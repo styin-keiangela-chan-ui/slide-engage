@@ -1,0 +1,75 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import type { Lecturer, Event } from '@/lib/types';
+
+const AUTH_KEY = 'slideengage_lecturer';
+const EVENT_KEY = 'slideengage_event';
+
+export function useAuth() {
+  const [lecturer, setLecturer] = useState<Lecturer | null>(null);
+  const [currentEvent, setCurrentEvent] = useState<Event | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Load from localStorage
+    const stored = localStorage.getItem(AUTH_KEY);
+    if (stored) {
+      try {
+        setLecturer(JSON.parse(stored));
+      } catch {}
+    }
+    const storedEvent = localStorage.getItem(EVENT_KEY);
+    if (storedEvent) {
+      try {
+        setCurrentEvent(JSON.parse(storedEvent));
+      } catch {}
+    }
+    setLoading(false);
+  }, []);
+
+  const login = useCallback(async (email: string, password: string) => {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Login failed');
+    setLecturer(data.lecturer);
+    localStorage.setItem(AUTH_KEY, JSON.stringify(data.lecturer));
+    return data.lecturer as Lecturer;
+  }, []);
+
+  const register = useCallback(async (name: string, email: string, password: string) => {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Registration failed');
+    setLecturer(data.lecturer);
+    localStorage.setItem(AUTH_KEY, JSON.stringify(data.lecturer));
+    return data.lecturer as Lecturer;
+  }, []);
+
+  const logout = useCallback(() => {
+    setLecturer(null);
+    setCurrentEvent(null);
+    localStorage.removeItem(AUTH_KEY);
+    localStorage.removeItem(EVENT_KEY);
+  }, []);
+
+  const selectEvent = useCallback((event: Event) => {
+    setCurrentEvent(event);
+    localStorage.setItem(EVENT_KEY, JSON.stringify(event));
+  }, []);
+
+  const clearSelectedEvent = useCallback(() => {
+    setCurrentEvent(null);
+    localStorage.removeItem(EVENT_KEY);
+  }, []);
+
+  return { lecturer, currentEvent, loading, login, register, logout, selectEvent, clearSelectedEvent };
+}

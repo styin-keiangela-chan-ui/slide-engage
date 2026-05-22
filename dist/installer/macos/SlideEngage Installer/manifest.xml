@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+  xsi:type="TaskPaneApp">
+
+  <Id>3a58a707-8f47-4b13-a3ac-99d9f7238a41</Id>
+  <Version>1.0.0</Version>
+  <ProviderName>SlideEngage</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="SlideEngage"/>
+  <Description DefaultValue="Slido-style live polls, Q&amp;A, analytics, and QR joining for PowerPoint."/>
+  <IconUrl DefaultValue="https://slideengage.app/assets/icons/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://slideengage.app/assets/icons/icon-80.png"/>
+  <SupportUrl DefaultValue="https://slideengage.app/support"/>
+
+  <AppDomains>
+    <AppDomain>https://slideengage.app</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Presentation"/>
+  </Hosts>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://slideengage.app/taskpane"/>
+  </DefaultSettings>
+
+  <Permissions>ReadWriteDocument</Permissions>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Presentation">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <CustomTab id="SlideEngage.Tab">
+              <Group id="SlideEngage.Group">
+                <Label resid="CommandsGroup.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16x16"/>
+                  <bt:Image size="32" resid="Icon.32x32"/>
+                  <bt:Image size="80" resid="Icon.80x80"/>
+                </Icon>
+                <Control xsi:type="Button" id="SlideEngage.OpenTaskpane">
+                  <Label resid="TaskpaneButton.Label"/>
+                  <Supertip>
+                    <Title resid="TaskpaneButton.Label"/>
+                    <Description resid="TaskpaneButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16"/>
+                    <bt:Image size="32" resid="Icon.32x32"/>
+                    <bt:Image size="80" resid="Icon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>SlideEngage.Taskpane</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </CustomTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16x16" DefaultValue="https://slideengage.app/assets/icons/icon-16.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://slideengage.app/assets/icons/icon-32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://slideengage.app/assets/icons/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://slideengage.app/addin-install"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://slideengage.app/taskpane"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="GetStarted.Title" DefaultValue="SlideEngage is ready"/>
+        <bt:String id="CommandsGroup.Label" DefaultValue="SlideEngage"/>
+        <bt:String id="TaskpaneButton.Label" DefaultValue="SlideEngage"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="GetStarted.Description" DefaultValue="Open the SlideEngage task pane from the SlideEngage ribbon tab to run live polls and Q&amp;A."/>
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Open the SlideEngage task pane."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

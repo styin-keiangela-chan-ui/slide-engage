@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SlideEngage — PowerPoint Add-in</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background: #F4F7F4; color: #1A1A2E; padding: 16px; }
+    .header { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #E2EBE6; }
+    .logo { width: 28px; height: 28px; background: #2D8A4E; border-radius: 7px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; }
+    .brand { font-weight: 800; font-size: 15px; }
+    .section { margin-bottom: 16px; }
+    .section-title { font-size: 11px; font-weight: 700; color: #6B7B8D; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+    .event-code-box { background: #EAF7EF; border: 2px dashed #2D8A4E; border-radius: 10px; padding: 10px 16px; text-align: center; margin-bottom: 12px; }
+    .event-code { font-size: 22px; font-weight: 800; font-family: 'DM Mono', monospace; color: #2D8A4E; }
+    .event-name { font-size: 11px; color: #6B7B8D; margin-top: 2px; }
+    input, select { width: 100%; padding: 8px 12px; border: 1.5px solid #E2EBE6; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; margin-bottom: 8px; }
+    input:focus { border-color: #2D8A4E; }
+    .btn { width: 100%; padding: 10px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 6px; transition: .15s; font-family: inherit; }
+    .btn-green { background: #2D8A4E; color: #fff; }
+    .btn-green:hover { background: #1A5C32; }
+    .btn-outline { background: #fff; border: 1.5px solid #E2EBE6; color: #1A1A2E; }
+    .btn-outline:hover { border-color: #2D8A4E; color: #2D8A4E; }
+    .slide-types { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+    .slide-type { border: 1.5px solid #E2EBE6; border-radius: 8px; padding: 10px 8px; text-align: center; cursor: pointer; background: #fff; transition: .15s; }
+    .slide-type:hover { border-color: #2D8A4E; background: #EAF7EF; }
+    .slide-type .icon { font-size: 20px; margin-bottom: 4px; }
+    .slide-type .label { font-size: 11px; font-weight: 600; }
+    .status { font-size: 12px; padding: 8px; border-radius: 8px; text-align: center; margin-top: 8px; }
+    .status-success { background: #EAF7EF; color: #2D8A4E; }
+    .status-error { background: #FFF0F0; color: #C53030; }
+    .qr-section { text-align: center; margin: 12px 0; }
+    .qr-section img { border-radius: 12px; border: 1px solid #E2EBE6; }
+    .divider { height: 1px; background: #E2EBE6; margin: 16px 0; }
+    .link { color: #2D8A4E; font-size: 12px; text-decoration: underline; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">🎯</div>
+  <div class="brand">SlideEngage</div>
+</div>
+
+<!-- Setup section -->
+<div id="setup-section">
+  <div class="section">
+    <div class="section-title">Connect to your session</div>
+    <input id="app-url" type="text" placeholder="App URL (e.g. https://your-app.vercel.app)" value="https://your-real-vercel-domain.vercel.app"/>
+    <input id="event-code-input" type="text" placeholder="Event code (e.g. KICK26)" style="text-transform:uppercase; font-weight:700; font-family:monospace; font-size:16px;"/>
+    <button class="btn btn-green" onclick="connectEvent()">Connect →</button>
+  </div>
+</div>
+
+<!-- Connected section -->
+<div id="connected-section" style="display:none">
+  <div class="event-code-box">
+    <div class="event-code" id="display-code">#CODE</div>
+    <div class="event-name" id="display-name">Event Name</div>
+  </div>
+
+  <!-- QR Code -->
+  <div class="qr-section">
+    <img id="qr-img" width="160" height="160" alt="QR Code"/>
+    <div style="font-size:11px;color:#6B7B8D;margin-top:6px">Students scan to join</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Insert slides -->
+  <div class="section">
+    <div class="section-title">Insert interactive slides</div>
+    <div class="slide-types">
+      <div class="slide-type" onclick="insertSlide('poll')">
+        <div class="icon">📊</div>
+        <div class="label">Poll</div>
+      </div>
+      <div class="slide-type" onclick="insertSlide('quiz')">
+        <div class="icon">🧠</div>
+        <div class="label">Quiz</div>
+      </div>
+      <div class="slide-type" onclick="insertSlide('qa')">
+        <div class="icon">❓</div>
+        <div class="label">Q&A</div>
+      </div>
+      <div class="slide-type" onclick="insertSlide('wordcloud')">
+        <div class="icon">☁️</div>
+        <div class="label">Word Cloud</div>
+      </div>
+      <div class="slide-type" onclick="insertSlide('feedback')">
+        <div class="icon">⭐</div>
+        <div class="label">Feedback</div>
+      </div>
+      <div class="slide-type" onclick="insertSlide('qrcode')">
+        <div class="icon">📱</div>
+        <div class="label">QR Code</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Quick actions -->
+  <div class="section">
+    <div class="section-title">Quick actions</div>
+    <button class="btn btn-outline" onclick="openDashboard()">📊 Open Dashboard</button>
+    <button class="btn btn-outline" onclick="openResults()">📈 View Live Results</button>
+    <button class="btn btn-outline" onclick="copyJoinLink()">📋 Copy Join Link</button>
+    <button class="btn btn-outline" onclick="disconnect()" style="color:#C53030;border-color:#FED7D7">Disconnect</button>
+  </div>
+
+  <div id="status-msg" class="status" style="display:none"></div>
+</div>
+
+<script>
+var APP_URL = '';
+var EVENT_CODE = '';
+var EVENT_NAME = '';
+
+// Initialize Office
+Office.onReady(function(info) {
+  console.log('SlideEngage add-in loaded. Host:', info.host);
+});
+
+function connectEvent() {
+  APP_URL = document.getElementById('app-url').value.trim().replace(/\/$/, '');
+  EVENT_CODE = document.getElementById('event-code-input').value.trim().toUpperCase().replace('#', '');
+
+  if (!APP_URL || !EVENT_CODE) {
+    showStatus('Please enter both URL and event code', 'error');
+    return;
+  }
+
+  if (APP_URL.indexOf('localhost') !== -1 || APP_URL.indexOf('127.0.0.1') !== -1 || APP_URL.indexOf('your-vercel-domain') !== -1) {
+    showStatus('Use your real public HTTPS SlideEngage URL, not localhost or the placeholder.', 'error');
+    return;
+  }
+
+  // Verify event exists by fetching it
+  fetch(APP_URL + '/api/events/join', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event_code: EVENT_CODE, display_name: 'PowerPoint Add-in' })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(data) {
+    if (data.event) {
+      EVENT_NAME = data.event.event_name;
+      document.getElementById('display-code').textContent = '#' + EVENT_CODE;
+      document.getElementById('display-name').textContent = EVENT_NAME;
+      document.getElementById('qr-img').src = APP_URL + '/api/qrcode?code=' + EVENT_CODE + '&format=png';
+      document.getElementById('setup-section').style.display = 'none';
+      document.getElementById('connected-section').style.display = 'block';
+    } else {
+      showStatus('Event not found: ' + (data.error || 'Check code'), 'error');
+    }
+  })
+  .catch(function(err) {
+    showStatus('Connection failed. Check URL.', 'error');
+  });
+}
+
+function disconnect() {
+  document.getElementById('setup-section').style.display = 'block';
+  document.getElementById('connected-section').style.display = 'none';
+  EVENT_CODE = '';
+  EVENT_NAME = '';
+}
+
+function insertSlide(type) {
+  if (!Office.context.document) {
+    showStatus('PowerPoint API not available', 'error');
+    return;
+  }
+
+  var joinUrl = APP_URL + '/join?code=' + EVENT_CODE;
+  var titles = {
+    poll: '📊 LIVE POLL',
+    quiz: '🧠 QUIZ',
+    qa: '❓ LIVE Q&A',
+    wordcloud: '☁️ WORD CLOUD',
+    feedback: '⭐ FEEDBACK',
+    qrcode: '📱 JOIN THE SESSION'
+  };
+  var subtitles = {
+    poll: 'Your poll question here?',
+    quiz: 'Your quiz question here?',
+    qa: 'Ask your questions!',
+    wordcloud: 'In ONE word, describe...',
+    feedback: 'Rate today\'s session',
+    qrcode: 'Scan the QR code or enter the code below'
+  };
+
+  // Use Office JS to insert a slide with content
+  try {
+    Office.context.document.setSelectedDataAsync(
+      '<div style="text-align:center;padding:40px;">' +
+        '<h1 style="color:#2D8A4E;">' + titles[type] + '</h1>' +
+        '<h2>' + subtitles[type] + '</h2>' +
+        '<p style="margin-top:30px;color:#6B7B8D;">Join at: ' + joinUrl + '</p>' +
+        '<p style="font-size:24px;font-weight:bold;color:#2D8A4E;">#' + EVENT_CODE + '</p>' +
+      '</div>',
+      { coercionType: Office.CoercionType.Html },
+      function(result) {
+        if (result.status === Office.AsyncResultStatus.Succeeded) {
+          showStatus(type + ' content inserted!', 'success');
+        } else {
+          // Fallback: insert as plain text
+          var text = titles[type] + '\n\n' + subtitles[type] + '\n\nJoin: ' + joinUrl + '\nCode: #' + EVENT_CODE;
+          Office.context.document.setSelectedDataAsync(text, {
+            coercionType: Office.CoercionType.Text
+          }, function(r) {
+            showStatus(type + ' slide text inserted!', 'success');
+          });
+        }
+      }
+    );
+  } catch (e) {
+    showStatus('Insert failed: ' + e.message, 'error');
+  }
+}
+
+function openDashboard() {
+  window.open(APP_URL + '/lecturer/dashboard', '_blank');
+}
+
+function openResults() {
+  window.open(APP_URL + '/lecturer/results', '_blank');
+}
+
+function copyJoinLink() {
+  var link = APP_URL + '/join?code=' + EVENT_CODE;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(link).then(function() {
+      showStatus('Join link copied!', 'success');
+    });
+  } else {
+    // Fallback
+    var input = document.createElement('input');
+    input.value = link;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    document.body.removeChild(input);
+    showStatus('Join link copied!', 'success');
+  }
+}
+
+function showStatus(msg, type) {
+  var el = document.getElementById('status-msg');
+  el.textContent = msg;
+  el.className = 'status status-' + type;
+  el.style.display = 'block';
+  setTimeout(function() { el.style.display = 'none'; }, 3000);
+}
+</script>
+</body>
+</html>

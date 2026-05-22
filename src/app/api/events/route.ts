@@ -1,0 +1,261 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+function safeLecturer(lecturer: any) {
+  if (!lecturer) return null;
+  const { password_hash, ...safe } = lecturer;
+  return safe;
+}
+
+function eventDateColumnError() {
+  return NextResponse.json(
+    {
+      error:
+        'Event dates could not be saved because the events table is missing start_date/end_date. Run src/lib/supabase/migrations/20260520_add_event_dates.sql in Supabase, then reload the schema cache.',
+    },
+    { status: 500 }
+  );
+}
+
+function eventStatusConstraintError() {
+  return NextResponse.json(
+    {
+      error:
+        'Archive is not enabled in your Supabase events table yet. Run src/lib/supabase/migrations/20260522_event_status_live_closed_archived.sql in Supabase SQL Editor, then try Archive again.',
+    },
+    { status: 500 }
+  );
+}
+
+// GET /api/events — list events for a lecturer
+export async function GET(req: NextRequest) {
+  const lecturerId = req.nextUrl.searchParams.get('lecturer_id');
+  const eventId = req.nextUrl.searchParams.get('id');
+
+  if (eventId) {
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .eq('id', eventId)
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ event: data });
+  }
+
+  if (!lecturerId) {
+    return NextResponse.json({ error: 'lecturer_id required' }, { status: 400 });
+  }
+
+  const { data, error } = await supabase
+    .from('events')
+    .select('*')
+    .eq('lecturer_id', lecturerId)
+    .order('created_at', { ascending: false });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ events: data });
+}
+
+// HEAD /api/events?cohost_email=xxx — check whether invitee has a SlideEngage account
+export async function HEAD(req: NextRequest) {
+  const email = req.nextUrl.searchParams.get('cohost_email')?.trim().toLowerCase();
+  if (!email) return new NextResponse(null, { status: 400 });
+
+  const { data, error } = await supabase
+    .from('lecturers')
+    .select('id')
+    .eq('email', email)
+    .single();
+
+  if (error || !data) return new NextResponse(null, { status: 404 });
+  return new NextResponse(null, { status: 204 });
+}
+
+// PUT /api/events — invite a registered user as an event collaborator
+export async function PUT(req: NextRequest) {
+  try {
+    const {
+      event_id,
+      email,
+      role = 'guest',
+      can_manage_interactions = true,
+      can_view_results = true,
+    } = await req.json();
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+
+    if (!event_id) {
+      return NextResponse.json({ error: 'event_id required' }, { status: 400 });
+    }
+
+    if (!normalizedEmail) {
+      return NextResponse.json({ error: 'Enter the co-host email.' }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from('lecturers')
+      .select('*')
+      .eq('email', normalizedEmail)
+      .single();
+
+    if (error || !data) {
+      return NextResponse.json({ error: 'This Gmail is not registered with SlideEngage yet.' }, { status: 404 });
+    }
+
+    const { data: collaborator, error: collaboratorError } = await supabase
+      .from('event_collaborators')
+      .upsert({
+        event_id,
+        user_id: data.id,
+        role,
+        can_manage_interactions,
+        can_view_results,
+      }, { onConflict: 'event_id,user_id' })
+      .select('*, lecturers(id, email, name)')
+      .single();
+
+    if (collaboratorError) {
+      return NextResponse.json({ error: collaboratorError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ collaborator, lecturer: safeLecturer(data) });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
+// POST /api/events — create a new event
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { lecturer_id, event_name, event_code, allow_anonymous, show_results, start_date, end_date } = body;
+
+    if (!lecturer_id || !event_name || !event_code) {
+      return NextResponse.json({ error: 'lecturer_id, event_name, and event_code required' }, { status: 400 });
+    }
+
+    const code = event_code.toUpperCase().replace('#', '');
+
+    // Check if code is taken
+    const { data: existing } = await supabase
+      .from('events')
+      .select('id')
+      .eq('event_code', code)
+      .single();
+
+    if (existing) {
+      return NextResponse.json({ error: 'Event code already in use' }, { status: 409 });
+    }
+
+    const insertPayload = {
+      lecturer_id,
+      event_name,
+      event_code: code,
+      status: 'closed',
+      allow_anonymous: allow_anonymous ?? true,
+      show_results: show_results ?? 'after_voting',
+      start_date: start_date || null,
+      end_date: end_date || null,
+    };
+
+    const { data, error } = await supabase
+      .from('events')
+      .insert(insertPayload)
+      .select()
+      .single();
+
+    if (error && /start_date|end_date|schema cache/i.test(error.message)) return eventDateColumnError();
+    if (error && /events_status_check|check constraint|violates check/i.test(error.message)) return eventStatusConstraintError();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ event: data }, { status: 201 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
+// PATCH /api/events — update event status or settings
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { id, ...updates } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Event id required' }, { status: 400 });
+    }
+
+    if (updates.status === 'draft') {
+      updates.status = 'closed';
+    }
+
+    if (updates.status === 'live') {
+      const { data: targetEvent, error: targetError } = await supabase
+        .from('events')
+        .select('lecturer_id, status')
+        .eq('id', id)
+        .single();
+
+      if (targetError || !targetEvent) {
+        return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+      }
+
+      if (targetEvent.status === 'archived') {
+        return NextResponse.json({ error: 'Restore this event before making it active.' }, { status: 409 });
+      }
+
+      const { data: activeEvent, error: activeError } = await supabase
+        .from('events')
+        .select('id')
+        .eq('lecturer_id', targetEvent.lecturer_id)
+        .eq('status', 'live')
+        .neq('id', id)
+        .maybeSingle();
+
+      if (activeError) {
+        return NextResponse.json({ error: activeError.message }, { status: 500 });
+      }
+
+      if (activeEvent) {
+        return NextResponse.json(
+          { error: 'You already have an active event. Please close or archive it first.' },
+          { status: 409 }
+        );
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('events')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error && /start_date|end_date|schema cache/i.test(error.message)) return eventDateColumnError();
+    if (error && /events_status_check|check constraint|violates check/i.test(error.message)) return eventStatusConstraintError();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ event: data });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
+// DELETE /api/events?id=xxx — delete an event and its related records
+export async function DELETE(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get('id');
+  if (!id) {
+    return NextResponse.json({ error: 'id required' }, { status: 400 });
+  }
+
+    const { error } = await supabase
+      .from('events')
+      .update({ status: 'archived', updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error && /events_status_check|check constraint|violates check/i.test(error.message)) return eventStatusConstraintError();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true, archived: true });
+}
