@@ -52,6 +52,7 @@ type Props = {
 
 type PresentationTheme = 'dark' | 'light';
 type CloudWord = {
+  id: string;
   text: string;
   count: number;
   latestAt: number;
@@ -142,72 +143,72 @@ function normalizeWord(value: string) {
 }
 
 function buildCloudWords(responses: JoinedResponse[], fallbackWords: any[], tick: number): CloudWord[] {
-  const grouped = new Map<string, { text: string; count: number; latestAt: number; firstSeen: number }>();
+  const responseWords = responses
+    .map((response, index) => {
+      const text = response.text_value?.trim() || '';
+      const normalized = normalizeWord(text);
+      if (!normalized) return null;
 
-  responses
-    .filter(response => response.text_value?.trim())
-    .forEach((response, index) => {
-      const normalized = normalizeWord(response.text_value || '');
-      if (!normalized) return;
-
-      const submittedAt = response.submitted_at ? new Date(response.submitted_at).getTime() : Date.now();
-      const existing = grouped.get(normalized);
-      if (existing) {
-        existing.count += 1;
-        existing.latestAt = Math.max(existing.latestAt, submittedAt);
-      } else {
-        grouped.set(normalized, {
-          text: response.text_value?.trim() || normalized,
-          count: 1,
-          latestAt: submittedAt,
-          firstSeen: index,
-        });
-      }
-    });
-
-  fallbackWords.forEach((entry: any, index: number) => {
-    const label = entry.word || entry.text || entry.text_value || '';
-    const normalized = normalizeWord(label);
-    if (!normalized) return;
-
-    const fallbackTimestamp =
-      entry.submitted_at || entry.created_at
-        ? new Date(entry.submitted_at || entry.created_at).getTime()
-        : Date.now() - index * 60_000;
-    const fallbackCount = Number(entry.count || entry.value || 1);
-    const existing = grouped.get(normalized);
-
-    if (existing) {
-      existing.count = Math.max(existing.count, fallbackCount);
-      existing.latestAt = Math.max(existing.latestAt, fallbackTimestamp);
-      existing.firstSeen = Math.min(existing.firstSeen, index);
-    } else {
-      grouped.set(normalized, {
-        text: label,
-        count: fallbackCount,
-        latestAt: fallbackTimestamp,
+      return {
+        id: response.id || `response-${index}-${normalized}`,
+        text,
+        normalized,
+        latestAt: response.submitted_at ? new Date(response.submitted_at).getTime() : Date.now(),
         firstSeen: index,
-      });
-    }
-  });
+      };
+    })
+    .filter(Boolean) as Array<{ id: string; text: string; normalized: string; latestAt: number; firstSeen: number }>;
 
-  const newestTimestamp = Math.max(...Array.from(grouped.values()).map(word => word.latestAt), 0);
+  const fallbackExpanded =
+    responseWords.length > 0
+      ? []
+      : fallbackWords.flatMap((entry: any, index: number) => {
+          const label = entry.word || entry.text || entry.text_value || '';
+          const normalized = normalizeWord(label);
+          if (!normalized) return [];
+
+          const count = Math.max(1, Math.floor(Number(entry.count || entry.value || 1)));
+          const fallbackTimestamp =
+            entry.submitted_at || entry.created_at
+              ? new Date(entry.submitted_at || entry.created_at).getTime()
+              : Date.now() - index * 60_000;
+
+          return Array.from({ length: count }, (_, copyIndex) => ({
+            id: `fallback-${index}-${copyIndex}-${normalized}`,
+            text: label,
+            normalized,
+            latestAt: fallbackTimestamp - copyIndex * 1_000,
+            firstSeen: index + copyIndex / 100,
+          }));
+        });
+
+  const entries = [...responseWords, ...fallbackExpanded];
+  const frequency = entries.reduce((map, entry) => {
+    map.set(entry.normalized, (map.get(entry.normalized) || 0) + 1);
+    return map;
+  }, new Map<string, number>());
+
+  const newestTimestamp = Math.max(...entries.map(word => word.latestAt), 0);
   const now = Date.now() + tick;
 
-  return Array.from(grouped.values())
+  return entries
     .map(word => {
       const minutesOld = Math.max(0, (now - word.latestAt) / 60_000);
       const ageFactor = Math.max(1, 10 - minutesOld);
-      const frequencyFactor = word.count * 5;
+      const count = frequency.get(word.normalized) || 1;
+      const frequencyFactor = count * 5;
       const value = 20 + ageFactor * 4 + frequencyFactor;
       return {
-        ...word,
+        id: word.id,
+        text: word.text,
+        count,
+        latestAt: word.latestAt,
+        firstSeen: word.firstSeen,
         value,
         isNewest: word.latestAt === newestTimestamp,
       };
     })
-    .sort((a, b) => b.value - a.value || b.latestAt - a.latestAt || a.firstSeen - b.firstSeen)
-    .slice(0, 34);
+    .sort((a, b) => b.value - a.value || b.latestAt - a.latestAt || a.firstSeen - b.firstSeen);
 }
 
 function layoutCloudWords({
@@ -224,41 +225,46 @@ function layoutCloudWords({
   if (!words.length || width <= 0 || height <= 0) return [];
 
   const padding = presentationMode ? 54 : 34;
-  const gap = presentationMode ? 18 : 14;
   const usableWidth = Math.max(1, width - padding * 2);
   const usableHeight = Math.max(1, height - padding * 2);
   const maxValue = Math.max(...words.map(word => word.value), 1);
-  const densityScale = words.length > 18 ? clamp(18 / words.length, 0.62, 1) : 1;
+  const densityScale = words.length > 18 ? clamp(18 / words.length, 0.42, 1) : 1;
   const areaScale = clamp(Math.sqrt((usableWidth * usableHeight) / (presentationMode ? 480_000 : 260_000)), 0.72, 1.25);
   const centerX = width / 2;
   const centerY = height / 2;
-  const placed: Array<PlacedCloudWord & { box: WordBox }> = [];
-
-  words
+  const sortedWords = words
     .slice()
-    .sort((a, b) => b.value - a.value || b.latestAt - a.latestAt || a.firstSeen - b.firstSeen)
-    .forEach((word, index) => {
+    .sort((a, b) => b.value - a.value || b.latestAt - a.latestAt || a.firstSeen - b.firstSeen);
+  const globalScaleAttempts = [1, 0.88, 0.76, 0.64, 0.54, 0.46, 0.38, 0.32, 0.27, 0.23, 0.2];
+
+  for (const globalScale of globalScaleAttempts) {
+    const placed: Array<PlacedCloudWord & { box: WordBox }> = [];
+    const gap = Math.max(3, (presentationMode ? 18 : 14) * globalScale);
+    let failed = false;
+
+    sortedWords.forEach((word, index) => {
+      if (failed) return;
       const seed = hashText(word.text);
-      const rotation = index < 2 ? 0 : ((seed % 31) - 15);
+      const rotation = globalScale < 0.46 ? 0 : index < 2 ? 0 : ((seed % 25) - 12);
       const normalized = word.value / maxValue;
       const desiredSize = clamp(
-        ((presentationMode ? 28 : 18) + normalized * (presentationMode ? 72 : 50)) * densityScale * areaScale,
-        presentationMode ? 24 : 16,
+        ((presentationMode ? 28 : 18) + normalized * (presentationMode ? 72 : 50)) * densityScale * areaScale * globalScale,
+        globalScale < 0.38 ? 10 : presentationMode ? 16 : 12,
         presentationMode ? 102 : 70
       );
 
-      const scaleAttempts = [1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52, 0.45];
+      const scaleAttempts = [1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52, 0.45, 0.38, 0.32];
       let placedWord: (PlacedCloudWord & { box: WordBox }) | null = null;
 
       for (const scale of scaleAttempts) {
-        const fontSize = Math.max(presentationMode ? 18 : 14, desiredSize * scale);
+        const fontSize = Math.max(10, desiredSize * scale);
         const estimatedWidth = Math.max(fontSize * 1.6, word.text.length * fontSize * 0.58);
         const estimatedHeight = fontSize * 1.15;
         const angleOffset = (seed % 360) * (Math.PI / 180);
 
-        for (let attempt = 0; attempt < 980; attempt += 1) {
-          const angle = angleOffset + attempt * 0.42;
-          const radius = attempt === 0 ? 0 : 5.2 * Math.sqrt(attempt);
+        for (let attempt = 0; attempt < 1800; attempt += 1) {
+          const angle = angleOffset + attempt * 0.36;
+          const radius = attempt === 0 ? 0 : 4.4 * Math.sqrt(attempt);
           const x = centerX + Math.cos(angle) * radius * 1.12;
           const y = centerY + Math.sin(angle) * radius * 0.82;
           const box = rotatedBox(x, y, estimatedWidth, estimatedHeight, rotation);
@@ -286,10 +292,41 @@ function layoutCloudWords({
         if (placedWord) break;
       }
 
-      if (placedWord) placed.push(placedWord);
+      if (placedWord) {
+        placed.push(placedWord);
+      } else {
+        failed = true;
+      }
     });
 
-  return placed.map(({ box: _box, ...word }) => word);
+    if (!failed && placed.length === sortedWords.length) {
+      return placed.map(({ box: _box, ...word }) => word);
+    }
+  }
+
+  const columns = Math.ceil(Math.sqrt(sortedWords.length * (usableWidth / Math.max(usableHeight, 1))));
+  const rows = Math.ceil(sortedWords.length / Math.max(columns, 1));
+  const cellWidth = usableWidth / Math.max(columns, 1);
+  const cellHeight = usableHeight / Math.max(rows, 1);
+
+  return sortedWords.map((word, index) => {
+    const seed = hashText(word.id);
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    const maxCellFont = Math.min(cellHeight * 0.5, cellWidth / Math.max(1.6, word.text.length * 0.58));
+    const fontSize = clamp(maxCellFont, 8, presentationMode ? 44 : 32);
+    const jitterX = ((seed % 13) - 6) * Math.min(2, cellWidth * 0.02);
+    const jitterY = (((seed >> 4) % 13) - 6) * Math.min(2, cellHeight * 0.02);
+
+    return {
+      ...word,
+      x: padding + col * cellWidth + cellWidth / 2 + jitterX,
+      y: padding + row * cellHeight + cellHeight / 2 + jitterY,
+      fontSize,
+      rotation: 0,
+      color: wordCloudColors[index % wordCloudColors.length],
+    };
+  });
 }
 
 function EventQRCode({
@@ -447,6 +484,18 @@ function AnimatedWordCloud({
     [cloudWords, dimensions.height, dimensions.width, presentationMode]
   );
 
+  useEffect(() => {
+    const missingCount = Math.max(0, cloudWords.length - placedWords.length);
+    console.log('[SlideEngage] Word cloud layout', {
+      processedCloudWords: cloudWords.length,
+      renderedWords: placedWords.length,
+      missingCount,
+      missingReason: missingCount ? 'layout fallback failed to place every word' : 'none',
+      container: dimensions,
+      presentationMode,
+    });
+  }, [cloudWords.length, dimensions, placedWords.length, presentationMode]);
+
   if (!cloudWords.length) {
     return (
       <div className={`grid place-items-center rounded-[8px] ${presentationMode ? 'min-h-[62vh]' : 'min-h-[430px]'} ${
@@ -473,7 +522,7 @@ function AnimatedWordCloud({
       {placedWords.map((word, index) => {
         return (
           <span
-            key={word.text}
+            key={word.id}
             className="absolute whitespace-nowrap font-black leading-none transition-[left,top,font-size,opacity] duration-700 ease-out"
             style={{
               left: `${word.x}px`,
@@ -604,7 +653,25 @@ function FullscreenPresentation({
     [fullscreenFallbackWords, fullscreenResponses, fullscreenTick]
   );
   const fullscreenCloudWords = cloudWords.length ? cloudWords : fetchedCloudWords;
-  const wordCloudKey = `${interaction.id}-${fullscreenCloudWords.map(word => `${word.text}:${word.count}`).join('|')}-${theme}`;
+  const wordCloudKey = `${interaction.id}-${fullscreenCloudWords.map(word => `${word.id}:${word.count}`).join('|')}-${theme}`;
+
+  useEffect(() => {
+    console.log('[SlideEngage] Fullscreen word cloud data', {
+      interactionId: interaction.id,
+      parentCloudWords: cloudWords.length,
+      fullscreenResponses: fullscreenResponses.length,
+      fullscreenFallbackWords: fullscreenFallbackWords.length,
+      fetchedCloudWords: fetchedCloudWords.length,
+      renderedSourceCloudWords: fullscreenCloudWords.length,
+    });
+  }, [
+    cloudWords.length,
+    fetchedCloudWords.length,
+    fullscreenCloudWords.length,
+    fullscreenFallbackWords.length,
+    fullscreenResponses.length,
+    interaction.id,
+  ]);
 
   useEffect(() => {
     const show = () => {
@@ -964,6 +1031,20 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
     () => buildCloudWords(responses, fallbackWords, wordCloudTick),
     [fallbackWords, responses, wordCloudTick]
   );
+
+  useEffect(() => {
+    const validResponseCount = responses.filter(response => response.text_value?.trim()).length;
+    console.log('[SlideEngage] Word cloud data', {
+      totalResponses: responses.length,
+      validTextResponses: validResponseCount,
+      fallbackWords: fallbackWords.length,
+      processedCloudWords: cloudWords.length,
+      filteredResponses: responses.length - validResponseCount,
+      filteredReason: responses.length - validResponseCount ? 'empty or missing text_value' : 'none',
+      isFullscreen,
+      publicMode,
+    });
+  }, [cloudWords.length, fallbackWords.length, isFullscreen, publicMode, responses]);
 
   const content = renderResultContent({
     event,
