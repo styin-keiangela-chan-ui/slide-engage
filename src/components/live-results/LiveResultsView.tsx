@@ -50,6 +50,8 @@ type Props = {
   publicMode?: boolean;
 };
 
+type PresentationTheme = 'dark' | 'light';
+
 const chartColors = ['#16833a', '#1f77b4', '#8b5cf6', '#f97316', '#dc2626', '#0891b2'];
 const wordCloudColors = ['#16833A', '#1D75D0', '#8B5CF6', '#E85D75', '#F97316', '#0891B2', '#6A8D0A', '#C026D3'];
 
@@ -154,10 +156,12 @@ function EventQRCode({
   event,
   variant = 'light',
   compact = false,
+  presentation = false,
 }: {
   event: Event | null;
   variant?: 'light' | 'dark';
   compact?: boolean;
+  presentation?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const publicUrl = normalizePublicUrl(process.env.NEXT_PUBLIC_APP_URL);
@@ -166,6 +170,7 @@ function EventQRCode({
   const joinLink = publicUrlReady && eventCode ? `${publicUrl}/join?code=${encodeURIComponent(eventCode)}` : '';
   const qrSrc = eventCode && publicUrlReady ? `/api/qrcode?code=${encodeURIComponent(eventCode)}&format=svg&v=${event?.id || eventCode}` : '';
   const isDark = variant === 'dark';
+  const qrSizeClass = presentation ? 'h-[220px] w-[220px]' : compact ? 'h-28 w-28' : 'h-40 w-40';
 
   const copyJoinLink = async () => {
     if (!joinLink) return;
@@ -177,9 +182,9 @@ function EventQRCode({
       <div
         className={`transition-all duration-500 ${
           isDark
-            ? 'rounded-[18px] border border-white/15 bg-white/10 text-white shadow-[0_0_45px_rgba(22,131,58,0.25)] backdrop-blur-xl'
+            ? 'rounded-[22px] border border-white/15 bg-white/10 text-white shadow-[0_0_45px_rgba(22,131,58,0.25)] backdrop-blur-xl'
             : 'rounded-[14px] border border-[#DDEAE3] bg-white/85 text-[#17172F] shadow-sm backdrop-blur'
-        } ${compact ? 'p-4' : 'p-5'}`}
+        } ${presentation ? 'p-5' : compact ? 'p-4' : 'p-5'}`}
       >
         <p className={`text-xs font-bold uppercase tracking-[0.18em] ${isDark ? 'text-emerald-200' : 'text-[#16833A]'}`}>
           Join live
@@ -194,22 +199,22 @@ function EventQRCode({
         >
           {qrSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={qrSrc} alt={`Join event ${eventCode}`} className={compact ? 'h-28 w-28' : 'h-40 w-40'} />
+            <img src={qrSrc} alt={`Join event ${eventCode}`} className={qrSizeClass} />
           ) : (
-            <div className={`${compact ? 'h-28 w-28' : 'h-40 w-40'} grid place-items-center text-center text-xs text-[#6B7B8D]`}>
+            <div className={`${qrSizeClass} grid place-items-center text-center text-xs text-[#6B7B8D]`}>
               Public URL required
             </div>
           )}
         </button>
-        <p className={`mt-4 text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-[#6B7B8D]'}`}>
+        <p className={`mt-4 ${presentation ? 'text-base' : 'text-sm'} font-semibold ${isDark ? 'text-slate-200' : 'text-[#6B7B8D]'}`}>
           Scan QR code to join the event
         </p>
-        <div className={`mt-3 rounded-[10px] border px-3 py-2 text-center text-2xl font-black tracking-wide ${
+        <div className={`mt-3 rounded-[10px] border px-3 py-2 text-center ${presentation ? 'text-4xl' : 'text-2xl'} font-black tracking-wide ${
           isDark ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-200' : 'border-[#CFE0D7] bg-[#EAF7EF] text-[#16833A]'
         }`}>
           #{eventCode || '------'}
         </div>
-        <p className={`mt-3 max-w-[190px] break-words text-xs ${isDark ? 'text-slate-300' : 'text-[#6B7B8D]'}`}>
+        <p className={`mt-3 ${presentation ? 'max-w-[245px] text-sm' : 'max-w-[190px] text-xs'} break-words ${isDark ? 'text-slate-300' : 'text-[#6B7B8D]'}`}>
           {publicUrl || 'Set NEXT_PUBLIC_APP_URL'}
         </p>
         {!compact && (
@@ -246,7 +251,7 @@ function EventQRCode({
   );
 }
 
-function JoinBanner({ event, variant = 'light' }: { event: Event | null; variant?: 'light' | 'dark' }) {
+function JoinBanner({ event, variant = 'light', presentation = false }: { event: Event | null; variant?: 'light' | 'dark'; presentation?: boolean }) {
   const publicUrl = normalizePublicUrl(process.env.NEXT_PUBLIC_APP_URL);
   const displayDomain = publicUrl ? new URL(publicUrl).hostname.replace(/^www\./, '') : 'slide-engage.com';
   const eventCode = event?.event_code || '------';
@@ -258,11 +263,11 @@ function JoinBanner({ event, variant = 'light' }: { event: Event | null; variant
         isDark
           ? 'border border-white/10 bg-black/28 text-white shadow-2xl'
           : 'border border-[#DDEAE3] bg-[#EAF7EF]/80 text-[#17172F]'
-      }`}
+      } ${presentation ? 'md:text-3xl md:px-8 md:py-4' : ''}`}
     >
       <span className="mr-2 text-[#16833A]">✣</span>
       Join at <span className="font-black text-[#16833A]">{displayDomain}</span> and enter code{' '}
-      <span className="font-black text-[#16833A]">{eventCode}</span>
+      <span className={`${presentation ? 'text-[1.15em]' : ''} font-black text-[#16833A]`}>{eventCode}</span>
     </div>
   );
 }
@@ -271,10 +276,12 @@ function AnimatedWordCloud({
   responses,
   fallbackWords,
   presentationMode,
+  theme = 'light',
 }: {
   responses: JoinedResponse[];
   fallbackWords: any[];
   presentationMode: boolean;
+  theme?: PresentationTheme;
 }) {
   const [tick, setTick] = useState(0);
 
@@ -303,14 +310,28 @@ function AnimatedWordCloud({
   }, [tick]);
 
   if (!cloudWords.length) {
-    return <p className="py-28 text-center text-xl font-semibold text-[#6B7B8D]">Waiting for words...</p>;
+    return (
+      <div className={`grid place-items-center rounded-[8px] ${presentationMode ? 'min-h-[62vh]' : 'min-h-[430px]'} ${
+        theme === 'dark' ? 'bg-white/5 text-slate-200' : 'bg-[#F7FBF9] text-[#6B7B8D]'
+      }`}>
+        <p className="text-center text-xl font-semibold">Waiting for words...</p>
+      </div>
+    );
   }
 
   return (
-    <div className={`relative mx-auto overflow-hidden rounded-[8px] bg-gradient-to-br from-white via-[#F7FBF9] to-[#EEF7F1] ${
+    <div className={`relative mx-auto overflow-hidden rounded-[8px] ${
+      theme === 'dark'
+        ? 'bg-transparent'
+        : 'bg-gradient-to-br from-white via-[#F7FBF9] to-[#EEF7F1]'
+    } ${
       presentationMode ? 'min-h-[62vh]' : 'min-h-[430px]'
     }`}>
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(22,131,58,0.12),transparent_48%)]" />
+      <div className={`pointer-events-none absolute inset-0 ${
+        theme === 'dark'
+          ? 'bg-[radial-gradient(circle_at_center,rgba(34,197,94,0.18),transparent_48%)]'
+          : 'bg-[radial-gradient(circle_at_center,rgba(22,131,58,0.12),transparent_48%)]'
+      }`} />
       {cloudWords.map((word, index) => {
         const slot = slots[index] || slots[slots.length - 1];
         const seed = hashText(word.text);
@@ -337,7 +358,13 @@ function AnimatedWordCloud({
               fontSize: `${size}px`,
               opacity,
               transform: `translate(-50%, -50%) rotate(${rotate}deg)`,
-              textShadow: word.isNewest ? '0 0 26px rgba(22, 131, 58, 0.45)' : '0 10px 30px rgba(15, 23, 42, 0.10)',
+              textShadow: theme === 'dark'
+                ? word.isNewest
+                  ? '0 0 34px rgba(52, 211, 153, 0.72), 0 14px 34px rgba(0, 0, 0, 0.42)'
+                  : '0 14px 34px rgba(0, 0, 0, 0.42)'
+                : word.isNewest
+                  ? '0 0 26px rgba(22, 131, 58, 0.45)'
+                  : '0 10px 30px rgba(15, 23, 42, 0.10)',
               zIndex: Math.max(1, 80 - index),
               animationDelay: `${(seed % 900) / 1000}s`,
             }}
@@ -384,6 +411,8 @@ function FullscreenPresentation({
   fallbackWords,
   onExit,
   publicMode,
+  theme,
+  onToggleTheme,
 }: {
   event: Event | null;
   interaction: LiveInteraction;
@@ -391,8 +420,11 @@ function FullscreenPresentation({
   fallbackWords: any[];
   onExit: () => void;
   publicMode: boolean;
+  theme: PresentationTheme;
+  onToggleTheme: () => void;
 }) {
   const [showControls, setShowControls] = useState(true);
+  const isDark = theme === 'dark';
 
   useEffect(() => {
     const show = () => {
@@ -411,43 +443,66 @@ function FullscreenPresentation({
   }, []);
 
   return (
-    <div className="relative min-h-[calc(100vh-64px)] overflow-hidden rounded-[18px] bg-[#08130D] p-7 text-white md:p-10">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(34,197,94,0.24),transparent_28%),radial-gradient(circle_at_72%_18%,rgba(45,212,191,0.18),transparent_26%),radial-gradient(circle_at_68%_78%,rgba(139,92,246,0.18),transparent_30%)]" />
+    <div className={`relative min-h-[calc(100vh-64px)] overflow-hidden rounded-[18px] p-7 transition-colors md:p-10 ${
+      isDark ? 'bg-[#08130D] text-white' : 'bg-gradient-to-br from-white via-[#F7FBF9] to-[#EAF7EF] text-[#17172F]'
+    }`}>
+      <div className={`absolute inset-0 ${
+        isDark
+          ? 'bg-[radial-gradient(circle_at_20%_30%,rgba(34,197,94,0.24),transparent_28%),radial-gradient(circle_at_72%_18%,rgba(45,212,191,0.18),transparent_26%),radial-gradient(circle_at_68%_78%,rgba(139,92,246,0.18),transparent_30%)]'
+          : 'bg-[radial-gradient(circle_at_24%_24%,rgba(22,131,58,0.14),transparent_28%),radial-gradient(circle_at_78%_18%,rgba(45,212,191,0.12),transparent_26%),radial-gradient(circle_at_66%_78%,rgba(139,92,246,0.10),transparent_30%)]'
+      }`} />
       <div className="absolute left-12 top-16 h-2 w-2 animate-[particleFloat_8s_ease-in-out_infinite] rounded-full bg-emerald-300/70" />
-      <div className="absolute right-28 top-28 h-3 w-3 animate-[particleFloat_10s_ease-in-out_infinite] rounded-full bg-cyan-200/60" />
-      <div className="absolute bottom-28 right-1/3 h-2 w-2 animate-[particleFloat_9s_ease-in-out_infinite] rounded-full bg-violet-200/60" />
+      <div className="absolute right-28 top-28 h-3 w-3 animate-[particleFloat_10s_ease-in-out_infinite] rounded-full bg-cyan-300/60" />
+      <div className="absolute bottom-28 right-1/3 h-2 w-2 animate-[particleFloat_9s_ease-in-out_infinite] rounded-full bg-violet-300/60" />
 
-      {!publicMode && (
+      <div className={`absolute right-6 top-6 z-20 flex gap-2 transition ${showControls ? 'opacity-100' : 'opacity-0'}`}>
         <button
           type="button"
-          onClick={onExit}
-          className={`absolute right-6 top-6 z-20 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white backdrop-blur transition ${
-            showControls ? 'opacity-100' : 'opacity-0'
+          onClick={onToggleTheme}
+          className={`rounded-full border px-4 py-2 text-sm font-bold backdrop-blur ${
+            isDark ? 'border-white/15 bg-white/10 text-white' : 'border-[#CFE0D7] bg-white/70 text-[#16833A]'
           }`}
         >
-          Exit Fullscreen
+          {isDark ? 'Light Mode' : 'Dark Mode'}
         </button>
-      )}
+        {!publicMode && (
+          <button
+            type="button"
+            onClick={onExit}
+            className={`rounded-full border px-4 py-2 text-sm font-bold backdrop-blur ${
+              isDark ? 'border-white/15 bg-white/10 text-white' : 'border-[#CFE0D7] bg-white/70 text-[#16833A]'
+            }`}
+          >
+            Exit Fullscreen
+          </button>
+        )}
+      </div>
 
       <div className="relative z-10 flex min-h-[calc(100vh-120px)] flex-col gap-8">
         <div>
-          <div className="flex flex-wrap items-center gap-3 text-sm font-bold uppercase tracking-[0.18em] text-emerald-200">
+          <div className={`flex flex-wrap items-center gap-4 text-sm font-bold uppercase tracking-[0.18em] ${
+            isDark ? 'text-emerald-200' : 'text-[#16833A]'
+          }`}>
             <span>Live Word Cloud</span>
-            <span className="rounded-full bg-white/10 px-3 py-1">#{event?.event_code}</span>
+            <span className={`rounded-full px-5 py-2 text-3xl font-black tracking-wide ${
+              isDark ? 'bg-white/10 text-emerald-200' : 'bg-white/80 text-[#16833A] shadow-sm'
+            }`}>#{event?.event_code}</span>
           </div>
-          <h1 className="mt-4 max-w-6xl text-[40px] font-black leading-tight text-white md:text-[64px]">{interaction.title}</h1>
+          <h1 className={`mt-4 max-w-6xl text-[40px] font-black leading-tight md:text-[64px] ${
+            isDark ? 'text-white' : 'text-[#17172F]'
+          }`}>{interaction.title}</h1>
         </div>
 
-        <div className="grid flex-1 gap-7 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <div className="self-end lg:self-center">
-            <EventQRCode event={event} variant="dark" compact />
+        <div className="grid flex-1 gap-7 lg:grid-cols-[300px_minmax(0,1fr)]">
+          <div className="self-start lg:self-center">
+            <EventQRCode event={event} variant={theme} presentation />
           </div>
-          <AnimatedWordCloud responses={responses} fallbackWords={fallbackWords} presentationMode />
+          <AnimatedWordCloud responses={responses} fallbackWords={fallbackWords} presentationMode theme={theme} />
         </div>
       </div>
 
       <div className="absolute inset-x-6 bottom-5 z-20">
-        <JoinBanner event={event} variant="dark" />
+        <JoinBanner event={event} variant={theme} presentation />
       </div>
 
       <style jsx>{`
@@ -476,6 +531,7 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
   const [questions, setQuestions] = useState<JoinedQuestion[]>([]);
   const [loading, setLoading] = useState(Boolean(eventCode && !initialEvent));
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenTheme, setFullscreenTheme] = useState<PresentationTheme>('dark');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -777,6 +833,8 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
           fallbackWords={words}
           onExit={exitFullscreen}
           publicMode={publicMode}
+          theme={fullscreenTheme}
+          onToggleTheme={() => setFullscreenTheme(current => (current === 'dark' ? 'light' : 'dark'))}
         />
       </div>
     );
