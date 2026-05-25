@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -60,6 +60,21 @@ type CloudWord = {
   isNewest: boolean;
 };
 
+type PlacedCloudWord = CloudWord & {
+  x: number;
+  y: number;
+  fontSize: number;
+  rotation: number;
+  color: string;
+};
+
+type WordBox = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+};
+
 const chartColors = ['#16833a', '#1f77b4', '#8b5cf6', '#f97316', '#dc2626', '#0891b2'];
 const wordCloudColors = ['#16833A', '#1D75D0', '#8B5CF6', '#E85D75', '#F97316', '#0891B2', '#6A8D0A', '#C026D3'];
 
@@ -98,6 +113,28 @@ function hashText(value: string) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function boxesOverlap(a: WordBox, b: WordBox, gap: number) {
+  return !(
+    a.right + gap < b.left ||
+    a.left - gap > b.right ||
+    a.bottom + gap < b.top ||
+    a.top - gap > b.bottom
+  );
+}
+
+function rotatedBox(centerX: number, centerY: number, width: number, height: number, rotation: number): WordBox {
+  const radians = (Math.abs(rotation) * Math.PI) / 180;
+  const rotatedWidth = Math.abs(width * Math.cos(radians)) + Math.abs(height * Math.sin(radians));
+  const rotatedHeight = Math.abs(width * Math.sin(radians)) + Math.abs(height * Math.cos(radians));
+
+  return {
+    left: centerX - rotatedWidth / 2,
+    right: centerX + rotatedWidth / 2,
+    top: centerY - rotatedHeight / 2,
+    bottom: centerY + rotatedHeight / 2,
+  };
 }
 
 function normalizeWord(value: string) {
@@ -171,6 +208,88 @@ function buildCloudWords(responses: JoinedResponse[], fallbackWords: any[], tick
     })
     .sort((a, b) => b.value - a.value || b.latestAt - a.latestAt || a.firstSeen - b.firstSeen)
     .slice(0, 34);
+}
+
+function layoutCloudWords({
+  words,
+  width,
+  height,
+  presentationMode,
+}: {
+  words: CloudWord[];
+  width: number;
+  height: number;
+  presentationMode: boolean;
+}): PlacedCloudWord[] {
+  if (!words.length || width <= 0 || height <= 0) return [];
+
+  const padding = presentationMode ? 54 : 34;
+  const gap = presentationMode ? 18 : 14;
+  const usableWidth = Math.max(1, width - padding * 2);
+  const usableHeight = Math.max(1, height - padding * 2);
+  const maxValue = Math.max(...words.map(word => word.value), 1);
+  const densityScale = words.length > 18 ? clamp(18 / words.length, 0.62, 1) : 1;
+  const areaScale = clamp(Math.sqrt((usableWidth * usableHeight) / (presentationMode ? 480_000 : 260_000)), 0.72, 1.25);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const placed: Array<PlacedCloudWord & { box: WordBox }> = [];
+
+  words
+    .slice()
+    .sort((a, b) => b.value - a.value || b.latestAt - a.latestAt || a.firstSeen - b.firstSeen)
+    .forEach((word, index) => {
+      const seed = hashText(word.text);
+      const rotation = index < 2 ? 0 : ((seed % 31) - 15);
+      const normalized = word.value / maxValue;
+      const desiredSize = clamp(
+        ((presentationMode ? 28 : 18) + normalized * (presentationMode ? 72 : 50)) * densityScale * areaScale,
+        presentationMode ? 24 : 16,
+        presentationMode ? 102 : 70
+      );
+
+      const scaleAttempts = [1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52, 0.45];
+      let placedWord: (PlacedCloudWord & { box: WordBox }) | null = null;
+
+      for (const scale of scaleAttempts) {
+        const fontSize = Math.max(presentationMode ? 18 : 14, desiredSize * scale);
+        const estimatedWidth = Math.max(fontSize * 1.6, word.text.length * fontSize * 0.58);
+        const estimatedHeight = fontSize * 1.15;
+        const angleOffset = (seed % 360) * (Math.PI / 180);
+
+        for (let attempt = 0; attempt < 980; attempt += 1) {
+          const angle = angleOffset + attempt * 0.42;
+          const radius = attempt === 0 ? 0 : 5.2 * Math.sqrt(attempt);
+          const x = centerX + Math.cos(angle) * radius * 1.12;
+          const y = centerY + Math.sin(angle) * radius * 0.82;
+          const box = rotatedBox(x, y, estimatedWidth, estimatedHeight, rotation);
+          const inside =
+            box.left >= padding &&
+            box.right <= width - padding &&
+            box.top >= padding &&
+            box.bottom <= height - padding;
+
+          if (!inside) continue;
+          if (placed.some(item => boxesOverlap(box, item.box, gap))) continue;
+
+          placedWord = {
+            ...word,
+            x,
+            y,
+            fontSize,
+            rotation,
+            color: wordCloudColors[index % wordCloudColors.length],
+            box,
+          };
+          break;
+        }
+
+        if (placedWord) break;
+      }
+
+      if (placedWord) placed.push(placedWord);
+    });
+
+  return placed.map(({ box: _box, ...word }) => word);
 }
 
 function EventQRCode({
@@ -302,52 +421,44 @@ function AnimatedWordCloud({
   presentationMode: boolean;
   theme?: PresentationTheme;
 }) {
-  const [tick, setTick] = useState(0);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
-    const interval = window.setInterval(() => setTick(value => value + 1), 3000);
-    return () => window.clearInterval(interval);
+    const element = containerRef.current;
+    if (!element) return;
+
+    const updateDimensions = () => {
+      const rect = element.getBoundingClientRect();
+      setDimensions({
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      });
+    };
+
+    updateDimensions();
+    const observer = new ResizeObserver(updateDimensions);
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    console.log('[SlideEngage] AnimatedWordCloud props', {
-      cloudWordsLength: cloudWords.length,
-      presentationMode,
-      theme,
-      sampleWords: cloudWords.slice(0, 5).map(word => ({ text: word.text, count: word.count, value: word.value })),
-    });
-  }, [cloudWords, presentationMode, theme]);
-
-  const maxValue = Math.max(...cloudWords.map(word => word.value), 1);
-  const slots = useMemo(() => {
-    const ringSteps = [0, 7, 13, 18];
-    return Array.from({ length: 40 }, (_, index) => {
-      if (index === 0) return { x: 50, y: 50 };
-      const ring = index <= 7 ? 1 : index <= 20 ? 2 : 3;
-      const positionInRing = index - ringSteps[ring - 1] - 1;
-      const itemsInRing = ring === 1 ? 7 : ring === 2 ? 13 : 19;
-      const angle = (Math.PI * 2 * positionInRing) / itemsInRing + ring * 0.27 + tick * 0.02;
-      const radiusX = ring === 1 ? 18 : ring === 2 ? 30 : 40;
-      const radiusY = ring === 1 ? 14 : ring === 2 ? 24 : 32;
-      return {
-        x: 50 + Math.cos(angle) * radiusX,
-        y: 50 + Math.sin(angle) * radiusY,
-      };
-    });
-  }, [tick]);
+  const placedWords = useMemo(
+    () => layoutCloudWords({ words: cloudWords, width: dimensions.width, height: dimensions.height, presentationMode }),
+    [cloudWords, dimensions.height, dimensions.width, presentationMode]
+  );
 
   if (!cloudWords.length) {
     return (
       <div className={`grid place-items-center rounded-[8px] ${presentationMode ? 'min-h-[62vh]' : 'min-h-[430px]'} ${
         theme === 'dark' ? 'bg-white/5 text-slate-200' : 'bg-[#F7FBF9] text-[#6B7B8D]'
       }`}>
-        <p className="text-center text-xl font-semibold">Waiting for words...</p>
+        <p className="text-center text-xl font-semibold">Results will appear below</p>
       </div>
     );
   }
 
   return (
-    <div className={`relative z-10 mx-auto h-full w-full overflow-hidden rounded-[8px] ${
+    <div ref={containerRef} className={`relative z-10 mx-auto h-full w-full overflow-hidden rounded-[8px] ${
       theme === 'dark'
         ? 'bg-transparent'
         : 'bg-gradient-to-br from-white via-[#F7FBF9] to-[#EEF7F1]'
@@ -359,32 +470,18 @@ function AnimatedWordCloud({
           ? 'bg-[radial-gradient(circle_at_center,rgba(34,197,94,0.18),transparent_48%)]'
           : 'bg-[radial-gradient(circle_at_center,rgba(22,131,58,0.12),transparent_48%)]'
       }`} />
-      {cloudWords.map((word, index) => {
-        const slot = slots[index] || slots[slots.length - 1];
-        const seed = hashText(word.text);
-        const driftX = Math.sin(tick * 0.7 + seed) * (presentationMode ? 1.5 : 1);
-        const driftY = Math.cos(tick * 0.55 + seed) * (presentationMode ? 1.2 : 0.8);
-        const rotate = ((seed % 31) - 15) * (index < 3 ? 0.35 : 1);
-        const size = clamp(
-          (presentationMode ? 28 : 18) + (word.value / maxValue) * (presentationMode ? 70 : 52),
-          presentationMode ? 26 : 18,
-          presentationMode ? 104 : 72
-        );
-        const opacity = clamp(0.48 + word.value / maxValue, 0.62, 1);
-
+      {placedWords.map((word, index) => {
         return (
           <span
             key={word.text}
-            className={`absolute whitespace-nowrap font-black leading-none transition-all duration-700 ease-out ${
-              word.isNewest ? 'animate-[wordPop_900ms_cubic-bezier(.2,1.4,.4,1)]' : 'animate-[wordFloat_5s_ease-in-out_infinite]'
-            }`}
+            className="absolute whitespace-nowrap font-black leading-none transition-[left,top,font-size,opacity] duration-700 ease-out"
             style={{
-              left: `${clamp(slot.x + driftX, 8, 92)}%`,
-              top: `${clamp(slot.y + driftY, 10, 90)}%`,
-              color: wordCloudColors[index % wordCloudColors.length],
-              fontSize: `${size}px`,
-              opacity,
-              transform: `translate(-50%, -50%) rotate(${rotate}deg)`,
+              left: `${word.x}px`,
+              top: `${word.y}px`,
+              color: word.color,
+              fontSize: `${word.fontSize}px`,
+              opacity: 1,
+              transform: `translate(-50%, -50%) rotate(${word.rotation}deg)`,
               textShadow: theme === 'dark'
                 ? word.isNewest
                   ? '0 0 34px rgba(52, 211, 153, 0.72), 0 14px 34px rgba(0, 0, 0, 0.42)'
@@ -393,10 +490,13 @@ function AnimatedWordCloud({
                   ? '0 0 26px rgba(22, 131, 58, 0.45)'
                   : '0 10px 30px rgba(15, 23, 42, 0.10)',
               zIndex: Math.max(1, 80 - index),
-              animationDelay: `${(seed % 900) / 1000}s`,
             }}
           >
-            {word.text}
+            <span
+              className={`inline-block ${word.isNewest ? 'animate-[wordPop_760ms_cubic-bezier(.2,1.2,.4,1)]' : ''}`}
+            >
+              {word.text}
+            </span>
           </span>
         );
       })}
@@ -404,26 +504,17 @@ function AnimatedWordCloud({
         @keyframes wordPop {
           0% {
             opacity: 0;
-            transform: translate(-50%, -50%) scale(0.55) rotate(0deg);
+            transform: scale(0.72);
             filter: blur(6px);
           }
           70% {
             opacity: 1;
-            transform: translate(-50%, -50%) scale(1.12) rotate(var(--rotate, 0deg));
+            transform: scale(1.08);
             filter: blur(0);
           }
           100% {
             opacity: 1;
-            transform: translate(-50%, -50%) scale(1) rotate(var(--rotate, 0deg));
-          }
-        }
-
-        @keyframes wordFloat {
-          0%, 100% {
-            margin-top: 0;
-          }
-          50% {
-            margin-top: -8px;
+            transform: scale(1);
           }
         }
       `}</style>
@@ -474,13 +565,9 @@ function FullscreenPresentation({
 
     setFullscreenResponses((responseResult.data || []) as JoinedResponse[]);
 
-    console.log('[SlideEngage] fullscreen fetched data', {
-      interactionId: interaction.id,
-      apiOk: resultResponse.ok,
-      responsesLength: responseResult.data?.length || 0,
-      fallbackWordsLength: nextFallbackWords.length,
-      responseError: responseResult.error?.message,
-    });
+    if (responseResult.error) {
+      console.error('[SlideEngage] Unable to load fullscreen responses', responseResult.error.message);
+    }
   }, [interaction.id, supabase]);
 
   useEffect(() => {
@@ -518,30 +605,6 @@ function FullscreenPresentation({
   );
   const fullscreenCloudWords = cloudWords.length ? cloudWords : fetchedCloudWords;
   const wordCloudKey = `${interaction.id}-${fullscreenCloudWords.map(word => `${word.text}:${word.count}`).join('|')}-${theme}`;
-
-  useEffect(() => {
-    console.log('[SlideEngage] FullscreenPresentation props/state', {
-      eventCode: event?.event_code,
-      interactionId: interaction.id,
-      parentCloudWordsLength: cloudWords.length,
-      fetchedCloudWordsLength: fetchedCloudWords.length,
-      fullscreenCloudWordsLength: fullscreenCloudWords.length,
-      fullscreenResponsesLength: fullscreenResponses.length,
-      fullscreenFallbackWordsLength: fullscreenFallbackWords.length,
-      publicMode,
-      theme,
-    });
-  }, [
-    cloudWords.length,
-    event?.event_code,
-    fetchedCloudWords.length,
-    fullscreenCloudWords.length,
-    fullscreenFallbackWords.length,
-    fullscreenResponses.length,
-    interaction.id,
-    publicMode,
-    theme,
-  ]);
 
   useEffect(() => {
     const show = () => {
@@ -870,15 +933,6 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
   }, []);
 
   const enterFullscreen = async () => {
-    console.log('[SlideEngage] Present Fullscreen clicked', {
-      renderMode: 'same LiveResultsView component with browser Fullscreen API',
-      route: window.location.pathname,
-      eventCode: event?.event_code,
-      interactionId: activeInteraction?.id,
-      responsesLength: responses.length,
-      cloudWordsLength: cloudWords.length,
-      isFullscreenBeforeClick: isFullscreen,
-    });
     setIsFullscreen(true);
     if (activeInteraction) {
       loadResults(activeInteraction);
@@ -910,28 +964,6 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
     () => buildCloudWords(responses, fallbackWords, wordCloudTick),
     [fallbackWords, responses, wordCloudTick]
   );
-
-  useEffect(() => {
-    console.log('[SlideEngage] LiveResultsView word cloud state', {
-      isFullscreen,
-      eventCode: event?.event_code,
-      interactionId: activeInteraction?.id,
-      interactionType: activeInteraction?.type,
-      responsesLength: responses.length,
-      fallbackWordsLength: fallbackWords.length,
-      cloudWordsLength: cloudWords.length,
-      publicMode,
-    });
-  }, [
-    activeInteraction?.id,
-    activeInteraction?.type,
-    cloudWords.length,
-    event?.event_code,
-    fallbackWords.length,
-    isFullscreen,
-    publicMode,
-    responses.length,
-  ]);
 
   const content = renderResultContent({
     event,
