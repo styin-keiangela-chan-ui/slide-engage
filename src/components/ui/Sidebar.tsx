@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { GoogleSlidesIcon, PowerPointIcon } from './IntegrationIcons';
 
 const sidebarItems = [
   { icon: '📅', label: 'Events', href: '/lecturer/events' },
@@ -16,8 +17,8 @@ const sidebarItems = [
 ];
 
 const integrationItems = [
-  { icon: 'PPT', label: 'PowerPoint', href: '/lecturer/integrations/powerpoint', accent: 'bg-[#C83B1C] text-white' },
-  { icon: '▭', label: 'Google Slides', href: '/lecturer/integrations/google-slides', accent: 'bg-[#F6B800] text-white' },
+  { icon: <PowerPointIcon size="sm" />, label: 'PowerPoint', href: '/lecturer/integrations/powerpoint' },
+  { icon: <GoogleSlidesIcon size="sm" />, label: 'Google Slides', href: '/lecturer/integrations/google-slides' },
 ];
 
 function isRouteActive(pathname: string, href: string) {
@@ -99,7 +100,7 @@ export default function Sidebar() {
                                 : 'text-[#7B8CA1] hover:bg-[#F3F8F5] hover:text-[#2D8A4E]'
                             }`}
                           >
-                            <span className={`grid h-5 min-w-5 place-items-center rounded-[5px] text-[9px] font-black ${subItem.accent}`}>
+                            <span className="grid h-5 min-w-5 place-items-center">
                               {subItem.icon}
                             </span>
                             {subItem.label}

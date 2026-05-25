@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import type { Event } from '@/lib/types';
+import { GoogleSlidesIcon, PowerPointIcon } from '@/components/ui/IntegrationIcons';
 import EventBuilderPage from '../page';
 
 type SettingsSection = 'General' | 'Collaboration' | 'Privacy' | 'Features' | 'Customization' | 'Integrations' | 'Engage Labs BETA';
@@ -297,14 +298,14 @@ export default function EventSettingsPage() {
       title: 'PowerPoint',
       path: 'Integrations > PowerPoint',
       section: 'Integrations' as SettingsSection,
-      icon: '▣',
+      icon: <PowerPointIcon size="sm" />,
       action: () => setPowerPointOpen(true),
     },
     {
       title: 'Google Slides',
       path: 'Integrations > Google Slides',
       section: 'Integrations' as SettingsSection,
-      icon: '▭',
+      icon: <GoogleSlidesIcon size="sm" />,
       action: () => setGoogleSlidesOpen(true),
     },
     {
@@ -697,8 +698,7 @@ export default function EventSettingsPage() {
           {activeSection === 'Integrations' && (
             <>
               <IntegrationPanel
-                icon="▣"
-                iconClass="text-[#D95F02]"
+                icon={<PowerPointIcon size="sm" />}
                 title="PowerPoint"
                 description="Add and display polls and Q&A directly in your PowerPoint slides."
                 open={powerPointOpen}
@@ -713,8 +713,7 @@ export default function EventSettingsPage() {
               </IntegrationPanel>
 
               <IntegrationPanel
-                icon="▭"
-                iconClass="text-[#E5AE22]"
+                icon={<GoogleSlidesIcon size="sm" />}
                 title="Google Slides"
                 description="Add and display polls and Q&A directly in your Google Slides presentation."
                 open={googleSlidesOpen}
@@ -916,15 +915,13 @@ function UploadImageControl({
 
 function IntegrationPanel({
   icon,
-  iconClass,
   title,
   description,
   open,
   onToggle,
   children,
 }: {
-  icon: string;
-  iconClass: string;
+  icon: ReactNode;
   title: string;
   description: string;
   open: boolean;
@@ -934,7 +931,7 @@ function IntegrationPanel({
   return (
     <div className="mb-8 border-b border-[#E1E1E1] pb-8">
       <button type="button" onClick={onToggle} className="flex w-full items-start gap-5 text-left">
-        <span className={`mt-1 text-lg ${iconClass}`}>{icon}</span>
+        <span className="mt-1 text-lg">{icon}</span>
         <div className="flex-1">
           <div className="text-xl font-extrabold">{title}</div>
           {!open && <p className="mt-3 max-w-[560px] text-base leading-7 text-[#555]">{description}</p>}

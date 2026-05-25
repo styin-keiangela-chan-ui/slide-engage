@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
+import { GoogleSlidesIcon } from '@/components/ui/IntegrationIcons';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function GoogleSlidesIntegrationPage() {
@@ -31,9 +32,7 @@ export default function GoogleSlidesIntegrationPage() {
 
           <div className="p-7">
             <section className="max-w-3xl rounded-[14px] border border-[#E2EBE6] bg-white p-7">
-              <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-[0_8px_24px_rgba(15,23,42,0.14)]">
-                <span className="grid h-9 w-7 place-items-center rounded-[5px] bg-[#F6B800] text-lg font-black text-white">▭</span>
-              </div>
+              <GoogleSlidesIcon className="mb-5" />
               <h2 className="mb-3 text-xl font-extrabold text-[#17172F]">SlideEngage for Google Slides</h2>
               <p className="mb-6 max-w-2xl text-sm leading-6 text-[#6B7B8D]">
                 Development uses the Apps Script copy/install flow. Production distribution should be published through Google Workspace Marketplace so lecturers can install without code.

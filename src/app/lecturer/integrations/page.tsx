@@ -5,35 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
+import { GoogleSlidesIcon, PowerPointIcon } from '@/components/ui/IntegrationIcons';
 import { useAuth } from '@/hooks/useAuth';
-
-function PowerPointIcon() {
-  return (
-    <div className="relative mb-5 h-[56px] w-[56px]" aria-hidden="true">
-      <div className="absolute inset-0 rounded-full bg-white shadow-[0_8px_24px_rgba(15,23,42,0.14)]" />
-      <div className="absolute left-[18px] top-[12px] h-8 w-8 rounded-full bg-[#D94D2B]">
-        <div className="absolute right-0 top-0 h-4 w-4 rounded-tr-full bg-[#FF8B6B]" />
-      </div>
-      <div className="absolute left-[9px] top-[19px] flex h-7 w-8 items-center justify-center rounded-[5px] bg-[#C83B1C] text-lg font-black text-white shadow-[4px_5px_10px_rgba(120,30,10,0.25)]">
-        P
-      </div>
-    </div>
-  );
-}
-
-function GoogleSlidesIcon() {
-  return (
-    <div className="relative mb-5 h-[56px] w-[56px]" aria-hidden="true">
-      <div className="absolute inset-0 rounded-full bg-white shadow-[0_8px_24px_rgba(15,23,42,0.14)]" />
-      <div className="absolute left-[17px] top-[11px] h-9 w-7 rounded-[5px] bg-[#F6B800] shadow-sm">
-        <div className="absolute right-0 top-0 h-3.5 w-3.5 rounded-bl-[3px] bg-[#FFE08A] [clip-path:polygon(0_0,100%_100%,100%_0)]" />
-        <div className="absolute left-1/2 top-[18px] h-[13px] w-[16px] -translate-x-1/2 rounded-[2px] bg-white">
-          <div className="absolute inset-[3px] rounded-[1px] bg-[#F6B800]" />
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function LecturerIntegrationsPage() {
   const router = useRouter();
@@ -59,7 +32,7 @@ export default function LecturerIntegrationsPage() {
 
           <div className="grid gap-5 p-7 md:grid-cols-2">
             <section className="rounded-[14px] border border-[#E2EBE6] bg-white p-6">
-              <PowerPointIcon />
+              <PowerPointIcon className="mb-5" />
               <h2 className="mb-2 text-base font-bold">PowerPoint</h2>
               <p className="mb-5 text-sm leading-6 text-[#6B7B8D]">
                 Use the production hosted manifest for AppSource or supported sideloading. Microsoft restricts fully automatic add-in installs, so production distribution should use AppSource or Microsoft 365 admin deployment.
@@ -75,7 +48,7 @@ export default function LecturerIntegrationsPage() {
             </section>
 
             <section className="rounded-[14px] border border-[#E2EBE6] bg-white p-6">
-              <GoogleSlidesIcon />
+              <GoogleSlidesIcon className="mb-5" />
               <h2 className="mb-2 text-base font-bold">Google Slides</h2>
               <p className="mb-5 text-sm leading-6 text-[#6B7B8D]">
                 Development uses Apps Script copy/install. Production should be published through Google Workspace Marketplace so users can install without code.

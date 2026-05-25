@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
+import { PowerPointIcon } from '@/components/ui/IntegrationIcons';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function PowerPointIntegrationPage() {
@@ -31,9 +32,7 @@ export default function PowerPointIntegrationPage() {
 
           <div className="p-7">
             <section className="max-w-3xl rounded-[14px] border border-[#E2EBE6] bg-white p-7">
-              <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-[0_8px_24px_rgba(15,23,42,0.14)]">
-                <span className="rounded-[5px] bg-[#C83B1C] px-2 py-1 text-lg font-black text-white">P</span>
-              </div>
+              <PowerPointIcon className="mb-5" />
               <h2 className="mb-3 text-xl font-extrabold text-[#17172F]">SlideEngage for PowerPoint</h2>
               <p className="mb-6 max-w-2xl text-sm leading-6 text-[#6B7B8D]">
                 Use the hosted PowerPoint manifest for supported sideloading, AppSource submission, or Microsoft 365 admin deployment. The add-in opens a SlideEngage task pane from the PowerPoint ribbon.
