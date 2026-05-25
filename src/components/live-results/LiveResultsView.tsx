@@ -51,6 +51,14 @@ type Props = {
 };
 
 type PresentationTheme = 'dark' | 'light';
+type CloudWord = {
+  text: string;
+  count: number;
+  latestAt: number;
+  firstSeen: number;
+  value: number;
+  isNewest: boolean;
+};
 
 const chartColors = ['#16833a', '#1f77b4', '#8b5cf6', '#f97316', '#dc2626', '#0891b2'];
 const wordCloudColors = ['#16833A', '#1D75D0', '#8B5CF6', '#E85D75', '#F97316', '#0891B2', '#6A8D0A', '#C026D3'];
@@ -96,7 +104,7 @@ function normalizeWord(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function buildCloudWords(responses: JoinedResponse[], fallbackWords: any[], tick: number) {
+function buildCloudWords(responses: JoinedResponse[], fallbackWords: any[], tick: number): CloudWord[] {
   const grouped = new Map<string, { text: string; count: number; latestAt: number; firstSeen: number }>();
 
   responses
@@ -286,13 +294,11 @@ function JoinBanner({ event, variant = 'light', presentation = false }: { event:
 }
 
 function AnimatedWordCloud({
-  responses,
-  fallbackWords,
+  cloudWords,
   presentationMode,
   theme = 'light',
 }: {
-  responses: JoinedResponse[];
-  fallbackWords: any[];
+  cloudWords: CloudWord[];
   presentationMode: boolean;
   theme?: PresentationTheme;
 }) {
@@ -303,7 +309,6 @@ function AnimatedWordCloud({
     return () => window.clearInterval(interval);
   }, []);
 
-  const cloudWords = useMemo(() => buildCloudWords(responses, fallbackWords, tick), [fallbackWords, responses, tick]);
   const maxValue = Math.max(...cloudWords.map(word => word.value), 1);
   const slots = useMemo(() => {
     const ringSteps = [0, 7, 13, 18];
@@ -420,8 +425,7 @@ function AnimatedWordCloud({
 function FullscreenPresentation({
   event,
   interaction,
-  responses,
-  fallbackWords,
+  cloudWords,
   onExit,
   publicMode,
   theme,
@@ -429,8 +433,7 @@ function FullscreenPresentation({
 }: {
   event: Event | null;
   interaction: LiveInteraction;
-  responses: JoinedResponse[];
-  fallbackWords: any[];
+  cloudWords: CloudWord[];
   onExit: () => void;
   publicMode: boolean;
   theme: PresentationTheme;
@@ -438,7 +441,7 @@ function FullscreenPresentation({
 }) {
   const [showControls, setShowControls] = useState(true);
   const isDark = theme === 'dark';
-  const wordCloudKey = `${interaction.id}-${responses.length}-${fallbackWords.length}-${theme}`;
+  const wordCloudKey = `${interaction.id}-${cloudWords.map(word => `${word.text}:${word.count}`).join('|')}-${theme}`;
 
   useEffect(() => {
     const show = () => {
@@ -513,8 +516,7 @@ function FullscreenPresentation({
           </div>
           <AnimatedWordCloud
             key={wordCloudKey}
-            responses={responses}
-            fallbackWords={fallbackWords}
+            cloudWords={cloudWords}
             presentationMode
             theme={theme}
           />
@@ -552,6 +554,7 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
   const [loading, setLoading] = useState(Boolean(eventCode && !initialEvent));
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenTheme, setFullscreenTheme] = useState<PresentationTheme>('dark');
+  const [wordCloudTick, setWordCloudTick] = useState(0);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -761,6 +764,11 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
     return () => window.clearInterval(interval);
   }, [activeInteraction, loadResults]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => setWordCloudTick(value => value + 1), 3000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const enterFullscreen = async () => {
     setIsFullscreen(true);
     if (activeInteraction) {
@@ -788,12 +796,19 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
 
+  const fallbackWords = useMemo(() => (Array.isArray(payload?.results) ? payload.results : []), [payload?.results]);
+  const cloudWords = useMemo(
+    () => buildCloudWords(responses, fallbackWords, wordCloudTick),
+    [fallbackWords, responses, wordCloudTick]
+  );
+
   const content = renderResultContent({
     event,
     interaction: activeInteraction,
     payload,
     responses,
     questions,
+    cloudWords,
     presentationMode: isFullscreen || publicMode,
   });
 
@@ -846,14 +861,12 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
   }
 
   if ((isFullscreen || publicMode) && activeInteraction.type === 'word_cloud') {
-    const words = Array.isArray(payload?.results) ? payload.results : [];
     return (
       <div className={shellClass}>
         <FullscreenPresentation
           event={event}
           interaction={activeInteraction}
-          responses={responses}
-          fallbackWords={words}
+          cloudWords={cloudWords}
           onExit={exitFullscreen}
           publicMode={publicMode}
           theme={fullscreenTheme}
@@ -925,6 +938,7 @@ function renderResultContent({
   payload,
   responses,
   questions,
+  cloudWords,
   presentationMode,
 }: {
   event: Event | null;
@@ -932,6 +946,7 @@ function renderResultContent({
   payload: ResultPayload | null;
   responses: JoinedResponse[];
   questions: JoinedQuestion[];
+  cloudWords: CloudWord[];
   presentationMode: boolean;
 }) {
   if (!interaction) return null;
@@ -1009,7 +1024,6 @@ function renderResultContent({
   }
 
   if (interaction.type === 'word_cloud') {
-    const words = Array.isArray(payload?.results) ? payload.results : [];
     return (
       <div className={`${presentationMode ? 'min-h-[66vh] p-3' : 'min-h-[430px] p-5'} rounded-[8px] border border-[#E2EBE6] bg-white shadow-sm`}>
         <div className="grid gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
@@ -1017,7 +1031,7 @@ function renderResultContent({
             <EventQRCode event={event} />
           </div>
           <div className="min-w-0">
-            <AnimatedWordCloud responses={responses} fallbackWords={words} presentationMode={presentationMode} />
+            <AnimatedWordCloud cloudWords={cloudWords} presentationMode={presentationMode} />
             <div className="mx-auto mt-4 max-w-3xl">
               <JoinBanner event={event} />
             </div>
