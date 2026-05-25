@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '@/lib/auth/jwt';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,14 +10,6 @@ const supabase = createClient(
 );
 
 const COOKIE_NAME = 'slideengage_session';
-
-function getJwtSecret() {
-  const secret = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET;
-  if (!secret) {
-    throw new Error('Missing JWT_SECRET environment variable.');
-  }
-  return secret;
-}
 
 export async function POST(req: NextRequest) {
   try {

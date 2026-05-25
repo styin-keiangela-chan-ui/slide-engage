@@ -8,6 +8,7 @@ const sidebarItems = [
   { icon: '📅', label: 'Events', href: '/lecturer/events' },
   { icon: '📊', label: 'Analytics', href: '/lecturer/analytics' },
   { icon: '🌐', label: 'Interactions', href: '/lecturer/interactions' },
+  { icon: '📊', label: 'Live Results', href: '/live-results' },
   { icon: '🔗', label: 'Share Access', href: '/lecturer/share-access' },
   { icon: '👥', label: 'Team', href: '/lecturer/team' },
   { icon: '🤝', label: 'Integrations', href: '/lecturer/integrations' },
