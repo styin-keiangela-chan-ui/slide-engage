@@ -309,6 +309,15 @@ function AnimatedWordCloud({
     return () => window.clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    console.log('[SlideEngage] AnimatedWordCloud props', {
+      cloudWordsLength: cloudWords.length,
+      presentationMode,
+      theme,
+      sampleWords: cloudWords.slice(0, 5).map(word => ({ text: word.text, count: word.count, value: word.value })),
+    });
+  }, [cloudWords, presentationMode, theme]);
+
   const maxValue = Math.max(...cloudWords.map(word => word.value), 1);
   const slots = useMemo(() => {
     const ringSteps = [0, 7, 13, 18];
@@ -338,7 +347,7 @@ function AnimatedWordCloud({
   }
 
   return (
-    <div className={`relative mx-auto overflow-hidden rounded-[8px] ${
+    <div className={`relative z-10 mx-auto h-full w-full overflow-hidden rounded-[8px] ${
       theme === 'dark'
         ? 'bg-transparent'
         : 'bg-gradient-to-br from-white via-[#F7FBF9] to-[#EEF7F1]'
@@ -439,9 +448,100 @@ function FullscreenPresentation({
   theme: PresentationTheme;
   onToggleTheme: () => void;
 }) {
+  const supabase = useMemo(() => createClient(), []);
   const [showControls, setShowControls] = useState(true);
+  const [fullscreenResponses, setFullscreenResponses] = useState<JoinedResponse[]>([]);
+  const [fullscreenFallbackWords, setFullscreenFallbackWords] = useState<any[]>([]);
+  const [fullscreenTick, setFullscreenTick] = useState(0);
   const isDark = theme === 'dark';
-  const wordCloudKey = `${interaction.id}-${cloudWords.map(word => `${word.text}:${word.count}`).join('|')}-${theme}`;
+
+  const loadFullscreenData = useCallback(async () => {
+    const [resultResponse, responseResult] = await Promise.all([
+      fetch(`/api/results?interaction_id=${interaction.id}`, { cache: 'no-store' }),
+      supabase
+        .from('responses')
+        .select('*, participants(display_name), interaction_options(option_text,is_correct)')
+        .eq('interaction_id', interaction.id)
+        .order('submitted_at', { ascending: true }),
+    ]);
+
+    const resultData = resultResponse.ok ? await resultResponse.json().catch(() => ({})) : {};
+    const nextFallbackWords = Array.isArray(resultData?.results) ? resultData.results : [];
+
+    if (resultResponse.ok) {
+      setFullscreenFallbackWords(nextFallbackWords);
+    }
+
+    setFullscreenResponses((responseResult.data || []) as JoinedResponse[]);
+
+    console.log('[SlideEngage] fullscreen fetched data', {
+      interactionId: interaction.id,
+      apiOk: resultResponse.ok,
+      responsesLength: responseResult.data?.length || 0,
+      fallbackWordsLength: nextFallbackWords.length,
+      responseError: responseResult.error?.message,
+    });
+  }, [interaction.id, supabase]);
+
+  useEffect(() => {
+    loadFullscreenData();
+  }, [loadFullscreenData]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setFullscreenTick(value => value + 1), 3000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`fullscreen-word-cloud-${interaction.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'responses', filter: `interaction_id=eq.${interaction.id}` },
+        () => loadFullscreenData()
+      )
+      .on('broadcast', { event: 'response_inserted' }, payload => {
+        if (payload.payload?.interaction_id === interaction.id) {
+          loadFullscreenData();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [interaction.id, loadFullscreenData, supabase]);
+
+  const fetchedCloudWords = useMemo(
+    () => buildCloudWords(fullscreenResponses, fullscreenFallbackWords, fullscreenTick),
+    [fullscreenFallbackWords, fullscreenResponses, fullscreenTick]
+  );
+  const fullscreenCloudWords = cloudWords.length ? cloudWords : fetchedCloudWords;
+  const wordCloudKey = `${interaction.id}-${fullscreenCloudWords.map(word => `${word.text}:${word.count}`).join('|')}-${theme}`;
+
+  useEffect(() => {
+    console.log('[SlideEngage] FullscreenPresentation props/state', {
+      eventCode: event?.event_code,
+      interactionId: interaction.id,
+      parentCloudWordsLength: cloudWords.length,
+      fetchedCloudWordsLength: fetchedCloudWords.length,
+      fullscreenCloudWordsLength: fullscreenCloudWords.length,
+      fullscreenResponsesLength: fullscreenResponses.length,
+      fullscreenFallbackWordsLength: fullscreenFallbackWords.length,
+      publicMode,
+      theme,
+    });
+  }, [
+    cloudWords.length,
+    event?.event_code,
+    fetchedCloudWords.length,
+    fullscreenCloudWords.length,
+    fullscreenFallbackWords.length,
+    fullscreenResponses.length,
+    interaction.id,
+    publicMode,
+    theme,
+  ]);
 
   useEffect(() => {
     const show = () => {
@@ -510,13 +610,13 @@ function FullscreenPresentation({
           }`}>{interaction.title}</h1>
         </div>
 
-        <div className="grid flex-1 gap-7 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="grid min-h-[62vh] flex-1 items-stretch gap-7 lg:grid-cols-[300px_minmax(0,1fr)]">
           <div className="self-start lg:self-center">
             <EventQRCode event={event} variant={theme} presentation />
           </div>
           <AnimatedWordCloud
             key={wordCloudKey}
-            cloudWords={cloudWords}
+            cloudWords={fullscreenCloudWords}
             presentationMode
             theme={theme}
           />
@@ -770,6 +870,15 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
   }, []);
 
   const enterFullscreen = async () => {
+    console.log('[SlideEngage] Present Fullscreen clicked', {
+      renderMode: 'same LiveResultsView component with browser Fullscreen API',
+      route: window.location.pathname,
+      eventCode: event?.event_code,
+      interactionId: activeInteraction?.id,
+      responsesLength: responses.length,
+      cloudWordsLength: cloudWords.length,
+      isFullscreenBeforeClick: isFullscreen,
+    });
     setIsFullscreen(true);
     if (activeInteraction) {
       loadResults(activeInteraction);
@@ -801,6 +910,28 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
     () => buildCloudWords(responses, fallbackWords, wordCloudTick),
     [fallbackWords, responses, wordCloudTick]
   );
+
+  useEffect(() => {
+    console.log('[SlideEngage] LiveResultsView word cloud state', {
+      isFullscreen,
+      eventCode: event?.event_code,
+      interactionId: activeInteraction?.id,
+      interactionType: activeInteraction?.type,
+      responsesLength: responses.length,
+      fallbackWordsLength: fallbackWords.length,
+      cloudWordsLength: cloudWords.length,
+      publicMode,
+    });
+  }, [
+    activeInteraction?.id,
+    activeInteraction?.type,
+    cloudWords.length,
+    event?.event_code,
+    fallbackWords.length,
+    isFullscreen,
+    publicMode,
+    responses.length,
+  ]);
 
   const content = renderResultContent({
     event,
