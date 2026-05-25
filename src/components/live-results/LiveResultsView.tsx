@@ -12,6 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { createClient } from '@/lib/supabase/client';
+import { isLocalUrl, normalizePublicUrl } from '@/lib/public-url';
 import type { Event, Interaction, InteractionOption } from '@/lib/types';
 
 type LiveInteraction = Interaction & {
@@ -149,7 +150,103 @@ function buildCloudWords(responses: JoinedResponse[], fallbackWords: any[], tick
     .slice(0, 34);
 }
 
-function DynamicWordCloud({
+function EventQRCode({
+  event,
+  variant = 'light',
+  compact = false,
+}: {
+  event: Event | null;
+  variant?: 'light' | 'dark';
+  compact?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const publicUrl = normalizePublicUrl(process.env.NEXT_PUBLIC_APP_URL);
+  const publicUrlReady = Boolean(publicUrl && !isLocalUrl(publicUrl));
+  const eventCode = event?.event_code || '';
+  const joinLink = publicUrlReady && eventCode ? `${publicUrl}/join?code=${encodeURIComponent(eventCode)}` : '';
+  const qrSrc = eventCode && publicUrlReady ? `/api/qrcode?code=${encodeURIComponent(eventCode)}&format=svg&v=${event?.id || eventCode}` : '';
+  const isDark = variant === 'dark';
+
+  const copyJoinLink = async () => {
+    if (!joinLink) return;
+    await navigator.clipboard?.writeText(joinLink);
+  };
+
+  return (
+    <>
+      <div
+        className={`transition-all duration-500 ${
+          isDark
+            ? 'rounded-[18px] border border-white/15 bg-white/10 text-white shadow-[0_0_45px_rgba(22,131,58,0.25)] backdrop-blur-xl'
+            : 'rounded-[14px] border border-[#DDEAE3] bg-white/85 text-[#17172F] shadow-sm backdrop-blur'
+        } ${compact ? 'p-4' : 'p-5'}`}
+      >
+        <p className={`text-xs font-bold uppercase tracking-[0.18em] ${isDark ? 'text-emerald-200' : 'text-[#16833A]'}`}>
+          Join live
+        </p>
+        <button
+          type="button"
+          onClick={() => qrSrc && setExpanded(true)}
+          className={`mt-4 block rounded-[12px] border p-3 transition hover:scale-[1.02] ${
+            isDark ? 'border-emerald-300/30 bg-white shadow-[0_0_30px_rgba(74,222,128,0.26)]' : 'border-[#DDEAE3] bg-white'
+          }`}
+          aria-label="Enlarge event QR code"
+        >
+          {qrSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={qrSrc} alt={`Join event ${eventCode}`} className={compact ? 'h-28 w-28' : 'h-40 w-40'} />
+          ) : (
+            <div className={`${compact ? 'h-28 w-28' : 'h-40 w-40'} grid place-items-center text-center text-xs text-[#6B7B8D]`}>
+              Public URL required
+            </div>
+          )}
+        </button>
+        <p className={`mt-4 text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-[#6B7B8D]'}`}>
+          Scan QR code to join the event
+        </p>
+        <div className={`mt-3 rounded-[10px] border px-3 py-2 text-center text-2xl font-black tracking-wide ${
+          isDark ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-200' : 'border-[#CFE0D7] bg-[#EAF7EF] text-[#16833A]'
+        }`}>
+          #{eventCode || '------'}
+        </div>
+        <p className={`mt-3 max-w-[190px] break-words text-xs ${isDark ? 'text-slate-300' : 'text-[#6B7B8D]'}`}>
+          {publicUrl || 'Set NEXT_PUBLIC_APP_URL'}
+        </p>
+        {!compact && (
+          <button
+            type="button"
+            onClick={copyJoinLink}
+            disabled={!joinLink}
+            className={`mt-4 w-full rounded-[8px] px-3 py-2 text-sm font-bold transition ${
+              joinLink
+                ? isDark
+                  ? 'bg-emerald-400 text-[#052E16] hover:bg-emerald-300'
+                  : 'bg-[#16833A] text-white hover:bg-[#116C31]'
+                : 'cursor-not-allowed bg-slate-200 text-slate-500'
+            }`}
+          >
+            Copy Join Link
+          </button>
+        )}
+      </div>
+
+      {expanded && (
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-black/70 p-6 backdrop-blur-sm" onClick={() => setExpanded(false)}>
+          <div className="rounded-[20px] bg-white p-7 shadow-2xl" onClick={event => event.stopPropagation()}>
+            {qrSrc && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={qrSrc} alt={`Join event ${eventCode}`} className="h-[360px] w-[360px]" />
+            )}
+            <p className="mt-4 text-center text-4xl font-black text-[#16833A]">#{eventCode}</p>
+            <p className="mt-2 max-w-[360px] break-words text-center text-sm text-[#6B7B8D]">{joinLink}</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function AnimatedWordCloud({
   responses,
   fallbackWords,
   presentationMode,
@@ -252,6 +349,97 @@ function DynamicWordCloud({
           }
           50% {
             margin-top: -8px;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function FullscreenPresentation({
+  event,
+  interaction,
+  responses,
+  fallbackWords,
+  onExit,
+  publicMode,
+}: {
+  event: Event | null;
+  interaction: LiveInteraction;
+  responses: JoinedResponse[];
+  fallbackWords: any[];
+  onExit: () => void;
+  publicMode: boolean;
+}) {
+  const [showControls, setShowControls] = useState(true);
+  const publicUrl = normalizePublicUrl(process.env.NEXT_PUBLIC_APP_URL);
+  const displayDomain = publicUrl ? new URL(publicUrl).hostname.replace(/^www\./, '') : 'slide-engage.com';
+
+  useEffect(() => {
+    const show = () => {
+      setShowControls(true);
+      window.clearTimeout((show as any).timer);
+      (show as any).timer = window.setTimeout(() => setShowControls(false), 3200);
+    };
+    show();
+    window.addEventListener('mousemove', show);
+    window.addEventListener('keydown', show);
+    return () => {
+      window.removeEventListener('mousemove', show);
+      window.removeEventListener('keydown', show);
+      window.clearTimeout((show as any).timer);
+    };
+  }, []);
+
+  return (
+    <div className="relative min-h-[calc(100vh-64px)] overflow-hidden rounded-[18px] bg-[#08130D] p-7 text-white md:p-10">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(34,197,94,0.24),transparent_28%),radial-gradient(circle_at_72%_18%,rgba(45,212,191,0.18),transparent_26%),radial-gradient(circle_at_68%_78%,rgba(139,92,246,0.18),transparent_30%)]" />
+      <div className="absolute left-12 top-16 h-2 w-2 animate-[particleFloat_8s_ease-in-out_infinite] rounded-full bg-emerald-300/70" />
+      <div className="absolute right-28 top-28 h-3 w-3 animate-[particleFloat_10s_ease-in-out_infinite] rounded-full bg-cyan-200/60" />
+      <div className="absolute bottom-28 right-1/3 h-2 w-2 animate-[particleFloat_9s_ease-in-out_infinite] rounded-full bg-violet-200/60" />
+
+      {!publicMode && (
+        <button
+          type="button"
+          onClick={onExit}
+          className={`absolute right-6 top-6 z-20 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white backdrop-blur transition ${
+            showControls ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          Exit Fullscreen
+        </button>
+      )}
+
+      <div className="relative z-10 flex min-h-[calc(100vh-120px)] flex-col gap-8">
+        <div>
+          <div className="flex flex-wrap items-center gap-3 text-sm font-bold uppercase tracking-[0.18em] text-emerald-200">
+            <span>Live Word Cloud</span>
+            <span className="rounded-full bg-white/10 px-3 py-1">#{event?.event_code}</span>
+          </div>
+          <h1 className="mt-4 max-w-6xl text-[40px] font-black leading-tight text-white md:text-[64px]">{interaction.title}</h1>
+        </div>
+
+        <div className="grid flex-1 gap-7 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <div className="self-end lg:self-center">
+            <EventQRCode event={event} variant="dark" compact />
+          </div>
+          <AnimatedWordCloud responses={responses} fallbackWords={fallbackWords} presentationMode />
+        </div>
+      </div>
+
+      <div className="absolute inset-x-6 bottom-5 z-20 rounded-full border border-white/10 bg-black/28 px-6 py-3 text-center text-lg font-bold text-white shadow-2xl backdrop-blur md:text-2xl">
+        Join at {displayDomain} and enter code <span className="text-emerald-300">#{event?.event_code}</span>
+      </div>
+
+      <style jsx>{`
+        @keyframes particleFloat {
+          0%, 100% {
+            transform: translate3d(0, 0, 0);
+            opacity: 0.35;
+          }
+          50% {
+            transform: translate3d(24px, -22px, 0);
+            opacity: 0.85;
           }
         }
       `}</style>
@@ -460,6 +648,7 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
   }, []);
 
   const content = renderResultContent({
+    event,
     interaction: activeInteraction,
     payload,
     responses,
@@ -515,6 +704,22 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
     );
   }
 
+  if ((isFullscreen || publicMode) && activeInteraction.type === 'word_cloud') {
+    const words = Array.isArray(payload?.results) ? payload.results : [];
+    return (
+      <div className={shellClass}>
+        <FullscreenPresentation
+          event={event}
+          interaction={activeInteraction}
+          responses={responses}
+          fallbackWords={words}
+          onExit={exitFullscreen}
+          publicMode={publicMode}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={shellClass}>
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -552,12 +757,14 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
 }
 
 function renderResultContent({
+  event,
   interaction,
   payload,
   responses,
   questions,
   presentationMode,
 }: {
+  event: Event | null;
   interaction: LiveInteraction | null;
   payload: ResultPayload | null;
   responses: JoinedResponse[];
@@ -642,7 +849,24 @@ function renderResultContent({
     const words = Array.isArray(payload?.results) ? payload.results : [];
     return (
       <div className={`${presentationMode ? 'min-h-[66vh] p-3' : 'min-h-[430px] p-5'} rounded-[8px] border border-[#E2EBE6] bg-white shadow-sm`}>
-        <DynamicWordCloud responses={responses} fallbackWords={words} presentationMode={presentationMode} />
+        <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <div className="animate-[qrSlideIn_500ms_ease-out] lg:sticky lg:top-4 lg:self-start">
+            <EventQRCode event={event} />
+          </div>
+          <AnimatedWordCloud responses={responses} fallbackWords={words} presentationMode={presentationMode} />
+        </div>
+        <style jsx>{`
+          @keyframes qrSlideIn {
+            from {
+              opacity: 0;
+              transform: translateX(-14px);
+            }
+            to {
+              opacity: 1;
+              transform: translateX(0);
+            }
+          }
+        `}</style>
       </div>
     );
   }
