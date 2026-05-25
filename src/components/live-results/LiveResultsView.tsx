@@ -246,6 +246,27 @@ function EventQRCode({
   );
 }
 
+function JoinBanner({ event, variant = 'light' }: { event: Event | null; variant?: 'light' | 'dark' }) {
+  const publicUrl = normalizePublicUrl(process.env.NEXT_PUBLIC_APP_URL);
+  const displayDomain = publicUrl ? new URL(publicUrl).hostname.replace(/^www\./, '') : 'slide-engage.com';
+  const eventCode = event?.event_code || '------';
+  const isDark = variant === 'dark';
+
+  return (
+    <div
+      className={`rounded-full px-5 py-3 text-center text-base font-semibold shadow-sm backdrop-blur md:text-lg ${
+        isDark
+          ? 'border border-white/10 bg-black/28 text-white shadow-2xl'
+          : 'border border-[#DDEAE3] bg-[#EAF7EF]/80 text-[#17172F]'
+      }`}
+    >
+      <span className="mr-2 text-[#16833A]">✣</span>
+      Join at <span className="font-black text-[#16833A]">{displayDomain}</span> and enter code{' '}
+      <span className="font-black text-[#16833A]">{eventCode}</span>
+    </div>
+  );
+}
+
 function AnimatedWordCloud({
   responses,
   fallbackWords,
@@ -372,8 +393,6 @@ function FullscreenPresentation({
   publicMode: boolean;
 }) {
   const [showControls, setShowControls] = useState(true);
-  const publicUrl = normalizePublicUrl(process.env.NEXT_PUBLIC_APP_URL);
-  const displayDomain = publicUrl ? new URL(publicUrl).hostname.replace(/^www\./, '') : 'slide-engage.com';
 
   useEffect(() => {
     const show = () => {
@@ -427,8 +446,8 @@ function FullscreenPresentation({
         </div>
       </div>
 
-      <div className="absolute inset-x-6 bottom-5 z-20 rounded-full border border-white/10 bg-black/28 px-6 py-3 text-center text-lg font-bold text-white shadow-2xl backdrop-blur md:text-2xl">
-        Join at {displayDomain} and enter code <span className="text-emerald-300">#{event?.event_code}</span>
+      <div className="absolute inset-x-6 bottom-5 z-20">
+        <JoinBanner event={event} variant="dark" />
       </div>
 
       <style jsx>{`
@@ -912,11 +931,16 @@ function renderResultContent({
     const words = Array.isArray(payload?.results) ? payload.results : [];
     return (
       <div className={`${presentationMode ? 'min-h-[66vh] p-3' : 'min-h-[430px] p-5'} rounded-[8px] border border-[#E2EBE6] bg-white shadow-sm`}>
-        <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <div className="grid gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
           <div className="animate-[qrSlideIn_500ms_ease-out] lg:sticky lg:top-4 lg:self-start">
             <EventQRCode event={event} />
           </div>
-          <AnimatedWordCloud responses={responses} fallbackWords={words} presentationMode={presentationMode} />
+          <div className="min-w-0">
+            <AnimatedWordCloud responses={responses} fallbackWords={words} presentationMode={presentationMode} />
+            <div className="mx-auto mt-4 max-w-3xl">
+              <JoinBanner event={event} />
+            </div>
+          </div>
         </div>
         <style jsx>{`
           @keyframes qrSlideIn {
