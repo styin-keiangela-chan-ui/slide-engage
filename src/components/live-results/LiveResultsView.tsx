@@ -120,18 +120,31 @@ function buildCloudWords(responses: JoinedResponse[], fallbackWords: any[], tick
       }
     });
 
-  if (!grouped.size) {
-    fallbackWords.forEach((entry: any, index: number) => {
-      const normalized = normalizeWord(entry.word || entry.text || '');
-      if (!normalized) return;
+  fallbackWords.forEach((entry: any, index: number) => {
+    const label = entry.word || entry.text || entry.text_value || '';
+    const normalized = normalizeWord(label);
+    if (!normalized) return;
+
+    const fallbackTimestamp =
+      entry.submitted_at || entry.created_at
+        ? new Date(entry.submitted_at || entry.created_at).getTime()
+        : Date.now() - index * 60_000;
+    const fallbackCount = Number(entry.count || entry.value || 1);
+    const existing = grouped.get(normalized);
+
+    if (existing) {
+      existing.count = Math.max(existing.count, fallbackCount);
+      existing.latestAt = Math.max(existing.latestAt, fallbackTimestamp);
+      existing.firstSeen = Math.min(existing.firstSeen, index);
+    } else {
       grouped.set(normalized, {
-        text: entry.word || entry.text,
-        count: Number(entry.count || entry.value || 1),
-        latestAt: Date.now() - index * 60_000,
+        text: label,
+        count: fallbackCount,
+        latestAt: fallbackTimestamp,
         firstSeen: index,
       });
-    });
-  }
+    }
+  });
 
   const newestTimestamp = Math.max(...Array.from(grouped.values()).map(word => word.latestAt), 0);
   const now = Date.now() + tick;
@@ -425,6 +438,7 @@ function FullscreenPresentation({
 }) {
   const [showControls, setShowControls] = useState(true);
   const isDark = theme === 'dark';
+  const wordCloudKey = `${interaction.id}-${responses.length}-${fallbackWords.length}-${theme}`;
 
   useEffect(() => {
     const show = () => {
@@ -497,7 +511,13 @@ function FullscreenPresentation({
           <div className="self-start lg:self-center">
             <EventQRCode event={event} variant={theme} presentation />
           </div>
-          <AnimatedWordCloud responses={responses} fallbackWords={fallbackWords} presentationMode theme={theme} />
+          <AnimatedWordCloud
+            key={wordCloudKey}
+            responses={responses}
+            fallbackWords={fallbackWords}
+            presentationMode
+            theme={theme}
+          />
         </div>
       </div>
 
@@ -743,6 +763,9 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
 
   const enterFullscreen = async () => {
     setIsFullscreen(true);
+    if (activeInteraction) {
+      loadResults(activeInteraction);
+    }
     try {
       if (document.fullscreenEnabled && !document.fullscreenElement) {
         await document.documentElement.requestFullscreen();
