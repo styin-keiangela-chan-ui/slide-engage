@@ -23,7 +23,7 @@ export default function Sidebar() {
       <div className="p-4 pb-3 border-b border-[#E2EBE6]">
         <div className="text-sm font-bold">{lecturer?.name || 'Lecturer'}</div>
         <div className="text-xs text-[#6B7B8D] mt-0.5">
-          {currentEvent?.event_name || 'No event selected'}
+          {lecturer?.email || 'No email available'}
         </div>
       </div>
 
