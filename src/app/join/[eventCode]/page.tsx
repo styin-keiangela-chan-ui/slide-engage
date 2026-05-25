@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useParticipant } from '@/hooks/useParticipant';
-import { useRealtime } from '@/hooks/useRealtime';
-import Navbar from '@/components/ui/Navbar';
+import { createClient } from '@/lib/supabase/client';
 import { getInteractionIcon } from '@/lib/utils';
 import type { Interaction, InteractionOption, QAQuestion } from '@/lib/types';
 
@@ -14,7 +13,7 @@ export default function StudentSessionPage() {
   const eventCode = params.eventCode as string;
   const { participant, leaveEvent, loading: partLoading } = useParticipant();
 
-  const [liveInteraction, setLiveInteraction] = useState<Interaction | null>(null);
+  const [liveInteractions, setLiveInteractions] = useState<Interaction[]>([]);
   const [loadingInt, setLoadingInt] = useState(true);
 
   // If not joined, redirect to join page
@@ -37,7 +36,7 @@ export default function StudentSessionPage() {
       const res = await fetch(`/api/interactions?event_id=${participant.event_id}`);
       const data = await res.json();
       const liveItems = (data.interactions || []).filter((i: Interaction) => i.status === 'live');
-      setLiveInteraction(liveItems[0] || null);
+      setLiveInteractions(liveItems);
     } catch (e) {
       console.error(e);
     }
@@ -49,6 +48,24 @@ export default function StudentSessionPage() {
     const interval = setInterval(fetchInteractions, 4000);
     return () => clearInterval(interval);
   }, [fetchInteractions]);
+
+  useEffect(() => {
+    if (!participant?.event_id) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`slideengage-event-${participant.event_id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'interactions', filter: `event_id=eq.${participant.event_id}` },
+        fetchInteractions
+      )
+      .on('broadcast', { event: 'interaction_changed' }, fetchInteractions)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchInteractions, participant?.event_id]);
 
   const handleLeave = () => {
     leaveEvent();
@@ -77,18 +94,28 @@ export default function StudentSessionPage() {
       <div className="max-w-[640px] mx-auto p-7">
         {loadingInt ? (
           <div className="text-center text-[#6B7B8D] py-10">Loading activities...</div>
-        ) : !liveInteraction ? (
+        ) : liveInteractions.length === 0 ? (
           <div className="bg-white rounded-[20px] p-8 shadow border border-[#E2EBE6] text-center">
             <div className="text-4xl mb-4">⏳</div>
             <h2 className="text-xl font-bold mb-2">Waiting for lecturer to start an interaction.</h2>
             <p className="text-[#6B7B8D] text-sm">Keep this page open. The live activity will appear here automatically.</p>
           </div>
         ) : (
-          <InteractionCard
-            key={liveInteraction.id}
-            interaction={liveInteraction}
-            participantId={participant.id}
-          />
+          <div className="space-y-5">
+            {liveInteractions.length > 1 && (
+              <div className="rounded-[14px] border border-[#E2EBE6] bg-white px-4 py-3 text-sm font-semibold text-[#6B7B8D] shadow-sm">
+                {liveInteractions.length} live interactions are open for this event.
+              </div>
+            )}
+            {liveInteractions.map(interaction => (
+              <InteractionCard
+                key={interaction.id}
+                interaction={interaction}
+                participantId={participant.id}
+                eventId={participant.event_id}
+              />
+            ))}
+          </div>
         )}
       </div>
     </>
@@ -96,7 +123,8 @@ export default function StudentSessionPage() {
 }
 
 // ── Individual interaction card ──
-function InteractionCard({ interaction, participantId }: { interaction: Interaction; participantId: string }) {
+function InteractionCard({ interaction, participantId, eventId }: { interaction: Interaction; participantId: string; eventId: string }) {
+  const supabase = useMemo(() => createClient(), []);
   const [options, setOptions] = useState<InteractionOption[]>([]);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -118,6 +146,35 @@ function InteractionCard({ interaction, participantId }: { interaction: Interact
   // For quiz timer
   const [quizTime, setQuizTime] = useState<number>(interaction.config?.time_limit_seconds || 30);
   const [quizResult, setQuizResult] = useState<string | null>(null);
+
+  const notifyRealtime = useCallback(
+    async (eventName: 'response_inserted' | 'qa_changed') => {
+      await new Promise<void>(resolve => {
+        const channel = supabase.channel(`slideengage-event-${eventId}`);
+        const timeout = window.setTimeout(async () => {
+          await supabase.removeChannel(channel);
+          resolve();
+        }, 1200);
+
+        channel.subscribe(async status => {
+          if (status !== 'SUBSCRIBED') return;
+          await channel.send({
+            type: 'broadcast',
+            event: eventName,
+            payload: {
+              event_id: eventId,
+              interaction_id: interaction.id,
+              sent_at: new Date().toISOString(),
+            },
+          });
+          window.clearTimeout(timeout);
+          await supabase.removeChannel(channel);
+          resolve();
+        });
+      });
+    },
+    [eventId, interaction.id, supabase]
+  );
 
   // Fetch options for poll/quiz
   useEffect(() => {
@@ -173,7 +230,10 @@ function InteractionCard({ interaction, participantId }: { interaction: Interact
           option_id: selectedOptionId,
         }),
       });
-      if (res.ok) setSubmitted(true);
+      if (res.ok) {
+        setSubmitted(true);
+        notifyRealtime('response_inserted');
+      }
       else {
         const data = await res.json();
         if (data.error?.includes('already')) setSubmitted(true);
@@ -188,7 +248,7 @@ function InteractionCard({ interaction, participantId }: { interaction: Interact
     setSubmitting(true);
     try {
       if (selectedOptionId) {
-        await fetch('/api/responses', {
+        const res = await fetch('/api/responses', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -197,6 +257,7 @@ function InteractionCard({ interaction, participantId }: { interaction: Interact
             option_id: selectedOptionId,
           }),
         });
+        if (res.ok) notifyRealtime('response_inserted');
       }
       // Check if correct
       const correctOpt = options.find(o => o.is_correct);
@@ -216,7 +277,7 @@ function InteractionCard({ interaction, participantId }: { interaction: Interact
     const word = wordInput.trim();
     if (!word) return;
     try {
-      await fetch('/api/responses', {
+      const res = await fetch('/api/responses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -225,6 +286,7 @@ function InteractionCard({ interaction, participantId }: { interaction: Interact
           text_value: word,
         }),
       });
+      if (res.ok) notifyRealtime('response_inserted');
       setWordInput('');
       setWordSubmitted(true);
       setTimeout(() => setWordSubmitted(false), 2500);
@@ -235,7 +297,7 @@ function InteractionCard({ interaction, participantId }: { interaction: Interact
     try {
       // Submit rating
       if (rating > 0) {
-        await fetch('/api/responses', {
+        const res = await fetch('/api/responses', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -244,10 +306,11 @@ function InteractionCard({ interaction, participantId }: { interaction: Interact
             rating_value: rating,
           }),
         });
+        if (res.ok) notifyRealtime('response_inserted');
       }
       // Submit text
       if (feedbackText.trim()) {
-        await fetch('/api/responses', {
+        const res = await fetch('/api/responses', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -256,6 +319,7 @@ function InteractionCard({ interaction, participantId }: { interaction: Interact
             text_value: feedbackText.trim(),
           }),
         });
+        if (res.ok) notifyRealtime('response_inserted');
       }
       setFeedbackSubmitted(true);
     } catch (e: any) { alert(e.message); }
@@ -265,7 +329,7 @@ function InteractionCard({ interaction, participantId }: { interaction: Interact
     const text = qaInput.trim();
     if (!text) return;
     try {
-      await fetch('/api/qa', {
+      const res = await fetch('/api/qa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -274,6 +338,7 @@ function InteractionCard({ interaction, participantId }: { interaction: Interact
           question_text: text,
         }),
       });
+      if (res.ok) notifyRealtime('qa_changed');
       setQaInput('');
     } catch (e: any) { alert(e.message); }
   };
@@ -284,6 +349,7 @@ function InteractionCard({ interaction, participantId }: { interaction: Interact
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question_id: questionId, participant_id: participantId }),
     });
+    notifyRealtime('qa_changed');
     // Refresh
     const res = await fetch(`/api/qa?interaction_id=${interaction.id}&participant_id=${participantId}`);
     const data = await res.json();

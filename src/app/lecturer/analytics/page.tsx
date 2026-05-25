@@ -12,6 +12,7 @@ type Metrics = {
   questions: number;
   poll_votes: number;
   quiz_answers: number;
+  integrations: number;
   engagement_score: number;
   active_interactions: number;
   response_rate: number;
@@ -22,6 +23,7 @@ const emptyMetrics: Metrics = {
   questions: 0,
   poll_votes: 0,
   quiz_answers: 0,
+  integrations: 2,
   engagement_score: 0,
   active_interactions: 0,
   response_rate: 0,
@@ -115,16 +117,20 @@ export default function LecturerAnalyticsPage() {
                 {error && <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{error}</div>}
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {[
-                    ['Participants', metrics.participants],
-                    ['Questions', metrics.questions],
-                    ['Poll votes', metrics.poll_votes],
-                    ['Quiz answers', metrics.quiz_answers],
-                    ['Engagement score', `${metrics.engagement_score}%`],
-                    ['Active interactions', metrics.active_interactions],
-                    ['Response rate', `${metrics.response_rate}%`],
-                  ].map(([label, value]) => (
+                    ['Participants', metrics.participants, '👥'],
+                    ['Questions', metrics.questions, '❓'],
+                    ['Poll votes', metrics.poll_votes, '📊'],
+                    ['Quiz answers', metrics.quiz_answers, '🏆'],
+                    ['Integrations', metrics.integrations, '🔌'],
+                    ['Engagement score', `${metrics.engagement_score}%`, '⚡'],
+                    ['Active interactions', metrics.active_interactions, '🌐'],
+                    ['Response rate', `${metrics.response_rate}%`, '📈'],
+                  ].map(([label, value, icon]) => (
                     <div key={label} className="rounded-[14px] border border-[#E2EBE6] bg-white p-5">
-                      <div className="text-xs font-bold uppercase tracking-wider text-[#6B7B8D]">{label}</div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-xs font-bold uppercase tracking-wider text-[#6B7B8D]">{label}</div>
+                        <span className="grid h-9 w-9 place-items-center rounded-full bg-[#EAF7EF] text-lg">{icon}</span>
+                      </div>
                       <div className="mt-3 text-3xl font-extrabold text-[#1A1A2E]">{loading ? '...' : value}</div>
                     </div>
                   ))}

@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
 
     const config = (interaction.config || {}) as Record<string, any>;
-    if (interaction.status === 'closed' || config.voting_open === false) {
+    if (interaction.status !== 'live' || config.voting_open === false) {
       return NextResponse.json({ error: 'Voting is closed for this interaction.' }, { status: 403 });
     }
 

@@ -486,7 +486,7 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
   }, [eventCode, initialEvent, supabase]);
 
   const loadLiveInteractions = useCallback(
-    async (eventId: string) => {
+    async (eventId: string, preferredInteractionId?: string) => {
       const { data, error: interactionError } = await supabase
         .from('interactions')
         .select('*, interaction_options(*)')
@@ -504,7 +504,14 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
 
       const rows = (data || []) as LiveInteraction[];
       setLiveInteractions(rows);
-      setActiveInteraction(rows[0] || null);
+      setActiveInteraction(current => {
+        return (
+          rows.find(row => row.id === preferredInteractionId) ||
+          rows.find(row => row.id === current?.id) ||
+          rows[0] ||
+          null
+        );
+      });
     },
     [supabase]
   );
@@ -585,18 +592,38 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
     if (!event?.id) return;
 
     const channel = supabase
-      .channel(`live-results-interactions-${event.id}`)
+      .channel(`slideengage-event-${event.id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'interactions', filter: `event_id=eq.${event.id}` },
-        () => loadLiveInteractions(event.id)
+        payload => {
+          const next = payload.new as Partial<LiveInteraction> | undefined;
+          loadLiveInteractions(event.id, next?.status === 'live' ? next.id : undefined);
+        }
       )
+      .on(
+        'broadcast',
+        { event: 'interaction_changed' },
+        payload => {
+          loadLiveInteractions(event.id, payload.payload?.interaction_id);
+        }
+      )
+      .on('broadcast', { event: 'response_inserted' }, payload => {
+        if (!activeInteraction || payload.payload?.interaction_id === activeInteraction.id) {
+          loadResults(activeInteraction);
+        }
+      })
+      .on('broadcast', { event: 'qa_changed' }, payload => {
+        if (!activeInteraction || payload.payload?.interaction_id === activeInteraction.id) {
+          loadResults(activeInteraction);
+        }
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [event?.id, loadLiveInteractions, supabase]);
+  }, [activeInteraction, event?.id, loadLiveInteractions, loadResults, supabase]);
 
   useEffect(() => {
     if (!activeInteraction?.id) return;
@@ -616,12 +643,28 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
       .on('postgres_changes', { event: '*', schema: 'public', table: 'qa_upvotes' }, () =>
         activeInteraction.type === 'qa' ? loadResults(activeInteraction) : undefined
       )
+      .on('broadcast', { event: 'response_inserted' }, payload => {
+        if (payload.payload?.interaction_id === activeInteraction.id) {
+          loadResults(activeInteraction);
+        }
+      })
+      .on('broadcast', { event: 'qa_changed' }, payload => {
+        if (payload.payload?.interaction_id === activeInteraction.id) {
+          loadResults(activeInteraction);
+        }
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [activeInteraction, loadResults, supabase]);
+
+  useEffect(() => {
+    if (!activeInteraction?.id) return;
+    const interval = window.setInterval(() => loadResults(activeInteraction), 2500);
+    return () => window.clearInterval(interval);
+  }, [activeInteraction, loadResults]);
 
   const enterFullscreen = async () => {
     setIsFullscreen(true);
@@ -735,7 +778,7 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
           </h1>
           {liveInteractions.length > 1 && (
             <p className={isFullscreen || publicMode ? 'mt-3 text-slate-300' : 'mt-3 text-[#6B7B8D]'}>
-              Showing the first live interaction in this event.
+              {liveInteractions.length} live interactions in this event.
             </p>
           )}
         </div>
@@ -750,6 +793,26 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
           </button>
         )}
       </div>
+
+      {liveInteractions.length > 1 && !isFullscreen && !publicMode && (
+        <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
+          {liveInteractions.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveInteraction(item)}
+              className={`min-w-[190px] rounded-[8px] border px-4 py-3 text-left transition ${
+                activeInteraction.id === item.id
+                  ? 'border-[#16833A] bg-[#EAF7EF] text-[#16833A] shadow-sm'
+                  : 'border-[#E2EBE6] bg-white text-[#17172F] hover:border-[#16833A]'
+              }`}
+            >
+              <div className="text-xs font-bold uppercase tracking-[0.1em]">{interactionLabel(item)}</div>
+              <div className="mt-1 truncate text-sm font-bold">{item.title}</div>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mt-8">{content}</div>
     </div>

@@ -69,6 +69,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'interaction_id, participant_id, and question_text required' }, { status: 400 });
     }
 
+    const { data: interaction, error: interactionError } = await supabase
+      .from('interactions')
+      .select('status')
+      .eq('id', interaction_id)
+      .single();
+
+    if (interactionError || !interaction) {
+      return NextResponse.json({ error: 'Interaction not found' }, { status: 404 });
+    }
+
+    if (interaction.status !== 'live') {
+      return NextResponse.json({ error: 'Q&A is closed for this interaction.' }, { status: 403 });
+    }
+
     const { data, error } = await supabase
       .from('qa_questions')
       .insert({ interaction_id, participant_id, question_text })
