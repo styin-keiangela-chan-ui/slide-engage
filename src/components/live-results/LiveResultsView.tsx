@@ -196,8 +196,9 @@ function buildCloudWords(responses: JoinedResponse[], fallbackWords: any[], tick
       const minutesOld = Math.max(0, (now - word.latestAt) / 60_000);
       const ageFactor = Math.max(1, 10 - minutesOld);
       const count = frequency.get(word.normalized) || 1;
-      const frequencyFactor = count * 5;
-      const value = 20 + ageFactor * 4 + frequencyFactor;
+      const frequencyFactor = Math.log2(count + 1) * 26;
+      const recencyFactor = ageFactor * 4.5;
+      const value = 18 + recencyFactor + frequencyFactor;
       return {
         id: word.id,
         text: word.text,
@@ -224,14 +225,27 @@ function layoutCloudWords({
 }): PlacedCloudWord[] {
   if (!words.length || width <= 0 || height <= 0) return [];
 
-  const padding = presentationMode ? 54 : 34;
+  const padding = presentationMode ? 28 : 18;
   const usableWidth = Math.max(1, width - padding * 2);
   const usableHeight = Math.max(1, height - padding * 2);
   const maxValue = Math.max(...words.map(word => word.value), 1);
-  const densityScale = words.length > 18 ? clamp(18 / words.length, 0.42, 1) : 1;
-  const areaScale = clamp(Math.sqrt((usableWidth * usableHeight) / (presentationMode ? 480_000 : 260_000)), 0.72, 1.25);
+  const densityScale = words.length > 22 ? clamp(Math.sqrt(22 / words.length), 0.46, 1) : 1;
+  const areaScale = clamp(Math.sqrt((usableWidth * usableHeight) / (presentationMode ? 360_000 : 220_000)), 0.82, 1.35);
   const centerX = width / 2;
   const centerY = height / 2;
+  const aspectX = clamp(usableWidth / Math.max(usableHeight, 1), 1, 1.95);
+  const aspectY = clamp(usableHeight / Math.max(usableWidth, 1), 0.72, 1.08);
+  const anchors = [
+    { x: centerX, y: centerY },
+    { x: padding + usableWidth * 0.28, y: padding + usableHeight * 0.34 },
+    { x: padding + usableWidth * 0.72, y: padding + usableHeight * 0.64 },
+    { x: padding + usableWidth * 0.74, y: padding + usableHeight * 0.32 },
+    { x: padding + usableWidth * 0.28, y: padding + usableHeight * 0.68 },
+    { x: padding + usableWidth * 0.5, y: padding + usableHeight * 0.2 },
+    { x: padding + usableWidth * 0.5, y: padding + usableHeight * 0.82 },
+    { x: padding + usableWidth * 0.14, y: padding + usableHeight * 0.5 },
+    { x: padding + usableWidth * 0.86, y: padding + usableHeight * 0.5 },
+  ];
   const sortedWords = words
     .slice()
     .sort((a, b) => b.value - a.value || b.latestAt - a.latestAt || a.firstSeen - b.firstSeen);
@@ -239,18 +253,26 @@ function layoutCloudWords({
 
   for (const globalScale of globalScaleAttempts) {
     const placed: Array<PlacedCloudWord & { box: WordBox }> = [];
-    const gap = Math.max(3, (presentationMode ? 18 : 14) * globalScale);
+    const gap = Math.max(2, (presentationMode ? 14 : 10) * globalScale);
     let failed = false;
 
     sortedWords.forEach((word, index) => {
       if (failed) return;
       const seed = hashText(word.text);
-      const rotation = globalScale < 0.46 ? 0 : index < 2 ? 0 : ((seed % 25) - 12);
+      const rotation = globalScale < 0.46 ? 0 : index < 2 ? 0 : ((seed % 31) - 15);
       const normalized = word.value / maxValue;
+      const rankWeight = 1 - index / Math.max(1, sortedWords.length - 1);
+      const visualWeight = clamp(
+        Math.pow(normalized, 1.35) * 0.72 + Math.pow(rankWeight, 1.6) * 0.24 + (word.isNewest ? 0.14 : 0),
+        0.08,
+        1
+      );
+      const minSize = presentationMode ? 20 : 18;
+      const maxSize = presentationMode ? 96 : 78;
       const desiredSize = clamp(
-        ((presentationMode ? 28 : 18) + normalized * (presentationMode ? 72 : 50)) * densityScale * areaScale * globalScale,
-        globalScale < 0.38 ? 10 : presentationMode ? 16 : 12,
-        presentationMode ? 102 : 70
+        (minSize + visualWeight * (maxSize - minSize)) * densityScale * areaScale * globalScale,
+        globalScale < 0.38 ? 9 : presentationMode ? 18 : 14,
+        maxSize
       );
 
       const scaleAttempts = [1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52, 0.45, 0.38, 0.32];
@@ -258,15 +280,17 @@ function layoutCloudWords({
 
       for (const scale of scaleAttempts) {
         const fontSize = Math.max(10, desiredSize * scale);
-        const estimatedWidth = Math.max(fontSize * 1.6, word.text.length * fontSize * 0.58);
+        const estimatedWidth = Math.max(fontSize * 1.6, word.text.length * fontSize * 0.62);
         const estimatedHeight = fontSize * 1.15;
         const angleOffset = (seed % 360) * (Math.PI / 180);
 
-        for (let attempt = 0; attempt < 1800; attempt += 1) {
-          const angle = angleOffset + attempt * 0.36;
-          const radius = attempt === 0 ? 0 : 4.4 * Math.sqrt(attempt);
-          const x = centerX + Math.cos(angle) * radius * 1.12;
-          const y = centerY + Math.sin(angle) * radius * 0.82;
+        for (let attempt = 0; attempt < 2200; attempt += 1) {
+          const anchor = anchors[attempt % anchors.length];
+          const localAttempt = Math.floor(attempt / anchors.length);
+          const angle = angleOffset + localAttempt * 0.55 + index * 0.13;
+          const radius = localAttempt === 0 ? 0 : 7.4 * Math.sqrt(localAttempt);
+          const x = anchor.x + Math.cos(angle) * radius * aspectX;
+          const y = anchor.y + Math.sin(angle) * radius * aspectY;
           const box = rotatedBox(x, y, estimatedWidth, estimatedHeight, rotation);
           const inside =
             box.left >= padding &&
@@ -313,8 +337,9 @@ function layoutCloudWords({
     const seed = hashText(word.id);
     const col = index % columns;
     const row = Math.floor(index / columns);
-    const maxCellFont = Math.min(cellHeight * 0.5, cellWidth / Math.max(1.6, word.text.length * 0.58));
-    const fontSize = clamp(maxCellFont, 8, presentationMode ? 44 : 32);
+    const maxCellFont = Math.min(cellHeight * 0.62, cellWidth / Math.max(1.6, word.text.length * 0.62));
+    const valueWeight = word.value / maxValue;
+    const fontSize = clamp(maxCellFont * (0.72 + valueWeight * 0.5), 8, presentationMode ? 58 : 42);
     const jitterX = ((seed % 13) - 6) * Math.min(2, cellWidth * 0.02);
     const jitterY = (((seed >> 4) % 13) - 6) * Math.min(2, cellHeight * 0.02);
 
