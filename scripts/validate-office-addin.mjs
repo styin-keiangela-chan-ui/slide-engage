@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 const requiredUrl = 'https://slide-engage.vercel.app';
-const requiredTaskpane = `${requiredUrl}/taskpane`;
+const requiredTaskpane = `${requiredUrl}/taskpane-test`;
 const manifestFiles = [
   'public/manifest.xml',
   'public/office-addin/manifest.xml',
