@@ -168,6 +168,21 @@ export function GET() {
         cursor: not-allowed;
         opacity: 0.55;
       }
+      .button.loading::after {
+        content: "";
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        margin-left: 8px;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 999px;
+        vertical-align: -2px;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
       .event-list {
         display: grid;
         gap: 8px;
@@ -389,6 +404,17 @@ export function GET() {
           node.textContent = message;
         }
 
+        function setButtonLoading(id, isLoading, label) {
+          var button = el(id);
+          if (!button) return;
+          if (!button.getAttribute("data-label")) {
+            button.setAttribute("data-label", button.textContent);
+          }
+          button.disabled = !!isLoading;
+          button.classList.toggle("loading", !!isLoading);
+          button.textContent = isLoading && label ? label : button.getAttribute("data-label");
+        }
+
         function showApp() {
           el("login-view").classList.add("hidden");
           el("app-view").classList.remove("hidden");
@@ -459,6 +485,7 @@ export function GET() {
             setStatus("login-status", "Email and password required.", true);
             return;
           }
+          setButtonLoading("login-button", true, "Signing in");
           setStatus("login-status", "Signing in...", false);
           request("/api/auth/login", {
             method: "POST",
@@ -474,6 +501,8 @@ export function GET() {
           }).catch(function (error) {
             setStatus("login-status", error.message, true);
             addDebug("Login failed: " + error.message);
+          }).finally(function () {
+            setButtonLoading("login-button", false);
           });
         }
 
@@ -548,6 +577,7 @@ export function GET() {
             setStatus("app-status", "Enter an event name.", true);
             return;
           }
+          setButtonLoading("create-event-button", true, "Creating");
           var code = Math.random().toString(36).slice(2, 8).toUpperCase();
           request("/api/events", {
             method: "POST",
@@ -560,6 +590,8 @@ export function GET() {
             loadEvents();
           }).catch(function (error) {
             setStatus("app-status", error.message, true);
+          }).finally(function () {
+            setButtonLoading("create-event-button", false);
           });
         }
 
@@ -680,6 +712,7 @@ export function GET() {
             setStatus("app-status", "Enter a question and at least two options.", true);
             return;
           }
+          setButtonLoading("save-poll-button", true, "Saving");
           request("/api/interactions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -697,6 +730,8 @@ export function GET() {
             return insertPollSlide(data.interaction.id, question, options);
           }).catch(function (error) {
             setStatus("app-status", error.message, true);
+          }).finally(function () {
+            setButtonLoading("save-poll-button", false);
           });
         }
 
@@ -750,12 +785,16 @@ export function GET() {
             setStatus("app-status", "Select an event first.", true);
             return;
           }
+          setButtonLoading("present-button", true, "Starting");
           updateEventStatus("live")
             .then(function () {
               return insertJoiningSlide();
             })
             .catch(function (error) {
               setStatus("app-status", error.message, true);
+            })
+            .finally(function () {
+              setButtonLoading("present-button", false);
             });
         }
 
@@ -814,9 +853,17 @@ export function GET() {
           setStatus("app-status", message, true);
         });
 
-        bind();
-        initializeOffice();
-        restoreSession();
+        try {
+          bind();
+          addDebug("Handlers bound");
+          initializeOffice();
+          restoreSession();
+        } catch (error) {
+          var message = error && error.message ? error.message : "Taskpane startup failed";
+          addDebug("Startup error: " + message);
+          setStatus("login-status", message, true);
+          setStatus("app-status", message, true);
+        }
       })();
     </script>
   </body>

@@ -17,7 +17,7 @@ if [[ ! -f "${SOURCE_MANIFEST}" ]]; then
   exit 1
 fi
 
-if ! grep -q "https://slide-engage.vercel.app/taskpane-test" "${SOURCE_MANIFEST}"; then
+if ! grep -q "https://slide-engage.vercel.app/taskpane" "${SOURCE_MANIFEST}"; then
   echo "SlideEngage manifest does not point to the production taskpane URL." >&2
   exit 1
 fi

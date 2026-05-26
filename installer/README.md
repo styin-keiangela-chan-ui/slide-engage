@@ -6,7 +6,7 @@ This folder contains the production installer scaffolding for the SlideEngage Po
 
 - Use the production manifest at `https://slide-engage.vercel.app/manifest.xml`.
 - Register the add-in for PowerPoint only.
-- Keep the task pane pointed at `https://slide-engage.vercel.app/taskpane-test`.
+- Keep the task pane pointed at `https://slide-engage.vercel.app/taskpane`.
 - Use the same SlideEngage logo for website, Office manifest icons, and installer assets.
 - Avoid asking lecturers to upload `manifest.xml` manually.
 
@@ -69,7 +69,7 @@ If WiX is unavailable, the build still creates `SlideEngage-Windows-Installer.zi
 1. Deploy the Next.js app to Vercel at `https://slide-engage.vercel.app`.
 2. Confirm these URLs return `200`:
    - `https://slide-engage.vercel.app/manifest.xml`
-   - `https://slide-engage.vercel.app/taskpane-test`
+   - `https://slide-engage.vercel.app/taskpane`
    - `https://slide-engage.vercel.app/assets/icons/icon-32.png`
    - `https://slide-engage.vercel.app/assets/icons/icon-80.png`
 3. Build the macOS and Windows installers.

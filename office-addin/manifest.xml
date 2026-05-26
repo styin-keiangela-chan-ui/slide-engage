@@ -9,8 +9,8 @@
   <Version>1.0.0.0</Version>
   <ProviderName>SlideEngage</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="SlideEngage Test"/>
-  <Description DefaultValue="Minimal SlideEngage PowerPoint task pane test for Microsoft 365 PowerPoint for Mac."/>
+  <DisplayName DefaultValue="SlideEngage"/>
+  <Description DefaultValue="SlideEngage PowerPoint task pane for live polls, Q&amp;A, QR joining, and audience interactions."/>
   <IconUrl DefaultValue="https://slide-engage.vercel.app/assets/icons/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://slide-engage.vercel.app/assets/icons/icon-80.png"/>
   <SupportUrl DefaultValue="https://slide-engage.vercel.app/support"/>
@@ -24,7 +24,7 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://slide-engage.vercel.app/taskpane-test"/>
+    <SourceLocation DefaultValue="https://slide-engage.vercel.app/taskpane"/>
   </DefaultSettings>
 
   <Permissions>ReadDocument</Permissions>
