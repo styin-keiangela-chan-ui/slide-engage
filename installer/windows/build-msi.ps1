@@ -42,7 +42,7 @@ The installer registers a current-user Office trusted catalog and copies manifes
 %LOCALAPPDATA%\Microsoft\Office\16.0\Wef\SlideEngage
 
 The manifest task pane URL is:
-https://slide-engage.vercel.app/taskpane
+https://slide-engage.vercel.app/taskpane-test
 "@
 
 $Wix = Get-Command candle.exe -ErrorAction SilentlyContinue

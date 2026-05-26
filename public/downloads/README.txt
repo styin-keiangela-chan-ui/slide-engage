@@ -14,4 +14,4 @@ SlideEngage-Windows.msi
 SlideEngage-Windows-Installer.zip
 
 The Office manifest must point to:
-https://slide-engage.vercel.app/taskpane
+https://slide-engage.vercel.app/taskpane-test

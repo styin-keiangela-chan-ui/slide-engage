@@ -25,7 +25,7 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://slide-engage.vercel.app/taskpane"/>
+    <SourceLocation DefaultValue="https://slide-engage.vercel.app/taskpane-test"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -79,7 +79,7 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://slide-engage.vercel.app/addin-install"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://slide-engage.vercel.app/taskpane"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://slide-engage.vercel.app/taskpane-test"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="SlideEngage is ready"/>
