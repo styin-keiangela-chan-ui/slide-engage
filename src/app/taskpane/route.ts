@@ -1122,19 +1122,29 @@ export function GET() {
 
         function presentInteraction(interaction) {
           if (!selectedEvent || !interaction) return;
-          setButtonLoading("present-slide-button", true, "Presenting");
+          setButtonLoading("present-slide-button", true, "Creating slide");
+          setStatus("app-status", "Creating PowerPoint slide...", false);
+          addDebug("Present interaction: " + (interaction.id || "missing id"));
+          addDebug("Event code: " + selectedEvent.event_code);
+          addDebug("Question: " + (interaction.title || "Untitled"));
           var options = normalizeOptions(interaction.interaction_options || optionDrafts).map(function (option) {
-            return option.option_text;
-          }).filter(Boolean);
-          if (interaction.type === "poll" || interaction.type === "quiz") {
-            insertPollSlide(interaction.id, interaction.title, options).finally(function () {
+            return { option_text: option.option_text, is_correct: !!option.is_correct };
+          }).filter(function (option) {
+            return !!option.option_text;
+          });
+          addDebug("Options: " + options.length);
+          request("/api/results?interaction_id=" + encodeURIComponent(interaction.id), { cache: "no-store" })
+            .catch(function (error) {
+              addDebug("Result snapshot failed: " + error.message);
+              return { results: [], total_responses: 0 };
+            })
+            .then(function (resultData) {
+              addDebug("Result snapshot responses: " + (resultData.total_responses || 0));
+              return insertInteractionSlide(interaction, options, resultData);
+            })
+            .finally(function () {
               setButtonLoading("present-slide-button", false);
             });
-          } else {
-            insertPresentationText(interaction).finally(function () {
-              setButtonLoading("present-slide-button", false);
-            });
-          }
         }
 
         function savePoll() {
@@ -1177,10 +1187,67 @@ export function GET() {
           });
         }
 
-        function insertPresentationText(interaction) {
+        function interactionLiveUrl(interaction) {
+          return APP_URL + "/present/" + encodeURIComponent(selectedEvent.event_code);
+        }
+
+        function insertInteractionSlide(interaction, options, resultData) {
+          if (!selectedEvent) return Promise.resolve();
+          var joinUrl = APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
+          var liveUrl = interactionLiveUrl(interaction);
+          addDebug("Office host available: " + (!!(window.Office && Office.context)));
+          addDebug("insertFileFromBase64Async available: " + (!!(window.Office && Office.context && Office.context.document && Office.context.document.insertFileFromBase64Async)));
+          return request("/api/powerpoint/interaction-slide", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              interactionId: interaction.id,
+              interactionType: interaction.type,
+              interactionLabel: labelForInteraction(interaction),
+              question: interaction.title,
+              options: options,
+              eventCode: selectedEvent.event_code,
+              joinUrl: joinUrl,
+              liveUrl: liveUrl,
+              results: resultData.results || [],
+              totalResponses: resultData.total_responses || 0
+            })
+          }).then(function (data) {
+            return insertBase64Presentation(data.base64, interaction, liveUrl);
+          }).catch(function (error) {
+            setStatus("app-status", "Unable to create slide: " + error.message, true);
+            addDebug("Create slide failed: " + error.message);
+          });
+        }
+
+        function insertBase64Presentation(base64, interaction, liveUrl) {
+          return new Promise(function (resolve) {
+            if (window.Office && Office.context && Office.context.document && Office.context.document.insertFileFromBase64Async) {
+              Office.context.document.insertFileFromBase64Async(base64, function (result) {
+                if (result.status === Office.AsyncResultStatus.Succeeded) {
+                  setStatus("app-status", "Slide created successfully. Open the live view in the taskpane or use the link on the slide for realtime results.", false);
+                  addDebug("PowerPoint slide inserted successfully");
+                } else {
+                  var message = result.error && result.error.message ? result.error.message : "PowerPoint rejected the generated slide.";
+                  setStatus("app-status", "Unable to create slide: " + message, true);
+                  addDebug("PowerPoint insert failed: " + message);
+                  insertPresentationText(interaction, liveUrl).then(resolve);
+                  return;
+                }
+                resolve();
+              });
+            } else {
+              setStatus("app-status", "Unable to create a new slide in this Office host. Inserted a fallback live presentation link instead.", true);
+              addDebug("insertFileFromBase64Async unsupported; using text fallback");
+              insertPresentationText(interaction, liveUrl).then(resolve);
+            }
+          });
+        }
+
+        function insertPresentationText(interaction, liveUrlOverride) {
           return new Promise(function (resolve) {
             var joinUrl = APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
-            var liveUrl = APP_URL + "/live-results";
+            var liveUrl = liveUrlOverride || interactionLiveUrl(interaction);
             var text = "SlideEngage live interaction\\n\\n" +
               interaction.title + "\\n\\n" +
               "Join at " + joinUrl + "\\n" +
