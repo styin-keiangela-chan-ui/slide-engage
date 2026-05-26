@@ -237,6 +237,11 @@ export function GET() {
       .template:hover {
         border-color: var(--green);
       }
+      .template-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
       .template-icon {
         display: grid;
         place-items: center;
@@ -258,6 +263,52 @@ export function GET() {
         height: 100%;
         border-radius: inherit;
         background: var(--green);
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: var(--green-soft);
+        padding: 5px 9px;
+        color: var(--green);
+        font-size: 11px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+      .pill.closed { background: #f1f4f2; color: #68788a; }
+      .pill.draft { background: #fff7df; color: #9a5b00; }
+      .toolbar {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .option-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+      }
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+      }
+      .preview {
+        border: 1px dashed #b8dec5;
+        border-radius: 14px;
+        background: #fbfffc;
+        padding: 12px;
+      }
+      .preview-title {
+        margin-bottom: 8px;
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 900;
+        text-transform: uppercase;
       }
       .status {
         margin-top: 8px;
@@ -330,21 +381,36 @@ export function GET() {
 
         <section id="interaction-card" class="card hidden">
           <h2 class="title">Create new interaction</h2>
-          <div id="templates" class="stack"></div>
+          <div id="templates" class="template-grid"></div>
         </section>
 
-        <section id="poll-editor" class="card hidden">
+        <section id="interaction-editor" class="card hidden">
           <div class="row">
-            <h2 class="title" style="margin:0">Multiple choice poll</h2>
-            <button id="close-poll-editor" class="button secondary small" type="button">Close</button>
+            <div>
+              <h2 id="editor-title" class="title" style="margin:0">Interaction editor</h2>
+              <p id="editor-status" class="small muted" style="margin-top:4px">Draft auto-save ready</p>
+            </div>
+            <button id="close-editor" class="button secondary small" type="button">Close</button>
           </div>
           <div class="stack" style="margin-top:12px">
-            <textarea id="poll-question" class="input" rows="3" placeholder="Poll question"></textarea>
-            <input id="poll-option-1" class="input" placeholder="Option 1" />
-            <input id="poll-option-2" class="input" placeholder="Option 2" />
-            <input id="poll-option-3" class="input" placeholder="Option 3" />
-            <input id="poll-option-4" class="input" placeholder="Option 4" />
-            <button id="save-poll-button" class="button full" type="button">Save poll and insert slide</button>
+            <textarea id="interaction-question" class="input" rows="3" placeholder="Question or prompt"></textarea>
+            <div id="option-fields" class="stack"></div>
+            <button id="add-option-button" class="button secondary full hidden" type="button">Add option</button>
+            <div id="interaction-settings" class="stack"></div>
+            <div class="preview">
+              <div class="preview-title">Live editor preview</div>
+              <div id="editor-preview" class="small muted">Choose an interaction type to start.</div>
+            </div>
+            <div class="toolbar">
+              <button id="save-interaction-button" class="button" type="button">Save draft</button>
+              <button id="present-slide-button" class="button secondary" type="button">Present in PowerPoint</button>
+              <button id="go-live-button" class="button secondary" type="button">Go live</button>
+              <button id="close-live-button" class="button secondary" type="button">Close</button>
+              <button id="show-results-button" class="button secondary" type="button">Show results</button>
+              <button id="reset-results-button" class="button danger" type="button">Reset results</button>
+              <button id="previous-interaction-button" class="button secondary" type="button">Previous</button>
+              <button id="next-interaction-button" class="button secondary" type="button">Next</button>
+            </div>
           </div>
         </section>
 
@@ -369,16 +435,20 @@ export function GET() {
         var events = [];
         var selectedEvent = null;
         var interactions = [];
-        var activePollId = null;
+        var selectedInteraction = null;
+        var editorTemplate = null;
+        var optionDrafts = [];
+        var autosaveTimer = null;
+        var resultsTimer = null;
 
         var templates = [
-          { label: "Multiple choice", icon: "=", type: "poll", options: ["First option", "Second option", "Third option"] },
-          { label: "Open text", icon: "T", type: "feedback", config: { poll_kind: "open_text", include_open_text: true } },
-          { label: "Word cloud", icon: "W", type: "word_cloud", config: { max_words_per_participant: 3 } },
-          { label: "Rating", icon: "*", type: "feedback", config: { poll_kind: "rating", include_star_ratings: true } },
-          { label: "Ranking", icon: "#", type: "poll", config: { poll_kind: "ranking" }, options: ["Rank item 1", "Rank item 2", "Rank item 3"] },
-          { label: "Quiz", icon: "Q", type: "quiz", config: { time_limit_seconds: 30 }, options: ["Correct answer", "Distractor", "Distractor"] },
-          { label: "Audience Q&A", icon: "?", type: "qa", config: { allow_anonymous_questions: true } }
+          { label: "Multiple choice", icon: "=", type: "poll", config: { poll_kind: "multiple_choice", results_visible: true, voting_open: true }, options: ["Option 1", "Option 2"] },
+          { label: "Open text", icon: "T", type: "feedback", config: { poll_kind: "open_text", include_open_text: true, anonymous: true, voting_open: true } },
+          { label: "Word cloud", icon: "W", type: "word_cloud", config: { max_words_per_participant: 3, allow_duplicate_words: true, voting_open: true } },
+          { label: "Rating", icon: "*", type: "feedback", config: { poll_kind: "rating", include_star_ratings: true, scale: 5, voting_open: true } },
+          { label: "Ranking", icon: "#", type: "poll", config: { poll_kind: "ranking", voting_open: true }, options: ["Rank item 1", "Rank item 2"] },
+          { label: "Quiz", icon: "Q", type: "quiz", config: { time_limit_seconds: 30, points: 100, voting_open: true }, options: [{ option_text: "Correct answer", is_correct: true }, { option_text: "Distractor", is_correct: false }] },
+          { label: "Audience Q&A", icon: "?", type: "qa", config: { allow_anonymous_questions: true, moderation: false, voting_open: true } }
         ];
 
         function el(id) {
@@ -619,11 +689,7 @@ export function GET() {
             button.querySelector(".template-icon").textContent = template.icon;
             button.querySelector("span:last-child").textContent = template.label;
             button.onclick = function () {
-              if (template.label === "Multiple choice") {
-                openPollEditor();
-              } else {
-                createInteraction(template);
-              }
+              openInteractionEditor(null, template);
             };
             list.appendChild(button);
           });
@@ -635,8 +701,10 @@ export function GET() {
             .then(function (data) {
               interactions = data.interactions || [];
               renderInteractions();
-              var live = interactions.filter(function (item) { return item.status === "live"; })[0] || interactions[0];
-              if (live) loadResults(live.id);
+              if (selectedInteraction) {
+                selectedInteraction = findInteraction(selectedInteraction.id) || selectedInteraction;
+                renderEditor();
+              }
             })
             .catch(function (error) {
               setStatus("app-status", error.message, true);
@@ -658,17 +726,63 @@ export function GET() {
             item.className = "interaction-item";
             item.innerHTML = '<div class="row"><div><div class="event-name"></div><div class="small muted"></div></div><span class="code"></span></div>';
             item.querySelector(".event-name").textContent = interaction.title || "Untitled";
-            item.querySelector(".small.muted").textContent = interaction.type || "interaction";
+            item.querySelector(".small.muted").textContent = labelForInteraction(interaction);
+            item.querySelector(".code").className = "pill " + (interaction.status || "draft");
             item.querySelector(".code").textContent = interaction.status || "draft";
             item.onclick = function () {
-              activePollId = interaction.id;
-              loadResults(interaction.id);
+              openInteractionEditor(interaction, templateForInteraction(interaction));
             };
             list.appendChild(item);
           });
         }
 
-        function createInteraction(template) {
+        function findInteraction(id) {
+          for (var i = 0; i < interactions.length; i += 1) {
+            if (interactions[i].id === id) return interactions[i];
+          }
+          return null;
+        }
+
+        function labelForInteraction(interaction) {
+          var config = interaction.config || {};
+          if (interaction.type === "poll" && config.poll_kind === "ranking") return "Ranking";
+          if (interaction.type === "poll") return "Multiple choice";
+          if (interaction.type === "quiz") return "Quiz";
+          if (interaction.type === "word_cloud") return "Word cloud";
+          if (interaction.type === "qa") return "Audience Q&A";
+          if (interaction.type === "feedback" && config.poll_kind === "rating") return "Rating";
+          if (interaction.type === "feedback") return "Open text";
+          return interaction.type || "Interaction";
+        }
+
+        function templateForInteraction(interaction) {
+          var label = labelForInteraction(interaction);
+          for (var i = 0; i < templates.length; i += 1) {
+            if (templates[i].label === label) return templates[i];
+          }
+          return templates[0];
+        }
+
+        function needsOptions(template) {
+          return template && (template.type === "poll" || template.type === "quiz");
+        }
+
+        function minOptions(template) {
+          return needsOptions(template) ? 2 : 0;
+        }
+
+        function normalizeOptions(options) {
+          return (options || []).slice().sort(function (a, b) {
+            return (a.position || 0) - (b.position || 0);
+          }).map(function (option) {
+            return {
+              option_text: option.option_text || "",
+              is_correct: !!option.is_correct
+            };
+          });
+        }
+
+        function createInteraction(template, callback) {
           if (!selectedEvent) {
             setStatus("app-status", "Please select or create an event before adding interactions.", true);
             return;
@@ -688,55 +802,341 @@ export function GET() {
           }).then(function () {
             setStatus("app-status", template.label + " created.", false);
             loadInteractions();
+            if (callback) callback();
           }).catch(function (error) {
             setStatus("app-status", error.message, true);
           });
         }
 
-        function openPollEditor() {
-          el("poll-editor").classList.remove("hidden");
-          el("poll-question").value = "How familiar are you with the topic?";
-          el("poll-option-1").value = "I have some basic understanding";
-          el("poll-option-2").value = "I am an expert";
-          el("poll-option-3").value = "I have some solid background";
-          el("poll-option-4").value = "I am completely new";
-        }
-
-        function savePoll() {
-          if (!selectedEvent) return;
-          var question = el("poll-question").value.trim();
-          var options = [1, 2, 3, 4].map(function (number) {
-            return el("poll-option-" + number).value.trim();
-          }).filter(Boolean);
-          if (!question || options.length < 2) {
-            setStatus("app-status", "Enter a question and at least two options.", true);
+        function openInteractionEditor(interaction, template) {
+          if (!selectedEvent) {
+            setStatus("app-status", "Please select or create an event before adding interactions.", true);
             return;
           }
-          setButtonLoading("save-poll-button", true, "Saving");
+          selectedInteraction = interaction || null;
+          editorTemplate = template || (interaction ? templateForInteraction(interaction) : templates[0]);
+          optionDrafts = interaction && interaction.interaction_options
+            ? normalizeOptions(interaction.interaction_options)
+            : normalizeOptions((editorTemplate.options || []).map(function (option) {
+                return typeof option === "string" ? { option_text: option } : option;
+              }));
+          el("interaction-editor").classList.remove("hidden");
+          renderEditor();
+        }
+
+        function renderEditor() {
+          if (!editorTemplate) return;
+          var label = editorTemplate.label;
+          var config = selectedInteraction && selectedInteraction.config ? selectedInteraction.config : (editorTemplate.config || {});
+          el("editor-title").textContent = label;
+          el("editor-status").textContent = selectedInteraction ? ("Status: " + (selectedInteraction.status || "draft")) : "New draft";
+          el("interaction-question").value = selectedInteraction ? (selectedInteraction.title || "") : "";
+          if (!selectedInteraction && !el("interaction-question").value) {
+            el("interaction-question").value = defaultQuestion(label);
+          }
+          renderOptionFields();
+          renderSettings(config);
+          renderEditorPreview();
+          updateEditorButtons();
+        }
+
+        function defaultQuestion(label) {
+          if (label === "Multiple choice") return "How familiar are you with the topic?";
+          if (label === "Word cloud") return "In one word, describe today's topic";
+          if (label === "Open text") return "What should we discuss next?";
+          if (label === "Rating") return "How would you rate this session?";
+          if (label === "Ranking") return "Rank these items";
+          if (label === "Quiz") return "Which answer is correct?";
+          if (label === "Audience Q&A") return "What questions should we answer?";
+          return "Untitled interaction";
+        }
+
+        function renderOptionFields() {
+          var holder = el("option-fields");
+          holder.innerHTML = "";
+          el("add-option-button").classList.toggle("hidden", !needsOptions(editorTemplate));
+          if (!needsOptions(editorTemplate)) return;
+          optionDrafts.forEach(function (option, index) {
+            var row = document.createElement("div");
+            row.className = "option-row";
+            row.innerHTML = '<input class="input" placeholder="Option" /><button class="button secondary" type="button">Remove</button>';
+            row.querySelector("input").value = option.option_text || "";
+            row.querySelector("input").oninput = function () {
+              optionDrafts[index].option_text = this.value;
+              scheduleAutosave();
+              renderEditorPreview();
+            };
+            row.querySelector("button").onclick = function () {
+              if (optionDrafts.length <= minOptions(editorTemplate)) {
+                setStatus("app-status", "At least two options are required.", true);
+                return;
+              }
+              optionDrafts.splice(index, 1);
+              renderOptionFields();
+              renderEditorPreview();
+              scheduleAutosave();
+            };
+            holder.appendChild(row);
+            if (editorTemplate.type === "quiz") {
+              var correct = document.createElement("label");
+              correct.className = "toggle-row small";
+              correct.innerHTML = '<span>Correct answer</span><input type="checkbox" />';
+              correct.querySelector("input").checked = !!option.is_correct;
+              correct.querySelector("input").onchange = function () {
+                for (var i = 0; i < optionDrafts.length; i += 1) optionDrafts[i].is_correct = false;
+                optionDrafts[index].is_correct = this.checked;
+                renderOptionFields();
+                scheduleAutosave();
+              };
+              holder.appendChild(correct);
+            }
+          });
+        }
+
+        function renderSettings(config) {
+          var holder = el("interaction-settings");
+          holder.innerHTML = "";
+          if (!editorTemplate) return;
+          if (editorTemplate.label === "Word cloud") {
+            holder.appendChild(numberSetting("Max words per participant", "max_words_per_participant", config.max_words_per_participant || 3));
+            holder.appendChild(toggleSetting("Allow duplicate words", "allow_duplicate_words", config.allow_duplicate_words !== false));
+          }
+          if (editorTemplate.label === "Open text") {
+            holder.appendChild(numberSetting("Character limit", "character_limit", config.character_limit || 240));
+            holder.appendChild(toggleSetting("Anonymous responses", "anonymous", config.anonymous !== false));
+          }
+          if (editorTemplate.label === "Rating") {
+            holder.appendChild(numberSetting("Rating scale", "scale", config.scale || 5));
+          }
+          if (editorTemplate.label === "Quiz") {
+            holder.appendChild(numberSetting("Timer seconds", "time_limit_seconds", config.time_limit_seconds || 30));
+            holder.appendChild(numberSetting("Points", "points", config.points || 100));
+          }
+          if (editorTemplate.label === "Audience Q&A") {
+            holder.appendChild(toggleSetting("Moderation", "moderation", !!config.moderation));
+            holder.appendChild(toggleSetting("Anonymous questions", "allow_anonymous_questions", config.allow_anonymous_questions !== false));
+          }
+        }
+
+        function numberSetting(label, key, value) {
+          var row = document.createElement("label");
+          row.className = "toggle-row small";
+          row.innerHTML = '<span></span><input class="input" style="width:86px" type="number" min="1" />';
+          row.querySelector("span").textContent = label;
+          row.querySelector("input").value = value;
+          row.querySelector("input").setAttribute("data-config-key", key);
+          row.querySelector("input").oninput = scheduleAutosave;
+          return row;
+        }
+
+        function toggleSetting(label, key, value) {
+          var row = document.createElement("label");
+          row.className = "toggle-row small";
+          row.innerHTML = '<span></span><input type="checkbox" />';
+          row.querySelector("span").textContent = label;
+          row.querySelector("input").checked = !!value;
+          row.querySelector("input").setAttribute("data-config-key", key);
+          row.querySelector("input").onchange = scheduleAutosave;
+          return row;
+        }
+
+        function collectConfig() {
+          var config = {};
+          var base = editorTemplate && editorTemplate.config ? editorTemplate.config : {};
+          Object.keys(base).forEach(function (key) { config[key] = base[key]; });
+          var fields = el("interaction-settings").querySelectorAll("[data-config-key]");
+          for (var i = 0; i < fields.length; i += 1) {
+            var key = fields[i].getAttribute("data-config-key");
+            if (fields[i].type === "checkbox") config[key] = fields[i].checked;
+            else config[key] = Number(fields[i].value || 0);
+          }
+          return config;
+        }
+
+        function collectEditorPayload() {
+          var question = el("interaction-question").value.trim();
+          var options = optionDrafts.filter(function (option) {
+            return option.option_text && option.option_text.trim();
+          }).map(function (option) {
+            return { option_text: option.option_text.trim(), is_correct: !!option.is_correct };
+          });
+          return {
+            title: question,
+            type: editorTemplate.type,
+            config: collectConfig(),
+            options: needsOptions(editorTemplate) ? options : []
+          };
+        }
+
+        function validateEditor(payload) {
+          if (!payload.title) return "Question is required.";
+          if (needsOptions(editorTemplate) && payload.options.length < 2) return "At least two options are required.";
+          if (editorTemplate.type === "quiz") {
+            var correct = payload.options.filter(function (option) { return option.is_correct; });
+            if (!correct.length) return "Choose the correct answer.";
+          }
+          return "";
+        }
+
+        function saveEditor(isAuto, callback) {
+          if (!selectedEvent || !editorTemplate) return;
+          var payload = collectEditorPayload();
+          var validation = validateEditor(payload);
+          if (validation) {
+            if (!isAuto) setStatus("app-status", validation, true);
+            return;
+          }
+          if (!isAuto) setButtonLoading("save-interaction-button", true, "Saving");
+          var body = selectedInteraction
+            ? { id: selectedInteraction.id, title: payload.title, config: payload.config, options: payload.options }
+            : { event_id: selectedEvent.id, type: payload.type, title: payload.title, config: payload.config, options: payload.options };
           request("/api/interactions", {
-            method: "POST",
+            method: selectedInteraction ? "PATCH" : "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              event_id: selectedEvent.id,
-              type: "poll",
-              title: question,
-              config: { poll_kind: "multiple_choice" },
-              options: options.map(function (option) { return { option_text: option }; })
-            })
+            body: JSON.stringify(body)
           }).then(function (data) {
-            activePollId = data.interaction.id;
-            el("poll-editor").classList.add("hidden");
+            selectedInteraction = data.interaction;
+            el("editor-status").textContent = isAuto ? "Draft saved" : "Saved";
+            setStatus("app-status", isAuto ? "" : "Interaction saved.", false);
             loadInteractions();
-            return insertPollSlide(data.interaction.id, question, options);
+            if (callback) callback(data.interaction);
+          }).catch(function (error) {
+            if (!isAuto) setStatus("app-status", error.message, true);
+          }).finally(function () {
+            if (!isAuto) setButtonLoading("save-interaction-button", false);
+          });
+        }
+
+        function scheduleAutosave() {
+          renderEditorPreview();
+          clearTimeout(autosaveTimer);
+          el("editor-status").textContent = "Saving draft...";
+          autosaveTimer = setTimeout(function () {
+            saveEditor(true);
+          }, 900);
+        }
+
+        function updateEditorButtons() {
+          var hasSelected = !!selectedInteraction;
+          el("present-slide-button").disabled = !hasSelected;
+          el("go-live-button").disabled = !hasSelected;
+          el("close-live-button").disabled = !hasSelected;
+          el("show-results-button").disabled = !hasSelected;
+          el("reset-results-button").disabled = !hasSelected;
+          el("previous-interaction-button").disabled = !interactions.length;
+          el("next-interaction-button").disabled = !interactions.length;
+        }
+
+        function renderEditorPreview() {
+          var payload = collectEditorPayload();
+          var node = el("editor-preview");
+          var html = '<strong>' + escapeHtml(payload.title || "Question preview") + '</strong>';
+          if (payload.options && payload.options.length) {
+            html += '<div class="stack" style="margin-top:10px">';
+            payload.options.forEach(function (option, index) {
+              html += '<div class="small">' + String.fromCharCode(65 + index) + '. ' + escapeHtml(option.option_text) + (option.is_correct ? ' <span class="pill">correct</span>' : '') + '</div>';
+            });
+            html += '</div>';
+          } else if (editorTemplate) {
+            html += '<div class="small muted" style="margin-top:8px">' + escapeHtml(editorTemplate.label) + ' responses will appear live.</div>';
+          }
+          node.innerHTML = html;
+        }
+
+        function escapeHtml(value) {
+          return String(value || "").replace(/[&<>"']/g, function (char) {
+            return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char];
+          });
+        }
+
+        function setInteractionStatus(status) {
+          if (!selectedInteraction) return;
+          setButtonLoading(status === "live" ? "go-live-button" : "close-live-button", true, status === "live" ? "Starting" : "Closing");
+          var ready = status === "live" && selectedEvent && selectedEvent.status !== "live"
+            ? updateEventStatus("live")
+            : Promise.resolve();
+          ready.then(function () {
+            return request("/api/interactions", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: selectedInteraction.id, status: status })
+            });
+          }).then(function (data) {
+              selectedInteraction = data.interaction;
+              setStatus("app-status", status === "live" ? "Interaction is live." : "Interaction closed.", false);
+              loadInteractions();
+            }).catch(function (error) {
+              setStatus("app-status", error.message, true);
+            }).finally(function () {
+              setButtonLoading(status === "live" ? "go-live-button" : "close-live-button", false);
+            });
+        }
+
+        function resetResults() {
+          if (!selectedInteraction) return;
+          if (!confirm("Reset all results for this interaction?")) return;
+          setButtonLoading("reset-results-button", true, "Resetting");
+          request("/api/responses?interaction_id=" + encodeURIComponent(selectedInteraction.id), {
+            method: "DELETE"
+          }).then(function () {
+            setStatus("app-status", "Results reset.", false);
+            loadResults(selectedInteraction.id);
           }).catch(function (error) {
             setStatus("app-status", error.message, true);
           }).finally(function () {
-            setButtonLoading("save-poll-button", false);
+            setButtonLoading("reset-results-button", false);
           });
+        }
+
+        function navigateInteraction(direction) {
+          if (!interactions.length) return;
+          var index = 0;
+          if (selectedInteraction) {
+            for (var i = 0; i < interactions.length; i += 1) {
+              if (interactions[i].id === selectedInteraction.id) index = i;
+            }
+          }
+          var nextIndex = (index + direction + interactions.length) % interactions.length;
+          openInteractionEditor(interactions[nextIndex], templateForInteraction(interactions[nextIndex]));
+        }
+
+        function saveAndPresent() {
+          saveEditor(false, function (interaction) {
+            presentInteraction(interaction);
+          });
+        }
+
+        function presentInteraction(interaction) {
+          if (!selectedEvent || !interaction) return;
+          setButtonLoading("present-slide-button", true, "Presenting");
+          var options = normalizeOptions(interaction.interaction_options || optionDrafts).map(function (option) {
+            return option.option_text;
+          }).filter(Boolean);
+          if (interaction.type === "poll" || interaction.type === "quiz") {
+            insertPollSlide(interaction.id, interaction.title, options).finally(function () {
+              setButtonLoading("present-slide-button", false);
+            });
+          } else {
+            insertPresentationText(interaction).finally(function () {
+              setButtonLoading("present-slide-button", false);
+            });
+          }
+        }
+
+        function savePoll() {
+          saveAndPresent();
+        }
+
+        function openPollEditor() {
+          openInteractionEditor(null, templates[0]);
         }
 
         function insertPollSlide(interactionId, question, options) {
           if (!selectedEvent) return Promise.resolve();
+          if (!options || options.length < 2) {
+            setStatus("app-status", "This slide type needs at least two options.", true);
+            return Promise.resolve();
+          }
           var joinUrl = APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
           return request("/api/powerpoint/poll-slide", {
             method: "POST",
@@ -759,6 +1159,31 @@ export function GET() {
               });
             } else {
               setStatus("app-status", "Poll saved. PowerPoint slide insertion API is not available in browser preview.", false);
+            }
+          });
+        }
+
+        function insertPresentationText(interaction) {
+          return new Promise(function (resolve) {
+            var joinUrl = APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
+            var liveUrl = APP_URL + "/live-results";
+            var text = "SlideEngage live interaction\\n\\n" +
+              interaction.title + "\\n\\n" +
+              "Join at " + joinUrl + "\\n" +
+              "Event code: #" + selectedEvent.event_code + "\\n\\n" +
+              "Live results: " + liveUrl;
+            if (window.Office && Office.context && Office.context.document && Office.context.document.setSelectedDataAsync) {
+              Office.context.document.setSelectedDataAsync(text, { coercionType: Office.CoercionType.Text }, function (result) {
+                if (result.status === Office.AsyncResultStatus.Succeeded) {
+                  setStatus("app-status", "Interaction inserted into the current slide.", false);
+                } else {
+                  setStatus("app-status", result.error && result.error.message ? result.error.message : "Unable to insert interaction.", true);
+                }
+                resolve();
+              });
+            } else {
+              setStatus("app-status", "Interaction saved. PowerPoint insertion API is not available in browser preview.", false);
+              resolve();
             }
           });
         }
@@ -799,30 +1224,85 @@ export function GET() {
         }
 
         function loadResults(interactionId) {
-          activePollId = interactionId;
           request("/api/results?interaction_id=" + encodeURIComponent(interactionId), { cache: "no-store" })
             .then(function (data) {
-              renderResults(data.results || []);
+              renderResults(data);
+              startResultsPolling(interactionId);
             })
             .catch(function () {
               el("results-list").innerHTML = "";
             });
         }
 
-        function renderResults(results) {
+        function startResultsPolling(interactionId) {
+          clearInterval(resultsTimer);
+          resultsTimer = setInterval(function () {
+            request("/api/results?interaction_id=" + encodeURIComponent(interactionId), { cache: "no-store" })
+              .then(function (data) {
+                renderResults(data);
+              })
+              .catch(function () {});
+          }, 4000);
+        }
+
+        function renderResults(data) {
           var list = el("results-list");
           list.innerHTML = "";
+          var results = data.results || [];
+          if (data.hidden) {
+            list.innerHTML = '<div class="muted small">Results are hidden for this interaction.</div>';
+            return;
+          }
           if (!results.length) return;
-          results.forEach(function (item) {
+          if (Array.isArray(results) && data.interaction && (data.interaction.type === "poll" || data.interaction.type === "quiz")) {
+            results.forEach(function (item) {
+              var row = document.createElement("div");
+              var percentage = Math.min(100, Number(item.percentage || 0));
+              row.className = "interaction-item";
+              row.innerHTML = '<div class="row small"><strong></strong><span></span></div><div class="bar" style="margin-top:8px"><span></span></div>';
+              row.querySelector("strong").textContent = (item.option_letter ? item.option_letter + ". " : "") + item.option_text;
+              row.querySelector("span").textContent = (item.count || 0) + " votes";
+              row.querySelector(".bar span").style.width = percentage + "%";
+              list.appendChild(row);
+            });
+            return;
+          }
+          if (Array.isArray(results) && data.interaction && data.interaction.type === "word_cloud") {
+            var cloud = document.createElement("div");
+            cloud.className = "interaction-item";
+            cloud.innerHTML = '<div class="small muted">Word cloud responses</div><div style="margin-top:8px;line-height:1.9"></div>';
+            results.forEach(function (item) {
+              var word = document.createElement("span");
+              word.className = "code";
+              word.style.margin = "3px";
+              word.textContent = item.word + " (" + item.count + ")";
+              cloud.querySelector("div:last-child").appendChild(word);
+            });
+            list.appendChild(cloud);
+            return;
+          }
+          if (data.interaction && data.interaction.type === "feedback" && results.text_responses) {
             var row = document.createElement("div");
-            var percentage = Math.min(100, Number(item.percentage || 0));
             row.className = "interaction-item";
-            row.innerHTML = '<div class="row small"><strong></strong><span></span></div><div class="bar" style="margin-top:8px"><span></span></div>';
-            row.querySelector("strong").textContent = (item.option_letter ? item.option_letter + ". " : "") + item.option_text;
-            row.querySelector("span").textContent = (item.count || 0) + " votes";
-            row.querySelector(".bar span").style.width = percentage + "%";
+            row.innerHTML = '<strong>Average rating: </strong><span></span><div class="stack" style="margin-top:8px"></div>';
+            row.querySelector("span").textContent = results.average_rating || 0;
+            results.text_responses.slice(0, 5).forEach(function (item) {
+              var text = document.createElement("div");
+              text.className = "small muted";
+              text.textContent = item.text;
+              row.querySelector(".stack").appendChild(text);
+            });
             list.appendChild(row);
-          });
+            return;
+          }
+          if (Array.isArray(results)) {
+            results.slice(0, 8).forEach(function (item) {
+              var row = document.createElement("div");
+              row.className = "interaction-item small";
+              row.textContent = item.text_value || item.answer || item.title || JSON.stringify(item);
+              list.appendChild(row);
+            });
+          }
         }
 
         function bind() {
@@ -832,15 +1312,30 @@ export function GET() {
             lecturer = null;
             events = [];
             selectedEvent = null;
+            clearInterval(resultsTimer);
             showLogin();
           };
           el("create-event-button").onclick = createEvent;
           el("present-button").onclick = present;
           el("insert-join-button").onclick = insertJoiningSlide;
-          el("close-poll-editor").onclick = function () {
-            el("poll-editor").classList.add("hidden");
+          el("close-editor").onclick = function () {
+            el("interaction-editor").classList.add("hidden");
           };
-          el("save-poll-button").onclick = savePoll;
+          el("interaction-question").oninput = scheduleAutosave;
+          el("add-option-button").onclick = function () {
+            optionDrafts.push({ option_text: "Option " + (optionDrafts.length + 1), is_correct: false });
+            renderOptionFields();
+            renderEditorPreview();
+            scheduleAutosave();
+          };
+          el("save-interaction-button").onclick = function () { saveEditor(false); };
+          el("present-slide-button").onclick = saveAndPresent;
+          el("go-live-button").onclick = function () { setInteractionStatus("live"); };
+          el("close-live-button").onclick = function () { setInteractionStatus("closed"); };
+          el("show-results-button").onclick = function () { if (selectedInteraction) loadResults(selectedInteraction.id); };
+          el("reset-results-button").onclick = resetResults;
+          el("previous-interaction-button").onclick = function () { navigateInteraction(-1); };
+          el("next-interaction-button").onclick = function () { navigateInteraction(1); };
         }
 
         window.addEventListener("error", function (event) {
