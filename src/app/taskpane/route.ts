@@ -721,18 +721,32 @@ export function GET() {
             return;
           }
           interactions.forEach(function (interaction) {
-            var item = document.createElement("button");
-            item.type = "button";
-            item.className = "interaction-item";
-            item.innerHTML = '<div class="row"><div><div class="event-name"></div><div class="small muted"></div></div><span class="code"></span></div>';
-            item.querySelector(".event-name").textContent = interaction.title || "Untitled";
-            item.querySelector(".small.muted").textContent = labelForInteraction(interaction);
-            item.querySelector(".code").className = "pill " + (interaction.status || "draft");
-            item.querySelector(".code").textContent = interaction.status || "draft";
-            item.onclick = function () {
-              openInteractionEditor(interaction, templateForInteraction(interaction));
-            };
-            list.appendChild(item);
+            try {
+              var item = document.createElement("button");
+              item.type = "button";
+              item.className = "interaction-item";
+              item.innerHTML = '<div class="row"><div><div class="event-name"></div><div class="small muted"></div></div><span class="status-pill"></span></div>';
+              var titleEl = item.querySelector(".event-name");
+              var typeEl = item.querySelector(".small.muted");
+              var statusEl = item.querySelector(".status-pill");
+              if (titleEl) titleEl.textContent = interaction.title || "Untitled";
+              if (typeEl) typeEl.textContent = labelForInteraction(interaction);
+              if (statusEl) {
+                statusEl.className = "status-pill pill " + (interaction.status || "draft");
+                statusEl.textContent = interaction.status || "draft";
+              }
+              item.onclick = function () {
+                try {
+                  openInteractionEditor(interaction, templateForInteraction(interaction));
+                } catch (error) {
+                  setStatus("app-status", error && error.message ? error.message : "Unable to open interaction.", true);
+                  addDebug("Open interaction failed: " + (error && error.message ? error.message : "unknown error"));
+                }
+              };
+              list.appendChild(item);
+            } catch (error) {
+              addDebug("Interaction card skipped: " + (error && error.message ? error.message : "unknown error"));
+            }
           });
         }
 
