@@ -26,26 +26,38 @@ export default function DownloadInstallerPage() {
               Install SlideEngage once. Use it inside PowerPoint forever.
             </h1>
             <p className="mb-8 max-w-[640px] text-lg leading-8 text-[#5F6F80]">
-              Download the installer for your computer, open PowerPoint, and the SlideEngage button appears in the ribbon. No manifest upload, no developer mode, no XML steps for lecturers.
+              Download the installer for your computer, restart PowerPoint, then open SlideEngage from Insert → Add-ins → My Add-ins. The installer registers the production Office manifest for you.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <a
-                href="/downloads/SlideEngage-macOS.dmg"
+                href="/downloads/SlideEngage-macOS.pkg"
                 className="flex min-h-14 items-center justify-center gap-3 rounded-xl bg-[#168A3A] px-6 text-base font-extrabold text-white shadow-sm transition hover:bg-[#0f6f2d]"
               >
                 <span className="text-xl">⌘</span>
                 Download for macOS
               </a>
               <a
-                href="/downloads/SlideEngage-Windows.msi"
+                href="/downloads/SlideEngage-Windows-Installer.zip"
                 className="flex min-h-14 items-center justify-center gap-3 rounded-xl bg-[#1A1A2E] px-6 text-base font-extrabold text-white shadow-sm transition hover:bg-[#2a2a50]"
               >
                 <span className="text-xl">▦</span>
                 Download for Windows
               </a>
             </div>
+            <div className="mt-3 text-sm font-semibold text-[#6B7B8D]">
+              Advanced download:{' '}
+              <a href="/downloads/SlideEngage-macOS-Installer.zip" className="text-[#2D8A4E] hover:underline">
+                macOS script package
+              </a>
+              <span className="mx-2">·</span>
+              Windows MSI can be generated on Windows with WiX using <span className="font-mono">npm run installer:windows</span>
+              <span className="mx-2">·</span>
+              <a href="/addin-install" className="text-[#2D8A4E] hover:underline">
+                Manual fallback
+              </a>
+            </div>
             <div className="mt-4 text-sm font-semibold text-[#6B7B8D]">
-              Production task pane: <span className="text-[#2D8A4E]">https://your-real-vercel-domain.vercel.app/taskpane</span>
+              Production task pane: <span className="text-[#2D8A4E]">https://slide-engage.vercel.app/taskpane</span>
             </div>
           </div>
 
@@ -74,8 +86,8 @@ export default function DownloadInstallerPage() {
           <div className="mx-auto grid max-w-[1120px] grid-cols-1 gap-6 px-6 py-10 md:grid-cols-3">
             {[
               ['Automatic registration', 'The installer places the PowerPoint manifest in the Office add-in location and registers the trusted catalog.'],
-              ['Production domain', 'The task pane loads from https://your-real-vercel-domain.vercel.app with HTTPS-hosted icons and support URLs.'],
-              ['Permanent ribbon button', 'After installation and a PowerPoint restart, SlideEngage appears in the ribbon for existing presentations.'],
+              ['Production domain', 'The task pane loads from https://slide-engage.vercel.app with HTTPS-hosted icons and support URLs.'],
+              ['After install', 'Restart PowerPoint, then open Insert → Add-ins → My Add-ins and choose SlideEngage.'],
             ].map(([title, desc]) => (
               <div key={title} className="rounded-xl border border-[#E2EBE6] p-5">
                 <h2 className="mb-2 text-base font-extrabold">{title}</h2>

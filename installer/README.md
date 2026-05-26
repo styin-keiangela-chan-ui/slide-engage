@@ -4,9 +4,9 @@ This folder contains the production installer scaffolding for the SlideEngage Po
 
 ## What The Installers Do
 
-- Use the production manifest at `https://your-real-vercel-domain.vercel.app/manifest.xml`.
+- Use the production manifest at `https://slide-engage.vercel.app/manifest.xml`.
 - Register the add-in for PowerPoint only.
-- Keep the task pane pointed at `https://your-real-vercel-domain.vercel.app/taskpane`.
+- Keep the task pane pointed at `https://slide-engage.vercel.app/taskpane`.
 - Use the same SlideEngage logo for website, Office manifest icons, and installer assets.
 - Avoid asking lecturers to upload `manifest.xml` manually.
 
@@ -29,6 +29,7 @@ The `.dmg` contains a signed-package-ready `.pkg`. The package installs the mani
 
 ```text
 ~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/SlideEngage.xml
+~/Library/Containers/com.microsoft.Powerpoint/Data/Library/Application Support/Microsoft/Office/16.0/Wef/SlideEngage.xml
 ```
 
 For public distribution, sign and notarize the package and DMG with an Apple Developer ID before uploading it.
@@ -46,6 +47,7 @@ Output:
 
 ```text
 public/downloads/SlideEngage-Windows.msi
+public/downloads/SlideEngage-Windows-Installer.zip
 ```
 
 The MSI installs `manifest.xml` under:
@@ -60,17 +62,19 @@ It also registers a current-user Office trusted catalog under:
 HKCU\Software\Microsoft\Office\16.0\WEF\TrustedCatalogs
 ```
 
+If WiX is unavailable, the build still creates `SlideEngage-Windows-Installer.zip`. It contains `Install SlideEngage.cmd`, `install-slideengage.ps1`, `uninstall-slideengage.ps1`, and the production `manifest.xml`.
+
 ## Production Distribution
 
-1. Deploy the Next.js app to Vercel at `https://your-real-vercel-domain.vercel.app`.
+1. Deploy the Next.js app to Vercel at `https://slide-engage.vercel.app`.
 2. Confirm these URLs return `200`:
-   - `https://your-real-vercel-domain.vercel.app/manifest.xml`
-   - `https://your-real-vercel-domain.vercel.app/taskpane`
-   - `https://your-real-vercel-domain.vercel.app/assets/icons/icon-32.png`
-   - `https://your-real-vercel-domain.vercel.app/assets/icons/icon-80.png`
+   - `https://slide-engage.vercel.app/manifest.xml`
+   - `https://slide-engage.vercel.app/taskpane`
+   - `https://slide-engage.vercel.app/assets/icons/icon-32.png`
+   - `https://slide-engage.vercel.app/assets/icons/icon-80.png`
 3. Build the macOS and Windows installers.
 4. Upload the generated files to `public/downloads/`.
-5. Users download from `https://your-real-vercel-domain.vercel.app/download`.
+5. Users download from `https://slide-engage.vercel.app/download`.
 
 ## Important Production Note
 

@@ -16,6 +16,15 @@
         <Directory Id="SlideEngageDir" Name="SlideEngage">
           <Directory Id="OfficeAddinDir" Name="OfficeAddin"/>
         </Directory>
+        <Directory Id="MicrosoftDir" Name="Microsoft">
+          <Directory Id="OfficeDir" Name="Office">
+            <Directory Id="Office16Dir" Name="16.0">
+              <Directory Id="WefDir" Name="Wef">
+                <Directory Id="SlideEngageWefDir" Name="SlideEngage"/>
+              </Directory>
+            </Directory>
+          </Directory>
+        </Directory>
       </Directory>
     </Directory>
   </Fragment>
@@ -30,6 +39,10 @@
           <RegistryValue Name="Flags" Value="1" Type="integer"/>
         </RegistryKey>
         <RemoveFolder Id="RemoveOfficeAddinDir" Directory="OfficeAddinDir" On="uninstall"/>
+      </Component>
+      <Component Id="PowerPointWefManifestComponent" Directory="SlideEngageWefDir" Guid="25CF6A5B-DF70-4C62-9AF5-92C79E5306EB">
+        <File Id="PowerPointWefManifestXml" Source="$(var.SourceDir)\manifest.xml" Name="SlideEngage.xml" KeyPath="yes"/>
+        <RemoveFolder Id="RemovePowerPointWefDir" Directory="SlideEngageWefDir" On="uninstall"/>
       </Component>
     </ComponentGroup>
   </Fragment>

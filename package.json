@@ -8,6 +8,7 @@
     "socket:dev": "node scripts/socket-server.mjs",
     "configure:public-url": "node scripts/configure-public-url.mjs",
     "icons:generate": "node scripts/generate-slideengage-icons.mjs",
+    "addin:validate": "node scripts/validate-office-addin.mjs",
     "installer:mac": "bash installer/macos/build-dmg.sh",
     "installer:windows": "powershell -ExecutionPolicy Bypass -File installer/windows/build-msi.ps1",
     "build": "next build",
