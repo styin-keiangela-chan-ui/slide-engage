@@ -46,6 +46,7 @@ for (const file of files) {
   const current = readFileSync(file, 'utf8');
   const next = current
     .replaceAll('https://your-vercel-domain.vercel.app', productionUrl)
+    .replaceAll('https://your-real-vercel-domain.vercel.app', productionUrl)
     .replaceAll('https://slide-engage.vercel.app', productionUrl);
   writeFileSync(file, next);
 }

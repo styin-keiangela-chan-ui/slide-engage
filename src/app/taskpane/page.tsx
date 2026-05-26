@@ -102,6 +102,8 @@ export default function TaskpanePage() {
   const [slideTitle, setSlideTitle] = useState('');
   const [loading, setLoading] = useState(false);
   const [officeReady, setOfficeReady] = useState(false);
+  const [officeScriptLoaded, setOfficeScriptLoaded] = useState(false);
+  const [officeStatus, setOfficeStatus] = useState('Loading Office.js...');
 
   const appUrl = useMemo(() => getAppUrl().replace(/\/$/, ''), []);
   const displayedAppUrl = appUrl || 'not configured';
@@ -114,8 +116,30 @@ export default function TaskpanePage() {
         setLecturer(JSON.parse(stored));
       } catch {}
     }
-    waitForOfficeReady().then(setOfficeReady);
   }, []);
+
+  useEffect(() => {
+    if (!officeScriptLoaded) return;
+
+    let cancelled = false;
+    waitForOfficeReady()
+      .then(ready => {
+        if (cancelled) return;
+        setOfficeReady(ready);
+        setOfficeStatus(ready ? 'Office ready: PowerPoint connected.' : 'Office.js loaded. Browser preview mode.');
+        console.log('[SlideEngage] Office ready', { ready });
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setOfficeReady(false);
+        setOfficeStatus(error?.message || 'Office.js failed to initialize.');
+        console.error('[SlideEngage] Office initialization failed', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [officeScriptLoaded]);
 
   useEffect(() => {
     if (!lecturer) return;
@@ -344,7 +368,15 @@ export default function TaskpanePage() {
   if (!lecturer) {
     return (
       <>
-        <Script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" strategy="afterInteractive" />
+        <Script
+          src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"
+          strategy="afterInteractive"
+          onLoad={() => setOfficeScriptLoaded(true)}
+          onError={() => {
+            setOfficeStatus('Office.js could not load. Check network access to appsforoffice.microsoft.com.');
+            console.error('[SlideEngage] Office.js script failed to load');
+          }}
+        />
         <main className="min-h-screen bg-[#F4F7F4] p-5 text-[#1A1A2E]">
           <div className="mb-8 flex items-center gap-3">
             <img src="/assets/icons/icon-64.png" alt="SlideEngage" className="h-10 w-10 rounded-full" />
@@ -359,6 +391,10 @@ export default function TaskpanePage() {
               Production URL is missing. The add-in URL is {displayedAppUrl}; set NEXT_PUBLIC_APP_URL in Vercel before publishing.
             </div>
           )}
+
+          <div className="mb-4 rounded-lg border border-[#E2EBE6] bg-white px-4 py-3 text-xs font-semibold text-[#6B7B8D]">
+            {officeStatus}
+          </div>
 
           <section className="rounded-lg border border-[#E2EBE6] bg-white p-4">
             <h2 className="mb-4 text-base font-extrabold">Lecturer login</h2>
@@ -376,7 +412,15 @@ export default function TaskpanePage() {
 
   return (
     <>
-      <Script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" strategy="afterInteractive" />
+      <Script
+        src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"
+        strategy="afterInteractive"
+        onLoad={() => setOfficeScriptLoaded(true)}
+        onError={() => {
+          setOfficeStatus('Office.js could not load. Check network access to appsforoffice.microsoft.com.');
+          console.error('[SlideEngage] Office.js script failed to load');
+        }}
+      />
       <main className="min-h-screen bg-[#F4F7F4] text-[#1A1A2E]">
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-[#E2EBE6] bg-white px-4 py-3">
           <div className="flex items-center gap-2">
@@ -403,6 +447,10 @@ export default function TaskpanePage() {
               Production URL is missing. The add-in URL is {displayedAppUrl}; set NEXT_PUBLIC_APP_URL in Vercel before distributing.
             </div>
           )}
+
+          <div className="rounded-lg border border-[#E2EBE6] bg-white px-4 py-3 text-xs font-semibold text-[#6B7B8D]">
+            {officeStatus}
+          </div>
 
           <button onClick={presentWithSlideEngage} disabled={!selectedEvent} className="w-full rounded-lg bg-[#168A3A] py-3 text-sm font-extrabold text-white disabled:opacity-60">
             ▷ Present with Slide Engage
