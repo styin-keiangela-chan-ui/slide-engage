@@ -2,13 +2,6 @@
 
 import Script from 'next/script';
 import { useEffect, useMemo, useState } from 'react';
-import QRCodeDisplay from '@/components/ui/QRCodeDisplay';
-import LivePollChart from '@/components/results/LivePollChart';
-import {
-  emitSlideChange,
-  joinRealtimeEvent,
-  launchInteraction,
-} from '@/lib/realtime/socket';
 import {
   insertPresentationFromBase64,
   insertTextIntoCurrentSelection,
@@ -104,18 +97,43 @@ export default function TaskpanePage() {
   const [officeReady, setOfficeReady] = useState(false);
   const [officeScriptLoaded, setOfficeScriptLoaded] = useState(false);
   const [officeStatus, setOfficeStatus] = useState('Loading Office.js...');
+  const [taskpaneDebug, setTaskpaneDebug] = useState<string[]>(['Taskpane loaded']);
 
   const appUrl = useMemo(() => getAppUrl().replace(/\/$/, ''), []);
   const displayedAppUrl = appUrl || 'not configured';
   const missingProductionUrl = useMemo(() => !process.env.NEXT_PUBLIC_APP_URL || isLocalUrl(process.env.NEXT_PUBLIC_APP_URL), []);
 
   useEffect(() => {
-    const stored = localStorage.getItem(SESSION_KEY);
-    if (stored) {
-      try {
-        setLecturer(JSON.parse(stored));
-      } catch {}
+    try {
+      setTaskpaneDebug(prev => [...prev, 'React mounted']);
+      const stored = localStorage.getItem(SESSION_KEY);
+      if (stored) {
+        try {
+          setLecturer(JSON.parse(stored));
+        } catch {}
+      }
+    } catch (error: any) {
+      setTaskpaneDebug(prev => [...prev, `Storage unavailable: ${error?.message || 'unknown error'}`]);
     }
+  }, []);
+
+  useEffect(() => {
+    const onError = (event: ErrorEvent) => {
+      setOfficeStatus(event.message || 'Taskpane runtime error');
+      setTaskpaneDebug(prev => [...prev, `Window error: ${event.message}`]);
+    };
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const message = event.reason?.message || String(event.reason || 'Unhandled promise rejection');
+      setOfficeStatus(message);
+      setTaskpaneDebug(prev => [...prev, `Promise rejection: ${message}`]);
+    };
+
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    };
   }, []);
 
   useEffect(() => {
@@ -127,12 +145,14 @@ export default function TaskpanePage() {
         if (cancelled) return;
         setOfficeReady(ready);
         setOfficeStatus(ready ? 'Office ready: PowerPoint connected.' : 'Office.js loaded. Browser preview mode.');
+        setTaskpaneDebug(prev => [...prev, ready ? 'Office initialized' : 'Office.js loaded outside PowerPoint']);
         console.log('[SlideEngage] Office ready', { ready });
       })
       .catch(error => {
         if (cancelled) return;
         setOfficeReady(false);
         setOfficeStatus(error?.message || 'Office.js failed to initialize.');
+        setTaskpaneDebug(prev => [...prev, `Office initialization failed: ${error?.message || 'unknown error'}`]);
         console.error('[SlideEngage] Office initialization failed', error);
       });
 
@@ -149,21 +169,32 @@ export default function TaskpanePage() {
   useEffect(() => {
     if (!selectedEvent) return;
     fetchInteractions(selectedEvent.id);
-    const socket = joinRealtimeEvent(selectedEvent.event_code);
-    socket.on('participants:update', payload => {
-      if (payload.eventCode === selectedEvent.event_code) {
-        setParticipantCount(payload.count || 0);
-      }
-    });
-    socket.on('reaction:new', payload => {
-      if (payload.eventCode === selectedEvent.event_code) {
-        setStatus(`Live reaction: ${payload.reaction || 'reaction'}`);
-      }
-    });
+    let socket: any;
+    let mounted = true;
+
+    import('@/lib/realtime/socket')
+      .then(({ joinRealtimeEvent }) => {
+        if (!mounted) return;
+        socket = joinRealtimeEvent(selectedEvent.event_code);
+        socket.on('participants:update', (payload: any) => {
+          if (payload.eventCode === selectedEvent.event_code) {
+            setParticipantCount(payload.count || 0);
+          }
+        });
+        socket.on('reaction:new', (payload: any) => {
+          if (payload.eventCode === selectedEvent.event_code) {
+            setStatus(`Live reaction: ${payload.reaction || 'reaction'}`);
+          }
+        });
+      })
+      .catch(error => {
+        setTaskpaneDebug(prev => [...prev, `Realtime disabled: ${error?.message || 'unable to load socket client'}`]);
+      });
 
     return () => {
-      socket.off('participants:update');
-      socket.off('reaction:new');
+      mounted = false;
+      socket?.off?.('participants:update');
+      socket?.off?.('reaction:new');
     };
   }, [selectedEvent]);
 
@@ -176,7 +207,9 @@ export default function TaskpanePage() {
       setSlideTitle(nextTitle);
       setSlideIndex(prev => {
         const next = prev + 1;
-        emitSlideChange(selectedEvent.event_code, next, nextTitle);
+        import('@/lib/realtime/socket')
+          .then(({ emitSlideChange }) => emitSlideChange(selectedEvent.event_code, next, nextTitle))
+          .catch(() => {});
         return next;
       });
     });
@@ -339,7 +372,9 @@ export default function TaskpanePage() {
     }
 
     await insertPresentationFromBase64(data.base64);
-    launchInteraction(selectedEvent.event_code, interactionId);
+    import('@/lib/realtime/socket')
+      .then(({ launchInteraction }) => launchInteraction(selectedEvent.event_code, interactionId))
+      .catch(() => {});
     setStatus(pollForm?.id ? 'Poll updated in Supabase. Inserted a refreshed poll slide into this PowerPoint.' : 'Poll saved and inserted as a new slide in this PowerPoint.');
   }
 
@@ -361,22 +396,49 @@ export default function TaskpanePage() {
   async function presentWithSlideEngage() {
     if (!selectedEvent) return;
     await updateEvent('live');
-    emitSlideChange(selectedEvent.event_code, slideIndex, slideTitle || 'Presentation started');
+    import('@/lib/realtime/socket')
+      .then(({ emitSlideChange }) => emitSlideChange(selectedEvent.event_code, slideIndex, slideTitle || 'Presentation started'))
+      .catch(() => {});
     await insertJoiningSlide();
+  }
+
+  function renderOfficeScript() {
+    return (
+      <Script
+        src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"
+        strategy="afterInteractive"
+        onLoad={() => {
+          setOfficeScriptLoaded(true);
+          setTaskpaneDebug(prev => [...prev, 'Office.js script loaded']);
+        }}
+        onError={() => {
+          setOfficeStatus('Office.js could not load. Check network access to appsforoffice.microsoft.com.');
+          setTaskpaneDebug(prev => [...prev, 'Office.js script failed to load']);
+          console.error('[SlideEngage] Office.js script failed to load');
+        }}
+      />
+    );
+  }
+
+  function renderDebugPanel() {
+    return (
+      <details className="mb-4 rounded-lg border border-[#E2EBE6] bg-white px-4 py-3 text-xs text-[#6B7B8D]" open>
+        <summary className="cursor-pointer font-extrabold text-[#1A1A2E]">Office debug</summary>
+        <div className="mt-2 space-y-1 font-semibold">
+          <div>Taskpane loaded</div>
+          <div>{officeStatus}</div>
+          {taskpaneDebug.map((item, index) => (
+            <div key={`${item}-${index}`}>• {item}</div>
+          ))}
+        </div>
+      </details>
+    );
   }
 
   if (!lecturer) {
     return (
       <>
-        <Script
-          src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"
-          strategy="afterInteractive"
-          onLoad={() => setOfficeScriptLoaded(true)}
-          onError={() => {
-            setOfficeStatus('Office.js could not load. Check network access to appsforoffice.microsoft.com.');
-            console.error('[SlideEngage] Office.js script failed to load');
-          }}
-        />
+        {renderOfficeScript()}
         <main className="min-h-screen bg-[#F4F7F4] p-5 text-[#1A1A2E]">
           <div className="mb-8 flex items-center gap-3">
             <img src="/assets/icons/icon-64.png" alt="SlideEngage" className="h-10 w-10 rounded-full" />
@@ -392,9 +454,7 @@ export default function TaskpanePage() {
             </div>
           )}
 
-          <div className="mb-4 rounded-lg border border-[#E2EBE6] bg-white px-4 py-3 text-xs font-semibold text-[#6B7B8D]">
-            {officeStatus}
-          </div>
+          {renderDebugPanel()}
 
           <section className="rounded-lg border border-[#E2EBE6] bg-white p-4">
             <h2 className="mb-4 text-base font-extrabold">Lecturer login</h2>
@@ -412,15 +472,7 @@ export default function TaskpanePage() {
 
   return (
     <>
-      <Script
-        src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"
-        strategy="afterInteractive"
-        onLoad={() => setOfficeScriptLoaded(true)}
-        onError={() => {
-          setOfficeStatus('Office.js could not load. Check network access to appsforoffice.microsoft.com.');
-          console.error('[SlideEngage] Office.js script failed to load');
-        }}
-      />
+      {renderOfficeScript()}
       <main className="min-h-screen bg-[#F4F7F4] text-[#1A1A2E]">
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-[#E2EBE6] bg-white px-4 py-3">
           <div className="flex items-center gap-2">
@@ -448,9 +500,7 @@ export default function TaskpanePage() {
             </div>
           )}
 
-          <div className="rounded-lg border border-[#E2EBE6] bg-white px-4 py-3 text-xs font-semibold text-[#6B7B8D]">
-            {officeStatus}
-          </div>
+          {renderDebugPanel()}
 
           <button onClick={presentWithSlideEngage} disabled={!selectedEvent} className="w-full rounded-lg bg-[#168A3A] py-3 text-sm font-extrabold text-white disabled:opacity-60">
             ▷ Present with Slide Engage
@@ -516,7 +566,16 @@ export default function TaskpanePage() {
                     Last detected slide text: {slideTitle}
                   </div>
                 )}
-                <QRCodeDisplay eventCode={selectedEvent.event_code} size={150} />
+                <div className="flex flex-col items-center gap-3">
+                  <img
+                    src={`/api/qrcode?code=${encodeURIComponent(selectedEvent.event_code)}&format=svg`}
+                    alt={`QR code for event #${selectedEvent.event_code}`}
+                    width={150}
+                    height={150}
+                    className="rounded-xl border border-[#E2EBE6] bg-white p-3"
+                  />
+                  <div className="font-mono text-sm font-extrabold text-[#2D8A4E]">#{selectedEvent.event_code}</div>
+                </div>
                 <button onClick={insertJoiningSlide} className="mt-3 w-full rounded-lg border border-[#E2EBE6] py-2 text-xs font-bold hover:border-[#2D8A4E] hover:text-[#2D8A4E]">
                   Insert joining slide
                 </button>
@@ -599,7 +658,19 @@ export default function TaskpanePage() {
                   <span className="text-xs text-[#6B7B8D]">{interactions.length} interactions</span>
                 </div>
                 {results?.results && Array.isArray(results.results) ? (
-                  <LivePollChart data={results.results} />
+                  <div className="space-y-2">
+                    {results.results.map((item: any, index: number) => (
+                      <div key={`${item.option_text}-${index}`} className="rounded-lg border border-[#E2EBE6] bg-[#FAFCFA] p-3">
+                        <div className="mb-1 flex items-center justify-between gap-3 text-xs font-extrabold">
+                          <span>{item.option_letter ? `${item.option_letter}. ` : ''}{item.option_text}</span>
+                          <span>{item.count || 0} votes</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-[#E2EBE6]">
+                          <div className="h-full rounded-full bg-[#2D8A4E]" style={{ width: `${Math.min(100, Number(item.percentage || 0))}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <p className="text-sm text-[#6B7B8D]">Create a poll or quiz to preview live charts.</p>
                 )}
