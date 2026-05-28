@@ -1123,15 +1123,17 @@ export function GET() {
             setButtonLoading("present-slide-button", true, "Creating slide");
             setStatus("app-status", "Creating PowerPoint slide...", false);
           }
-          addDebug((presentOptions.silent ? "Auto refresh interaction: " : "Present interaction: ") + (interaction.id || "missing id"));
-          addDebug("Event code: " + selectedEvent.event_code);
-          addDebug("Question: " + (interaction.title || "Untitled"));
+          if (!presentOptions.silent) {
+            addDebug("Present interaction: " + (interaction.id || "missing id"));
+            addDebug("Event code: " + selectedEvent.event_code);
+            addDebug("Question: " + (interaction.title || "Untitled"));
+          }
           var slideOptions = normalizeOptions(interaction.interaction_options || optionDrafts).map(function (option) {
             return { option_text: option.option_text, is_correct: !!option.is_correct };
           }).filter(function (option) {
             return !!option.option_text;
           });
-          addDebug("Options: " + slideOptions.length);
+          if (!presentOptions.silent) addDebug("Options: " + slideOptions.length);
           var snapshotUrl = interaction.type === "qa"
             ? "/api/qa?interaction_id=" + encodeURIComponent(interaction.id) + "&sort=popular"
             : "/api/results?interaction_id=" + encodeURIComponent(interaction.id);
@@ -1144,7 +1146,7 @@ export function GET() {
               if (interaction.type === "qa") {
                 resultData = { results: resultData.questions || [], total_responses: (resultData.questions || []).length };
               }
-              addDebug("Result snapshot responses: " + (resultData.total_responses || 0));
+              if (!presentOptions.silent) addDebug("Result snapshot responses: " + (resultData.total_responses || 0));
               var signature = JSON.stringify({
                 id: interaction.id,
                 title: interaction.title,
@@ -1154,6 +1156,7 @@ export function GET() {
               });
               if (presentOptions.silent && signature === liveSlideLastSignature) return true;
               liveSlideLastSignature = signature;
+              if (presentOptions.silent) addDebug("Live result changed; refreshing PowerPoint snapshot");
               return insertInteractionSlide(interaction, slideOptions, resultData, !!presentOptions.silent);
             })
             .then(function (inserted) {
@@ -1213,12 +1216,14 @@ export function GET() {
           if (!selectedEvent) return Promise.resolve();
           var joinUrl = APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
           var liveUrl = interactionLiveUrl(interaction);
-          addDebug("Office host available: " + (!!(window.Office && Office.context)));
-          addDebug("Office host: " + (window.Office && Office.context ? Office.context.host || "unknown" : "unavailable"));
-          addDebug("Office platform: " + (window.Office && Office.context ? Office.context.platform || "unknown" : "unavailable"));
-          addDebug("PowerPoint.run available: " + (!!(window.PowerPoint && PowerPoint.run)));
-          addDebug("setSelectedDataAsync available: " + (!!(window.Office && Office.context && Office.context.document && Office.context.document.setSelectedDataAsync)));
-          addDebug("insertFileFromBase64Async available: " + (!!(window.Office && Office.context && Office.context.document && Office.context.document.insertFileFromBase64Async)));
+          if (!isAutoRefresh) {
+            addDebug("Office host available: " + (!!(window.Office && Office.context)));
+            addDebug("Office host: " + (window.Office && Office.context ? Office.context.host || "unknown" : "unavailable"));
+            addDebug("Office platform: " + (window.Office && Office.context ? Office.context.platform || "unknown" : "unavailable"));
+            addDebug("PowerPoint.run available: " + (!!(window.PowerPoint && PowerPoint.run)));
+            addDebug("setSelectedDataAsync available: " + (!!(window.Office && Office.context && Office.context.document && Office.context.document.setSelectedDataAsync)));
+            addDebug("insertFileFromBase64Async available: " + (!!(window.Office && Office.context && Office.context.document && Office.context.document.insertFileFromBase64Async)));
+          }
           if (!isAutoRefresh) setStatus("app-status", "Rendering preview...", false);
           return request("/api/powerpoint/interaction-slide", {
             method: "POST",
@@ -1236,9 +1241,11 @@ export function GET() {
               totalResponses: resultData.total_responses || 0
             })
           }).then(function (data) {
-            addDebug("Generated PPTX base64: " + (!!data.base64));
-            addDebug("Generated slide image: " + (!!data.imageBase64));
-            addDebug("Generated slide SVG: " + (!!data.svgBase64));
+            if (!isAutoRefresh) {
+              addDebug("Generated PPTX base64: " + (!!data.base64));
+              addDebug("Generated slide image: " + (!!data.imageBase64));
+              addDebug("Generated slide SVG: " + (!!data.svgBase64));
+            }
             return insertVisualSlide(data, interaction, liveUrl, !!isAutoRefresh);
           }).catch(function (error) {
             setStatus("app-status", "Unable to create slide: " + error.message, true);
@@ -1303,7 +1310,7 @@ export function GET() {
             presentInteraction(selectedInteraction, { silent: true }).finally(function () {
               liveSlideRefreshing = false;
             });
-          }, 3000);
+          }, 1000);
         }
 
         function stopLiveSlideRefresh() {
@@ -1410,9 +1417,7 @@ export function GET() {
               },
               function (result) {
                 if (result.status === Office.AsyncResultStatus.Succeeded) {
-                  setStatus("app-status", isAutoRefresh
-                    ? "PowerPoint slide refreshed with latest results."
-                    : "Slide inserted successfully. Live snapshot auto-refresh is starting.", false);
+                  if (!isAutoRefresh) setStatus("app-status", "Slide inserted successfully. Live snapshot auto-refresh is starting.", false);
                   addDebug(isAutoRefresh ? "PowerPoint live snapshot refreshed" : "PowerPoint image inserted successfully");
                   resolve(true);
                 } else {

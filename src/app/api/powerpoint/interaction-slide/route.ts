@@ -28,6 +28,29 @@ type PreviewRow = {
   correct?: boolean;
 };
 
+type WordPlacement = {
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  rotate: number;
+  color: string;
+};
+
+type Bounds = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+type Box = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
 const colors = ['168A3A', '1A6BB5', 'D46B08', '8B1A4A', '7C3AED', '0F766E'];
 
 function xmlEscape(value: unknown) {
@@ -61,6 +84,124 @@ function svgRoundRect(x: number, y: number, width: number, height: number, fill:
   return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${radius}" fill="#${fill}" stroke="#${stroke}" stroke-width="2" opacity="${opacity}"/>`;
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function wordHash(value: string) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+function estimateWordBox(text: string, x: number, y: number, size: number, rotate: number, padding: number): Box {
+  const rawWidth = Math.max(size * 1.8, text.length * size * 0.56);
+  const rawHeight = size * 1.12;
+  const radians = Math.abs(rotate) * Math.PI / 180;
+  const width = rawWidth * Math.cos(radians) + rawHeight * Math.sin(radians) + padding * 2;
+  const height = rawWidth * Math.sin(radians) + rawHeight * Math.cos(radians) + padding * 2;
+  return {
+    left: x - width / 2,
+    top: y - height / 2 - size * 0.1,
+    right: x + width / 2,
+    bottom: y + height / 2,
+  };
+}
+
+function boxInside(box: Box, bounds: Bounds) {
+  return box.left >= bounds.left &&
+    box.top >= bounds.top &&
+    box.right <= bounds.left + bounds.width &&
+    box.bottom <= bounds.top + bounds.height;
+}
+
+function boxesOverlap(a: Box, b: Box) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function candidatePoints(bounds: Bounds, total: number, seed: number) {
+  const points: Array<{ x: number; y: number; score: number }> = [];
+  const centerX = bounds.left + bounds.width / 2;
+  const centerY = bounds.top + bounds.height / 2;
+  const cols = Math.max(5, Math.ceil(Math.sqrt(total) * 2.2));
+  const rows = Math.max(4, Math.ceil(total / cols * 2.1));
+  points.push({ x: centerX, y: centerY, score: 0 });
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const jitterX = (((seed + row * 17 + col * 23) % 11) - 5) * 3;
+      const jitterY = (((seed + row * 29 + col * 13) % 9) - 4) * 3;
+      const x = bounds.left + ((col + 0.5) / cols) * bounds.width + jitterX;
+      const y = bounds.top + ((row + 0.5) / rows) * bounds.height + jitterY;
+      const spreadBonus = Math.abs(x - centerX) * 0.05 + Math.abs(y - centerY) * 0.08;
+      const score = Math.hypot(x - centerX, y - centerY) - spreadBonus + ((seed + row + col) % 7);
+      points.push({ x, y, score });
+    }
+  }
+
+  return points.sort((a, b) => a.score - b.score);
+}
+
+function layoutWordCloud(rows: PreviewRow[], bounds: Bounds): WordPlacement[] {
+  const cleanRows = rows
+    .map(row => ({
+      label: truncate(row.label, rows.length > 30 ? 18 : rows.length > 15 ? 22 : 28),
+      count: Math.max(1, Number(row.count || 1)),
+    }))
+    .filter(row => row.label.trim());
+
+  const total = cleanRows.length;
+  if (!total) return [];
+
+  const maxCount = Math.max(1, ...cleanRows.map(row => row.count));
+  const [minSize, maxSize, basePadding, rotationLimit] =
+    total <= 5 ? [44, 112, 22, 10] :
+    total <= 15 ? [30, 82, 17, 8] :
+    total <= 30 ? [20, 58, 12, 4] :
+    [15, 40, 8, 0];
+
+  const sortedRows = cleanRows
+    .map((row, index) => ({ ...row, index }))
+    .sort((a, b) => b.count - a.count || a.index - b.index);
+
+  const placed: WordPlacement[] = [];
+  const boxes: Box[] = [];
+
+  sortedRows.forEach((row, order) => {
+    const weight = Math.sqrt(row.count / maxCount);
+    const originalSize = Math.round(minSize + (maxSize - minSize) * weight);
+    const seed = wordHash(`${row.label}-${row.index}`);
+    const rotate = rotationLimit ? ((seed % (rotationLimit * 2 + 1)) - rotationLimit) : 0;
+    const points = candidatePoints(bounds, total, seed + order * 101);
+    let best: WordPlacement | null = null;
+    let bestBox: Box | null = null;
+
+    for (let scale = 1; scale >= 0.42 && !best; scale -= 0.08) {
+      const size = Math.max(11, Math.round(originalSize * scale));
+      const padding = Math.max(3, Math.round(basePadding * scale));
+      for (const point of points) {
+        const x = clamp(point.x, bounds.left + padding, bounds.left + bounds.width - padding);
+        const y = clamp(point.y, bounds.top + padding + size, bounds.top + bounds.height - padding);
+        const box = estimateWordBox(row.label, x, y, size, scale < 0.72 ? 0 : rotate, padding);
+        if (!boxInside(box, bounds)) continue;
+        if (boxes.some(existing => boxesOverlap(existing, box))) continue;
+        best = { text: row.label, x, y, size, rotate: scale < 0.72 ? 0 : rotate, color: colors[row.index % colors.length] };
+        bestBox = box;
+        break;
+      }
+    }
+
+    if (best && bestBox) {
+      placed.push(best);
+      boxes.push(bestBox);
+    }
+  });
+
+  return placed.sort((a, b) => b.size - a.size);
+}
+
 function previewRows(body: InteractionSlideRequest): PreviewRow[] {
   const results = body.results;
   if (body.interactionType === 'poll' || body.interactionType === 'quiz') {
@@ -88,7 +229,7 @@ function previewRows(body: InteractionSlideRequest): PreviewRow[] {
   }
 
   if (body.interactionType === 'word_cloud') {
-    return (Array.isArray(results) ? results : []).slice(0, 18).map((item: any) => ({
+    return (Array.isArray(results) ? results : []).slice(0, 45).map((item: any) => ({
       label: item.word || item.text || item.text_value || 'Word',
       count: Number(item.count || 1),
     }));
@@ -120,24 +261,16 @@ function buildPreviewSvg(body: InteractionSlideRequest, qrDataUri: string) {
     if (!rows.length) {
       resultMarkup = svgText('Live responses will appear here', 1205, 560, { size: 44, weight: 800, color: 'A3AEA8', anchor: 'middle' });
     } else {
-      const positions = [
-        [900, 330, -8], [1240, 280, 7], [1110, 465, 0], [1450, 420, -6], [820, 575, 5],
-        [1265, 645, -4], [1535, 610, 6], [980, 720, 0], [1380, 760, -9], [1620, 300, 8],
-        [740, 430, 0], [1130, 810, 5], [1510, 815, 0], [850, 830, -5], [1320, 525, 8],
-        [1640, 710, -6], [990, 245, 4], [720, 700, 0],
-      ];
-      const maxCount = Math.max(1, ...rows.map(row => row.count || 1));
-      resultMarkup = rows.map((row, index) => {
-        const [x, y, rotate] = positions[index % positions.length];
-        const fontSize = Math.round(42 + ((row.count || 1) / maxCount) * 68 - Math.floor(index / positions.length) * 8);
-        return svgText(truncate(row.label, 28), x, y, {
-          size: Math.max(30, Math.min(110, fontSize)),
+      const placements = layoutWordCloud(rows, { left: 625, top: 330, width: 1165, height: 455 });
+      resultMarkup = placements.length
+        ? placements.map(word => svgText(word.text, word.x, word.y, {
+          size: word.size,
           weight: 900,
-          color: colors[index % colors.length],
+          color: word.color,
           anchor: 'middle',
-          rotate,
-        });
-      }).join('');
+          rotate: word.rotate,
+        })).join('')
+        : svgText('Live responses will appear here', 1205, 560, { size: 44, weight: 800, color: 'A3AEA8', anchor: 'middle' });
     }
   } else if (body.interactionType === 'poll' || body.interactionType === 'quiz') {
     resultMarkup = rows.length
@@ -282,23 +415,32 @@ function addPollResults(slide: any, pptx: any, options: InteractionOption[], res
 }
 
 function addWordCloud(slide: any, results: any[]) {
-  const words = (results || []).slice(0, 18);
+  const words = (results || []).slice(0, 30);
   if (!words.length) {
     slide.addText('Live words will appear here', { x: 5.25, y: 3.8, w: 5.2, h: 0.4, fontSize: 22, bold: true, align: 'center', color: 'A3AEA8', margin: 0 });
     return;
   }
+  const count = words.length;
+  const cols = count <= 6 ? 3 : count <= 15 ? 4 : 5;
+  const rows = Math.ceil(count / cols);
+  const maxCount = Math.max(1, ...words.map((item: any) => Number(item.count || 1)));
+  const minSize = count <= 6 ? 18 : count <= 15 ? 14 : 10;
+  const maxSize = count <= 6 ? 42 : count <= 15 ? 30 : 20;
   words.forEach((item: any, index: number) => {
-    const col = index % 4;
-    const row = Math.floor(index / 4);
-    const size = Math.max(16, Math.min(42, 18 + Number(item.count || 1) * 7 - row * 2));
-    slide.addText(item.word || item.text || '', {
-      x: 3.9 + col * 2.05 + (row % 2) * 0.35,
-      y: 2.55 + row * 0.62,
-      w: 2.0,
-      h: 0.45,
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+    const weight = Math.sqrt(Number(item.count || 1) / maxCount);
+    const size = Math.round(minSize + (maxSize - minSize) * weight);
+    const cellW = 7.75 / cols;
+    const cellH = Math.min(0.64, 3.0 / Math.max(1, rows));
+    slide.addText(truncate(item.word || item.text || '', count > 15 ? 16 : 24), {
+      x: 3.9 + col * cellW,
+      y: 2.5 + row * cellH,
+      w: cellW * 0.92,
+      h: Math.max(0.26, cellH * 0.74),
       fontSize: size,
       bold: true,
-      rotate: index % 3 === 0 ? -8 : index % 3 === 1 ? 7 : 0,
+      rotate: count > 15 ? 0 : index % 3 === 0 ? -5 : index % 3 === 1 ? 5 : 0,
       color: colors[index % colors.length],
       fit: 'shrink',
       margin: 0,
