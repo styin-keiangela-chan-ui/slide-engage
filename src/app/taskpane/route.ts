@@ -424,6 +424,7 @@ export function GET() {
         </section>
 
         <div id="app-status" class="status hidden"></div>
+        <button id="open-live-button" class="button secondary full hidden" type="button">Open live presentation</button>
       </section>
     </main>
 
@@ -1243,10 +1244,15 @@ export function GET() {
 
         function insertVisualSlide(data, interaction, liveUrl) {
           setStatus("app-status", "Inserting into PowerPoint slide...", false);
+          showOpenLiveButton(liveUrl);
           if (data && data.imageBase64) {
             return insertSlideImage(data.imageBase64, interaction, liveUrl)
               .catch(function (imageError) {
                 addDebug("Image insertion failed: " + imageError.message);
+                if (isMacPowerPoint()) {
+                  setStatus("app-status", "Image insertion blocked by PowerPoint Mac. Trying text fallback...", true);
+                  return insertPresentationFallback(interaction, liveUrl);
+                }
                 if (data.base64) return insertBase64Presentation(data.base64, interaction, liveUrl);
                 return insertPresentationText(interaction, liveUrl);
               });
@@ -1260,12 +1266,29 @@ export function GET() {
               })
               .catch(function (imageError) {
                 addDebug("SVG preview insertion failed: " + imageError.message);
+                if (isMacPowerPoint()) {
+                  setStatus("app-status", "Image insertion blocked by PowerPoint Mac. Trying text fallback...", true);
+                  return insertPresentationFallback(interaction, liveUrl);
+                }
                 if (data.base64) return insertBase64Presentation(data.base64, interaction, liveUrl);
                 return insertPresentationText(interaction, liveUrl);
               });
           }
           if (data && data.base64) return insertBase64Presentation(data.base64, interaction, liveUrl);
           return insertPresentationText(interaction, liveUrl);
+        }
+
+        function isMacPowerPoint() {
+          return !!(window.Office && Office.context && String(Office.context.platform || "").toLowerCase() === "mac");
+        }
+
+        function showOpenLiveButton(liveUrl) {
+          var button = el("open-live-button");
+          button.classList.remove("hidden");
+          button.onclick = function () {
+            setStatus("app-status", "Opening live presentation...", false);
+            window.open(liveUrl, "_blank", "noopener,noreferrer");
+          };
         }
 
         function svgBase64ToPngBase64(svgBase64) {
@@ -1328,6 +1351,11 @@ export function GET() {
 
         function insertBase64Presentation(base64, interaction, liveUrl) {
           return new Promise(function (resolve) {
+            if (isMacPowerPoint()) {
+              addDebug("Skipping insertFileFromBase64Async on Mac; using fallback");
+              insertPresentationFallback(interaction, liveUrl).then(resolve);
+              return;
+            }
             if (window.Office && Office.context && Office.context.document && Office.context.document.insertFileFromBase64Async) {
               addDebug("Attempting generated PPTX insertion");
               Office.context.document.insertFileFromBase64Async(base64, function (result) {
@@ -1346,24 +1374,81 @@ export function GET() {
             } else {
               setStatus("app-status", "Unable to create a new slide in this Office host. Inserted a fallback live presentation link instead.", true);
               addDebug("insertFileFromBase64Async unsupported; using text fallback");
-              insertPresentationText(interaction, liveUrl).then(resolve);
+              insertPresentationFallback(interaction, liveUrl).then(resolve);
             }
+          });
+        }
+
+        function buildFallbackText(interaction, liveUrlOverride) {
+          var joinUrl = APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
+          var liveUrl = liveUrlOverride || interactionLiveUrl(interaction);
+          var label = labelForInteraction(interaction);
+          var options = normalizeOptions(interaction.interaction_options || optionDrafts)
+            .map(function (option, index) {
+              return String.fromCharCode(65 + index) + ". " + option.option_text;
+            })
+            .filter(Boolean)
+            .join("\\n");
+          return "SlideEngage - " + label + "\\n" +
+            "================================\\n\\n" +
+            "Question:\\n" + (interaction.title || "Untitled interaction") + "\\n\\n" +
+            (options ? "Answer options:\\n" + options + "\\n\\n" : "") +
+            "Event code: #" + selectedEvent.event_code + "\\n" +
+            "Join URL: " + joinUrl + "\\n" +
+            "QR link: " + joinUrl + "\\n" +
+            "Live result link: " + liveUrl + "\\n\\n" +
+            "Live result area:\\n" +
+            (interaction.type === "word_cloud" ? "Live responses will appear here." :
+              interaction.type === "qa" ? "Live questions will appear here." :
+              interaction.type === "poll" || interaction.type === "quiz" ? "Live bars and percentages will appear in the live presentation." :
+              "Live responses will appear in the live presentation.");
+        }
+
+        function buildFallbackHtml(interaction, liveUrlOverride) {
+          var text = buildFallbackText(interaction, liveUrlOverride)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\\n/g, "<br>");
+          return '<div style="font-family:Aptos,Arial,sans-serif;color:#1A1A2E;padding:24px;border:2px solid #DDEBE3;border-radius:18px;background:#F4F7F4">' +
+            '<h1 style="margin:0 0 16px;color:#168A3A;font-size:30px">SlideEngage</h1>' +
+            '<div style="font-size:20px;line-height:1.45">' + text + '</div>' +
+            '</div>';
+        }
+
+        function insertPresentationFallback(interaction, liveUrlOverride) {
+          return insertPresentationHtml(interaction, liveUrlOverride).catch(function (htmlError) {
+            addDebug("HTML fallback failed: " + htmlError.message);
+            return insertPresentationText(interaction, liveUrlOverride);
+          });
+        }
+
+        function insertPresentationHtml(interaction, liveUrlOverride) {
+          return new Promise(function (resolve, reject) {
+            if (!(window.Office && Office.context && Office.context.document && Office.context.document.setSelectedDataAsync && Office.CoercionType && Office.CoercionType.Html)) {
+              reject(new Error("PowerPoint HTML insertion API is not available."));
+              return;
+            }
+            Office.context.document.setSelectedDataAsync(buildFallbackHtml(interaction, liveUrlOverride), { coercionType: Office.CoercionType.Html }, function (result) {
+              if (result.status === Office.AsyncResultStatus.Succeeded) {
+                setStatus("app-status", "Inserted HTML fallback successfully. Use Open live presentation for realtime results.", false);
+                addDebug("HTML fallback inserted successfully");
+                resolve();
+              } else {
+                reject(new Error(result.error && result.error.message ? result.error.message : "Unable to insert HTML fallback."));
+              }
+            });
           });
         }
 
         function insertPresentationText(interaction, liveUrlOverride) {
           return new Promise(function (resolve) {
-            var joinUrl = APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
-            var liveUrl = liveUrlOverride || interactionLiveUrl(interaction);
-            var text = "SlideEngage live interaction\\n\\n" +
-              interaction.title + "\\n\\n" +
-              "Join at " + joinUrl + "\\n" +
-              "Event code: #" + selectedEvent.event_code + "\\n\\n" +
-              "Live results: " + liveUrl;
+            var text = buildFallbackText(interaction, liveUrlOverride);
             if (window.Office && Office.context && Office.context.document && Office.context.document.setSelectedDataAsync) {
               Office.context.document.setSelectedDataAsync(text, { coercionType: Office.CoercionType.Text }, function (result) {
                 if (result.status === Office.AsyncResultStatus.Succeeded) {
-                  setStatus("app-status", "Interaction inserted into the current slide.", false);
+                  setStatus("app-status", "Inserted text fallback successfully. Use Open live presentation for realtime results.", false);
+                  addDebug("Text fallback inserted successfully");
                 } else {
                   setStatus("app-status", result.error && result.error.message ? result.error.message : "Unable to insert interaction.", true);
                 }

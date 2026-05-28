@@ -28,7 +28,7 @@
     <SourceLocation DefaultValue="https://slide-engage.vercel.app/taskpane-test"/>
   </DefaultSettings>
 
-  <Permissions>ReadDocument</Permissions>
+  <Permissions>ReadWriteDocument</Permissions>
 
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
