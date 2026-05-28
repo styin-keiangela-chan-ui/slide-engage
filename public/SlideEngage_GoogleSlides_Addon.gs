@@ -1,368 +1,387 @@
 /**
- * ============================================
- * SlideEngage — Google Slides Add-on
- * ============================================
+ * SlideEngage Google Slides Add-on
  *
- * HOW TO INSTALL:
- * 1. Open your Google Slides presentation
- * 2. Click Extensions → Apps Script
- * 3. Delete any existing code in Code.gs
- * 4. Paste this entire file into Code.gs
- * 5. Click Save (Ctrl+S)
- * 6. Run the onOpen() function once (click Run → onOpen)
- * 7. Authorize the script when prompted
- * 8. Reload your Google Slides — "SlideEngage" menu appears!
+ * Install in Google Slides:
+ * Extensions > Apps Script > paste this file into Code.gs > Save > reload Slides.
  *
- * CONFIGURATION:
- * Change SLIDEENGAGE_URL to your deployed app URL
+ * Production note:
+ * Publish through Google Workspace Marketplace for normal users. This script is
+ * the development/copy-install version and uses the same SlideEngage backend as
+ * the website and PowerPoint add-in.
  */
 
-// ── CONFIG ──────────────────────────────────────────────────
-var SLIDEENGAGE_URL = 'https://your-real-vercel-domain.vercel.app'; // Public Slide Engage deployment URL
-var EVENT_CODE = ''; // Set your event code here, or leave empty to prompt
+var SLIDEENGAGE_URL = 'https://slide-engage.vercel.app';
+var SESSION_KEY = 'SLIDEENGAGE_SESSION';
+var SELECTED_EVENT_KEY = 'SLIDEENGAGE_SELECTED_EVENT_ID';
 
-// ── MENU ────────────────────────────────────────────────────
 function onOpen() {
   SlidesApp.getUi()
     .createMenu('🎯 SlideEngage')
-    .addItem('📊 Insert Poll Slide', 'insertPollSlide')
-    .addItem('🧠 Insert Quiz Slide', 'insertQuizSlide')
-    .addItem('❓ Insert Q&A Slide', 'insertQASlide')
-    .addItem('☁️ Insert Word Cloud Slide', 'insertWordCloudSlide')
-    .addItem('⭐ Insert Feedback Slide', 'insertFeedbackSlide')
+    .addItem('Open SlideEngage', 'showSlideEngageSidebar')
     .addSeparator()
-    .addItem('📱 Insert QR Code Slide', 'insertQRCodeSlide')
-    .addItem('🎯 Insert Title Slide', 'insertTitleSlide')
-    .addSeparator()
-    .addItem('⚙️ Set Event Code', 'setEventCode')
-    .addItem('ℹ️ About SlideEngage', 'showAbout')
+    .addItem('Update current SlideEngage snapshot', 'updateSelectedInteractionSnapshot')
     .addToUi();
 }
 
-// ── SET EVENT CODE ──────────────────────────────────────────
-function setEventCode() {
-  var ui = SlidesApp.getUi();
-  var response = ui.prompt(
-    '🎯 SlideEngage — Set Event Code',
-    'Enter your event code (e.g., KICK26):',
-    ui.ButtonSet.OK_CANCEL
-  );
+function showSlideEngageSidebar() {
+  var html = HtmlService.createHtmlOutput(buildSidebarHtml_())
+    .setTitle('SlideEngage');
+  SlidesApp.getUi().showSidebar(html);
+}
 
-  if (response.getSelectedButton() == ui.Button.OK) {
-    var code = response.getResponseText().toUpperCase().replace('#', '').trim();
-    if (code) {
-      PropertiesService.getDocumentProperties().setProperty('SLIDEENGAGE_EVENT_CODE', code);
-      ui.alert('Event code set to: #' + code);
+function buildSidebarHtml_() {
+  return '<!doctype html><html><head><base target="_top"><style>' +
+    'body{font-family:Arial,sans-serif;margin:0;background:#f6faf7;color:#17172f}button,input,textarea,select{font:inherit}' +
+    '.wrap{padding:14px}.brand{display:flex;align-items:center;gap:10px;margin-bottom:14px}.logo{width:36px;height:36px;border-radius:10px;background:#168a3a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px}.title{font-weight:800;font-size:18px}.muted{color:#6b7b8d}.small{font-size:12px}.card{background:#fff;border:1px solid #dfe9e3;border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 8px 24px rgba(14,63,34,.06)}' +
+    '.stack{display:flex;flex-direction:column;gap:8px}.row{display:flex;gap:8px;align-items:center;justify-content:space-between}.input{width:100%;box-sizing:border-box;border:1px solid #d6e2dc;border-radius:10px;padding:10px;background:#fff}.btn{border:0;border-radius:10px;background:#168a3a;color:#fff;font-weight:800;padding:10px 12px;cursor:pointer}.btn.secondary{background:#fff;color:#17172f;border:1px solid #d6e2dc}.btn.danger{background:#fff;color:#b42318;border:1px solid #f0c6c6}.btn:disabled{opacity:.55;cursor:not-allowed}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.item{border:1px solid #dfe9e3;border-radius:12px;padding:10px;background:#fff;cursor:pointer}.item.active{border-color:#168a3a;background:#eaf7ef}.pill{border-radius:999px;background:#eaf7ef;color:#168a3a;padding:4px 8px;font-size:12px;font-weight:800}.status{padding:10px;border-radius:10px;background:#eaf7ef;color:#168a3a;font-weight:700}.error{background:#fff0f0;color:#b42318}.hidden{display:none}' +
+    '</style></head><body><div class="wrap">' +
+    '<div class="brand"><div class="logo">🎯</div><div><div class="title">SlideEngage</div><div class="small muted">Google Slides Add-on</div></div></div>' +
+    '<div id="status" class="status hidden"></div>' +
+    '<section id="login" class="card stack"><b>Lecturer login</b><input id="email" class="input" placeholder="Email"><input id="password" class="input" type="password" placeholder="Password"><button class="btn" onclick="login()">Sign in</button></section>' +
+    '<section id="app" class="hidden">' +
+    '<div class="row"><b id="hello"></b><button class="btn secondary" onclick="logout()">Logout</button></div>' +
+    '<div class="card stack"><b>Events</b><select id="events" class="input" onchange="selectEvent()"></select><div class="row"><input id="newEventName" class="input" placeholder="New event name"><button class="btn" onclick="createEvent()">Create</button></div><div id="eventInfo" class="small muted"></div></div>' +
+    '<div class="card stack"><b>Create new interaction</b><div id="templates" class="grid"></div></div>' +
+    '<div id="editor" class="card stack hidden"><div class="row"><b id="editorTitle">Editor</b><span id="interactionStatus" class="pill">draft</span></div><textarea id="question" class="input" rows="3" placeholder="Question"></textarea><div id="options" class="stack"></div><button id="addOption" class="btn secondary hidden" onclick="addOption()">Add option</button><button class="btn secondary" onclick="saveInteraction()">Save draft</button><button class="btn" onclick="insertSlide()">Present in Google Slides</button><div class="row"><button class="btn secondary" onclick="goLive()">Go live</button><button class="btn secondary" onclick="closeLive()">Close</button><button class="btn danger" onclick="resetResults()">Reset</button></div><button class="btn secondary" onclick="updateSnapshot()">Update slide snapshot</button></div>' +
+    '<div class="card stack"><div class="row"><b>Interactions</b><button class="btn secondary" onclick="refresh()">Refresh</button></div><div id="interactions" class="stack"></div></div>' +
+    '</section>' +
+    '</div><script>' +
+    'var state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[]};' +
+    'var templates=[{label:"Multiple choice",type:"poll",options:["Option 1","Option 2"],config:{poll_kind:"multiple_choice",results_visible:true,voting_open:true}},{label:"Open text",type:"feedback",options:[],config:{poll_kind:"open_text",include_open_text:true,anonymous:true,voting_open:true}},{label:"Word cloud",type:"word_cloud",options:[],config:{max_words_per_participant:3,allow_duplicate_words:true,voting_open:true}},{label:"Rating",type:"feedback",options:[],config:{poll_kind:"rating",include_star_ratings:true,scale:5,voting_open:true}},{label:"Quiz",type:"quiz",options:["Correct answer","Distractor"],config:{time_limit_seconds:30,points:100,voting_open:true}},{label:"Audience Q&A",type:"qa",options:[],config:{allow_anonymous_questions:true,moderation:false,voting_open:true}}];' +
+    'function $(id){return document.getElementById(id)}function show(m,e){var s=$("status");s.textContent=m||"";s.className="status"+(e?" error":"")+(m?"":" hidden")}function call(name,args,ok){show("Loading...");google.script.run.withSuccessHandler(function(r){show("");ok&&ok(r)}).withFailureHandler(function(err){show(err.message||String(err),true)})[name].apply(null,args||[])}' +
+    'function boot(){renderTemplates();call("getInitialState",[],function(r){state.session=r.session;state.events=r.events||[];state.selectedEvent=r.selectedEvent||null;state.interactions=r.interactions||[];render()})}' +
+    'function render(){if(state.session){$("login").classList.add("hidden");$("app").classList.remove("hidden");$("hello").textContent=state.session.lecturer.name||state.session.lecturer.email}else{$("login").classList.remove("hidden");$("app").classList.add("hidden")}renderEvents();renderInteractions();renderEditor()}' +
+    'function renderTemplates(){var box=$("templates");box.innerHTML="";templates.forEach(function(t){var b=document.createElement("button");b.className="item";b.textContent=t.label;b.onclick=function(){openTemplate(t)};box.appendChild(b)})}' +
+    'function renderEvents(){var sel=$("events");sel.innerHTML="";state.events.forEach(function(e){var o=document.createElement("option");o.value=e.id;o.textContent=(e.event_name||"Untitled")+" (#"+e.event_code+")";if(state.selectedEvent&&state.selectedEvent.id===e.id)o.selected=true;sel.appendChild(o)});$("eventInfo").textContent=state.selectedEvent?"Code #"+state.selectedEvent.event_code+" · "+(state.selectedEvent.status||"closed"):"Select or create an event."}' +
+    'function renderInteractions(){var list=$("interactions");list.innerHTML="";state.interactions.forEach(function(i){var row=document.createElement("div");row.className="item"+(state.selectedInteraction&&state.selectedInteraction.id===i.id?" active":"");row.innerHTML="<b>"+(i.title||"Untitled")+"</b><div class=\\"small muted\\">"+label(i)+" · "+(i.status||"draft")+"</div>";row.onclick=function(){openInteraction(i)};list.appendChild(row)})}' +
+    'function renderEditor(){var ed=$("editor");if(!state.selectedInteraction&&!state.template){ed.classList.add("hidden");return}ed.classList.remove("hidden");$("editorTitle").textContent=state.template?state.template.label:label(state.selectedInteraction);$("interactionStatus").textContent=(state.selectedInteraction&&state.selectedInteraction.status)||"draft";$("question").value=(state.selectedInteraction&&state.selectedInteraction.title)||"";var needs=needsOptions();$("addOption").classList.toggle("hidden",!needs);var box=$("options");box.innerHTML="";state.options.forEach(function(o,idx){var input=document.createElement("input");input.className="input";input.value=o.option_text||o;input.placeholder="Option "+(idx+1);input.oninput=function(){state.options[idx]={option_text:input.value,is_correct:!!o.is_correct}};box.appendChild(input)})}' +
+    'function label(i){return i.type==="poll"?"Multiple choice":i.type==="word_cloud"?"Word cloud":i.type==="quiz"?"Quiz":i.type==="qa"?"Audience Q&A":i.config&&i.config.poll_kind==="rating"?"Rating":"Open text"}function needsOptions(){var t=state.template?state.template.type:(state.selectedInteraction&&state.selectedInteraction.type);return t==="poll"||t==="quiz"}' +
+    'function login(){call("login",[$("email").value,$("password").value],function(r){state.session=r;refresh()})}function logout(){call("logout",[],function(){state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[]};render()})}' +
+    'function refresh(){call("getInitialState",[],function(r){state.session=r.session;state.events=r.events||[];state.selectedEvent=r.selectedEvent||null;state.interactions=r.interactions||[];render()})}function selectEvent(){call("selectEvent",[$("events").value],function(r){state.selectedEvent=r.selectedEvent;state.interactions=r.interactions||[];state.selectedInteraction=null;state.template=null;render()})}' +
+    'function createEvent(){call("createEvent",[$("newEventName").value],function(r){$("newEventName").value="";state.events=r.events;state.selectedEvent=r.selectedEvent;state.interactions=[];render()})}function openTemplate(t){if(!state.selectedEvent){show("Select or create an event first.",true);return}state.template=t;state.selectedInteraction=null;state.options=(t.options||[]).map(function(x,i){return{option_text:typeof x==="string"?x:x.option_text,is_correct:i===0&&t.type==="quiz"}});renderEditor()}' +
+    'function openInteraction(i){state.selectedInteraction=i;state.template=null;state.options=(i.interaction_options||[]).sort(function(a,b){return(a.position||0)-(b.position||0)}).map(function(o){return{option_text:o.option_text,is_correct:!!o.is_correct}});renderEditor()}' +
+    'function addOption(){state.options.push({option_text:"Option "+(state.options.length+1),is_correct:false});renderEditor()}function editorPayload(){return{id:state.selectedInteraction&&state.selectedInteraction.id,event_id:state.selectedEvent&&state.selectedEvent.id,type:(state.template&&state.template.type)||(state.selectedInteraction&&state.selectedInteraction.type),title:$("question").value,config:(state.template&&state.template.config)||(state.selectedInteraction&&state.selectedInteraction.config)||{},options:needsOptions()?state.options:[]}}function saveInteraction(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();show("Saved.")})}' +
+    'function goLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"live"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}function closeLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"closed"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}function resetResults(){if(!state.selectedInteraction)return;call("resetResults",[state.selectedInteraction.id],function(){show("Results reset.")})}' +
+    'function insertSlide(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();call("insertInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Slide inserted.")})})}function updateSnapshot(){if(!state.selectedInteraction)return;call("updateInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Slide snapshot updated.")})}' +
+    'boot();' +
+    '</script></body></html>';
+}
+
+function getInitialState() {
+  var session = getSession_();
+  if (!session) return { session: null, events: [], selectedEvent: null, interactions: [] };
+  var events = listEvents_();
+  var selectedEvent = getSelectedEvent_(events);
+  return {
+    session: session,
+    events: events,
+    selectedEvent: selectedEvent,
+    interactions: selectedEvent ? listInteractions_(selectedEvent.id) : [],
+  };
+}
+
+function login(email, password) {
+  if (!email || !password) throw new Error('Email and password required.');
+  var data = apiFetch_('/api/auth/login', {
+    method: 'post',
+    payload: { email: email, password: password },
+  });
+  saveSession_(data);
+  return data;
+}
+
+function logout() {
+  PropertiesService.getUserProperties().deleteProperty(SESSION_KEY);
+  return { success: true };
+}
+
+function selectEvent(eventId) {
+  PropertiesService.getUserProperties().setProperty(SELECTED_EVENT_KEY, eventId);
+  var events = listEvents_();
+  var selectedEvent = getSelectedEvent_(events);
+  return { selectedEvent: selectedEvent, interactions: selectedEvent ? listInteractions_(selectedEvent.id) : [] };
+}
+
+function createEvent(eventName) {
+  var session = requireSession_();
+  var name = String(eventName || '').trim();
+  if (!name) throw new Error('Enter an event name.');
+  var code = Utilities.getUuid().replace(/-/g, '').slice(0, 6).toUpperCase();
+  var data = apiFetch_('/api/events', {
+    method: 'post',
+    payload: {
+      lecturer_id: session.lecturer.id,
+      event_name: name,
+      event_code: code,
+      status: 'closed',
+    },
+  });
+  PropertiesService.getUserProperties().setProperty(SELECTED_EVENT_KEY, data.event.id);
+  return { selectedEvent: data.event, events: listEvents_() };
+}
+
+function saveInteraction(payload) {
+  requireSession_();
+  if (!payload || !payload.event_id) throw new Error('Please select or create an event before adding interactions.');
+  if (!payload.title) throw new Error('Question is required.');
+  var data = payload.id
+    ? apiFetch_('/api/interactions', { method: 'patch', payload: { id: payload.id, title: payload.title, config: payload.config || {}, options: payload.options || [] } })
+    : apiFetch_('/api/interactions', { method: 'post', payload: payload });
+  return { interaction: data.interaction, interactions: listInteractions_(payload.event_id) };
+}
+
+function setInteractionStatus(interactionId, status) {
+  requireSession_();
+  var data = apiFetch_('/api/interactions', { method: 'patch', payload: { id: interactionId, status: status } });
+  return { interaction: data.interaction, interactions: listInteractions_(data.interaction.event_id) };
+}
+
+function resetResults(interactionId) {
+  requireSession_();
+  return apiFetch_('/api/responses?interaction_id=' + encodeURIComponent(interactionId), { method: 'delete' });
+}
+
+function insertInteractionSlide(eventId, interactionId) {
+  return drawInteractionSlide_(eventId, interactionId, false);
+}
+
+function updateInteractionSlide(eventId, interactionId) {
+  return drawInteractionSlide_(eventId, interactionId, true);
+}
+
+function updateSelectedInteractionSnapshot() {
+  var props = PropertiesService.getDocumentProperties();
+  var eventId = props.getProperty('SLIDEENGAGE_LAST_EVENT_ID');
+  var interactionId = props.getProperty('SLIDEENGAGE_LAST_INTERACTION_ID');
+  if (!eventId || !interactionId) {
+    SlidesApp.getUi().alert('Open SlideEngage and insert an interaction slide first.');
+    return;
+  }
+  drawInteractionSlide_(eventId, interactionId, true);
+  SlidesApp.getUi().alert('SlideEngage snapshot updated.');
+}
+
+function drawInteractionSlide_(eventId, interactionId, updateExisting) {
+  requireSession_();
+  var event = apiFetch_('/api/events?id=' + encodeURIComponent(eventId), { method: 'get' }).event;
+  var interactions = listInteractions_(eventId);
+  var interaction = null;
+  for (var i = 0; i < interactions.length; i++) {
+    if (interactions[i].id === interactionId) interaction = interactions[i];
+  }
+  if (!interaction) throw new Error('Interaction not found.');
+
+  var slide = updateExisting ? findSlideForInteraction_(interactionId) : null;
+  if (!slide) slide = SlidesApp.getActivePresentation().appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  clearSlide_(slide);
+  renderSlide_(slide, event, interaction, getResults_(interaction));
+
+  var props = PropertiesService.getDocumentProperties();
+  props.setProperty('SLIDEENGAGE_SLIDE_' + interactionId, slide.getObjectId());
+  props.setProperty('SLIDEENGAGE_LAST_EVENT_ID', eventId);
+  props.setProperty('SLIDEENGAGE_LAST_INTERACTION_ID', interactionId);
+  return { success: true, slide_id: slide.getObjectId() };
+}
+
+function renderSlide_(slide, event, interaction, resultData) {
+  var code = event.event_code || event.code;
+  var joinUrl = SLIDEENGAGE_URL + '/join?code=' + encodeURIComponent(code);
+  slide.getBackground().setSolidFill('#F4F7F4');
+  text_(slide, 'SlideEngage', 25, 15, 180, 24, 11, true, '#168A3A');
+  text_(slide, label_(interaction).toUpperCase(), 280, 15, 300, 24, 11, true, '#6B7B8D');
+
+  rounded_(slide, 30, 60, 165, 405, '#FFFFFF', '#DDEBE3');
+  text_(slide, 'Join at', 55, 85, 120, 24, 14, true, '#17172F');
+  text_(slide, host_(), 55, 112, 120, 24, 13, true, '#168A3A');
+  try {
+    var qr = UrlFetchApp.fetch(SLIDEENGAGE_URL + '/api/qrcode?code=' + encodeURIComponent(code) + '&format=png').getBlob().setName('slideengage-qr.png');
+    slide.insertImage(qr, 52, 155, 120, 120);
+  } catch (e) {
+    text_(slide, 'QR unavailable', 52, 190, 120, 24, 12, true, '#B42318', SlidesApp.ParagraphAlignment.CENTER);
+  }
+  text_(slide, 'Scan QR code to join', 42, 292, 145, 24, 10, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
+  rounded_(slide, 52, 330, 120, 42, '#EAF7EF', '#CBEAD4');
+  text_(slide, '#' + code, 52, 340, 120, 28, 20, true, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, joinUrl, 42, 392, 145, 34, 7, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
+
+  rounded_(slide, 220, 60, 470, 405, '#FFFFFF', '#DDEBE3');
+  text_(slide, interaction.title || 'Untitled interaction', 250, 92, 410, 55, 24, true, '#17172F');
+  renderResults_(slide, interaction, resultData);
+}
+
+function renderResults_(slide, interaction, data) {
+  var results = data.results || [];
+  if (interaction.type === 'poll' || interaction.type === 'quiz') {
+    if (!results.length) {
+      var options = interaction.interaction_options || [];
+      for (var i = 0; i < options.length; i++) {
+        text_(slide, options[i].option_text, 260, 170 + i * 48, 300, 24, 14, true, '#17172F');
+        bar_(slide, 260, 198 + i * 48, 285, 10, 0, '#168A3A');
+        text_(slide, '0%', 560, 190 + i * 48, 60, 18, 12, true, '#6B7B8D');
+      }
+      return;
     }
+    for (var p = 0; p < Math.min(results.length, 6); p++) {
+      var row = results[p];
+      text_(slide, row.option_text || row.label || 'Option', 260, 170 + p * 48, 300, 24, 14, true, '#17172F');
+      bar_(slide, 260, 198 + p * 48, 285, 10, Number(row.percentage || 0), '#168A3A');
+      text_(slide, (row.percentage || 0) + '% · ' + (row.count || 0), 560, 190 + p * 48, 90, 18, 12, true, '#168A3A');
+    }
+    return;
+  }
+  if (interaction.type === 'word_cloud') {
+    if (!results.length) {
+      text_(slide, 'Live responses will appear here', 270, 250, 360, 32, 20, true, '#A3AEA8', SlidesApp.ParagraphAlignment.CENTER);
+      return;
+    }
+    var colors = ['#168A3A', '#1A6BB5', '#D46B08', '#8B1A4A', '#7C3AED', '#0F766E'];
+    for (var w = 0; w < Math.min(results.length, 24); w++) {
+      var col = w % 4;
+      var rowIndex = Math.floor(w / 4);
+      var size = Math.max(12, Math.min(34, 14 + Number(results[w].count || 1) * 6 - rowIndex));
+      text_(slide, results[w].word || results[w].text || '', 255 + col * 100, 170 + rowIndex * 42, 95, 28, size, true, colors[w % colors.length]);
+    }
+    return;
+  }
+  if (interaction.type === 'qa') {
+    var questions = data.results || [];
+    if (!questions.length) {
+      text_(slide, 'Ask your question', 270, 225, 360, 34, 24, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
+      text_(slide, 'Live questions will appear here', 270, 268, 360, 28, 15, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
+      return;
+    }
+    for (var q = 0; q < Math.min(questions.length, 5); q++) {
+      rounded_(slide, 255, 165 + q * 52, 385, 40, '#F4F7F4', '#DDEBE3');
+      text_(slide, questions[q].question_text || questions[q].text || '', 268, 176 + q * 52, 310, 20, 12, true, '#17172F');
+      text_(slide, '+' + (questions[q].upvote_count || 0), 600, 176 + q * 52, 35, 20, 11, true, '#168A3A');
+    }
+    return;
+  }
+  var items = Array.isArray(results) ? results : (results.text_responses || []);
+  if (!items.length) {
+    text_(slide, 'Live responses will appear here', 270, 250, 360, 32, 20, true, '#A3AEA8', SlidesApp.ParagraphAlignment.CENTER);
+    return;
+  }
+  for (var r = 0; r < Math.min(items.length, 5); r++) {
+    rounded_(slide, 255, 165 + r * 52, 385, 40, '#F4F7F4', '#DDEBE3');
+    text_(slide, items[r].text || items[r].text_value || JSON.stringify(items[r]), 270, 176 + r * 52, 340, 20, 12, true, '#17172F');
   }
 }
 
-function getEventCode() {
-  if (!isPublicSlideEngageUrl()) return null;
+function getResults_(interaction) {
+  if (interaction.type === 'qa') {
+    var qa = apiFetch_('/api/qa?interaction_id=' + encodeURIComponent(interaction.id) + '&sort=popular', { method: 'get' });
+    return { results: qa.questions || [], total_responses: (qa.questions || []).length };
+  }
+  return apiFetch_('/api/results?interaction_id=' + encodeURIComponent(interaction.id), { method: 'get' });
+}
 
-  var saved = PropertiesService.getDocumentProperties().getProperty('SLIDEENGAGE_EVENT_CODE');
-  if (saved) return saved;
-  if (EVENT_CODE) return EVENT_CODE;
+function listEvents_() {
+  var session = requireSession_();
+  return apiFetch_('/api/events?lecturer_id=' + encodeURIComponent(session.lecturer.id), { method: 'get' }).events || [];
+}
 
-  // Prompt user
-  var ui = SlidesApp.getUi();
-  var response = ui.prompt(
-    '🎯 SlideEngage',
-    'Enter your event code first:',
-    ui.ButtonSet.OK_CANCEL
-  );
+function listInteractions_(eventId) {
+  return apiFetch_('/api/interactions?event_id=' + encodeURIComponent(eventId), { method: 'get' }).interactions || [];
+}
 
-  if (response.getSelectedButton() == ui.Button.OK) {
-    var code = response.getResponseText().toUpperCase().replace('#', '').trim();
-    if (code) {
-      PropertiesService.getDocumentProperties().setProperty('SLIDEENGAGE_EVENT_CODE', code);
-      return code;
-    }
+function getSelectedEvent_(events) {
+  if (!events.length) return null;
+  var selectedId = PropertiesService.getUserProperties().getProperty(SELECTED_EVENT_KEY);
+  for (var i = 0; i < events.length; i++) {
+    if (events[i].id === selectedId) return events[i];
+  }
+  PropertiesService.getUserProperties().setProperty(SELECTED_EVENT_KEY, events[0].id);
+  return events[0];
+}
+
+function getSession_() {
+  var raw = PropertiesService.getUserProperties().getProperty(SESSION_KEY);
+  if (!raw) return null;
+  var session = JSON.parse(raw);
+  if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) {
+    PropertiesService.getUserProperties().deleteProperty(SESSION_KEY);
+    return null;
+  }
+  return session;
+}
+
+function requireSession_() {
+  var session = getSession_();
+  if (!session) throw new Error('Please sign in to SlideEngage first.');
+  return session;
+}
+
+function saveSession_(data) {
+  var session = {
+    lecturer: data.lecturer,
+    expires_at: data.expires_at || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
+  };
+  PropertiesService.getUserProperties().setProperty(SESSION_KEY, JSON.stringify(session));
+}
+
+function apiFetch_(path, options) {
+  if (!/^https:\/\//.test(SLIDEENGAGE_URL) || /localhost|127\.0\.0\.1/.test(SLIDEENGAGE_URL)) {
+    throw new Error('Set SLIDEENGAGE_URL to your public HTTPS SlideEngage deployment.');
+  }
+  options = options || {};
+  var params = {
+    method: options.method || 'get',
+    muteHttpExceptions: true,
+    headers: { 'Content-Type': 'application/json' },
+  };
+  if (options.payload) params.payload = JSON.stringify(options.payload);
+  var response = UrlFetchApp.fetch(SLIDEENGAGE_URL + path, params);
+  var text = response.getContentText();
+  var data = text ? JSON.parse(text) : {};
+  if (response.getResponseCode() >= 400) throw new Error(data.error || 'SlideEngage request failed.');
+  return data;
+}
+
+function findSlideForInteraction_(interactionId) {
+  var slideId = PropertiesService.getDocumentProperties().getProperty('SLIDEENGAGE_SLIDE_' + interactionId);
+  if (!slideId) return null;
+  var slides = SlidesApp.getActivePresentation().getSlides();
+  for (var i = 0; i < slides.length; i++) {
+    if (slides[i].getObjectId() === slideId) return slides[i];
   }
   return null;
 }
 
-function isPublicSlideEngageUrl() {
-  if (!SLIDEENGAGE_URL || SLIDEENGAGE_URL.indexOf('http') !== 0 || SLIDEENGAGE_URL.indexOf('your-vercel-domain') !== -1) {
-    SlidesApp.getUi().alert('Set SLIDEENGAGE_URL to your public HTTPS Slide Engage URL before using the add-on.');
-    return false;
-  }
-
-  if (SLIDEENGAGE_URL.indexOf('localhost') !== -1 || SLIDEENGAGE_URL.indexOf('127.0.0.1') !== -1) {
-    SlidesApp.getUi().alert('SLIDEENGAGE_URL cannot use localhost. Deploy Slide Engage to Vercel and use the public HTTPS URL.');
-    return false;
-  }
-
-  return true;
+function clearSlide_(slide) {
+  var elements = slide.getPageElements();
+  for (var i = elements.length - 1; i >= 0; i--) elements[i].remove();
 }
 
-// ── SLIDE HELPERS ───────────────────────────────────────────
-function getPresentation() {
-  return SlidesApp.getActivePresentation();
+function label_(interaction) {
+  if (interaction.type === 'poll') return 'Multiple choice';
+  if (interaction.type === 'word_cloud') return 'Word cloud';
+  if (interaction.type === 'quiz') return 'Quiz';
+  if (interaction.type === 'qa') return 'Audience Q&A';
+  if (interaction.config && interaction.config.poll_kind === 'rating') return 'Rating';
+  return 'Open text';
 }
 
-function createSlide(layout) {
-  var presentation = getPresentation();
-  var slide = presentation.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-  return slide;
+function host_() {
+  return SLIDEENGAGE_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
-function addBackground(slide, color) {
-  slide.getBackground().setSolidFill(color);
+function text_(slide, text, left, top, width, height, size, bold, color, align) {
+  var box = slide.insertTextBox(String(text || ''), left, top, width, height);
+  var range = box.getText();
+  range.getTextStyle().setFontSize(size).setBold(!!bold).setForegroundColor(color || '#17172F');
+  range.getParagraphStyle().setParagraphAlignment(align || SlidesApp.ParagraphAlignment.START);
+  return box;
 }
 
-function addTextBox(slide, text, left, top, width, height, fontSize, bold, color, align) {
-  var shape = slide.insertShape(SlidesApp.ShapeType.TEXT_BOX, left, top, width, height);
-  var textRange = shape.getText();
-  textRange.setText(text);
-  var style = textRange.getTextStyle();
-  style.setFontSize(fontSize);
-  style.setBold(bold || false);
-  if (color) style.setForegroundColor(color);
-  if (align) {
-    var paragraphs = textRange.getParagraphs();
-    for (var i = 0; i < paragraphs.length; i++) {
-      paragraphs[i].getRange().getParagraphStyle().setParagraphAlignment(align);
-    }
-  }
+function rounded_(slide, left, top, width, height, fill, stroke) {
+  var shape = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, left, top, width, height);
+  shape.getFill().setSolidFill(fill);
+  shape.getBorder().setWeight(1).getLineFill().setSolidFill(stroke);
   return shape;
 }
 
-// ── INSERT POLL SLIDE ───────────────────────────────────────
-function insertPollSlide() {
-  var code = getEventCode();
-  if (!code) return;
-
-  var slide = createSlide();
-  addBackground(slide, '#F4F7F4');
-
-  // Header
-  addTextBox(slide, '📊 LIVE POLL', 30, 20, 660, 40, 14, true, '#2D8A4E', SlidesApp.ParagraphAlignment.START);
-
-  // Question
-  addTextBox(slide, 'Your poll question here?', 30, 70, 660, 60, 28, true, '#1A1A2E', SlidesApp.ParagraphAlignment.START);
-
-  // Options
-  var options = ['Option A — Your first choice', 'Option B — Your second choice', 'Option C — Your third choice', 'Option D — Your fourth choice'];
-  var colors = ['#2D8A4E', '#1A6BB5', '#D46B08', '#8B1A4A'];
-
-  for (var i = 0; i < options.length; i++) {
-    var optShape = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, 30, 150 + (i * 65), 500, 50);
-    optShape.getBorder().setWeight(2).getLineFill().setSolidFill(colors[i]);
-    optShape.getFill().setSolidFill('#FFFFFF');
-    var optText = optShape.getText();
-    optText.setText(String.fromCharCode(65 + i) + '.  ' + options[i]);
-    optText.getTextStyle().setFontSize(16).setForegroundColor('#1A1A2E');
-  }
-
-  // Join info
-  addTextBox(slide, 'Join at: ' + SLIDEENGAGE_URL + '/join    Code: #' + code, 30, 440, 660, 30, 12, true, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
-
-  SlidesApp.getUi().alert('Poll slide inserted! Edit the question and options.');
-}
-
-// ── INSERT QUIZ SLIDE ───────────────────────────────────────
-function insertQuizSlide() {
-  var code = getEventCode();
-  if (!code) return;
-
-  var slide = createSlide();
-  addBackground(slide, '#F4F7F4');
-
-  // Header with timer
-  addTextBox(slide, '🧠 QUIZ — 30s', 30, 20, 400, 40, 14, true, '#D46B08', SlidesApp.ParagraphAlignment.START);
-  addTextBox(slide, '⏱ 30', 580, 20, 100, 40, 24, true, '#D46B08', SlidesApp.ParagraphAlignment.END);
-
-  // Question
-  addTextBox(slide, 'Your quiz question here?', 30, 70, 660, 60, 28, true, '#1A1A2E', SlidesApp.ParagraphAlignment.START);
-
-  // Options (2x2 grid)
-  var optLabels = ['A', 'B', 'C', 'D'];
-  var optTexts = ['First answer option', 'Second answer option', 'Third answer option', 'Fourth answer option'];
-  var optColors = ['#2D8A4E', '#1A6BB5', '#D46B08', '#8B1A4A'];
-  var positions = [[30, 150], [370, 150], [30, 280], [370, 280]];
-
-  for (var i = 0; i < 4; i++) {
-    var box = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, positions[i][0], positions[i][1], 310, 110);
-    box.getBorder().setWeight(2).getLineFill().setSolidFill(optColors[i]);
-    box.getFill().setSolidFill('#FFFFFF');
-    var t = box.getText();
-    t.setText(optLabels[i] + '\n' + optTexts[i]);
-    var runs = t.getRuns();
-    if (runs.length > 0) {
-      runs[0].getTextStyle().setFontSize(20).setBold(true).setForegroundColor(optColors[i]);
-    }
-    t.getTextStyle().setFontSize(14).setForegroundColor('#1A1A2E');
-  }
-
-  // Join info
-  addTextBox(slide, 'Join at: ' + SLIDEENGAGE_URL + '/join    Code: #' + code, 30, 440, 660, 30, 12, true, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
-
-  SlidesApp.getUi().alert('Quiz slide inserted! Edit the question and mark the correct answer.');
-}
-
-// ── INSERT Q&A SLIDE ────────────────────────────────────────
-function insertQASlide() {
-  var code = getEventCode();
-  if (!code) return;
-
-  var slide = createSlide();
-  addBackground(slide, '#F4F7F4');
-
-  // Header
-  addTextBox(slide, '❓ LIVE Q&A', 30, 20, 660, 40, 14, true, '#2D8A4E', SlidesApp.ParagraphAlignment.START);
-
-  // Main text
-  addTextBox(slide, 'Ask your questions!', 30, 120, 660, 80, 36, true, '#1A1A2E', SlidesApp.ParagraphAlignment.CENTER);
-
-  // Instruction
-  addTextBox(slide, 'Submit your questions and upvote the ones you want answered.\nThe most popular questions rise to the top.', 60, 220, 600, 60, 16, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
-
-  // Join box
-  var joinBox = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, 150, 320, 420, 80);
-  joinBox.getBorder().setWeight(2).setDashStyle(SlidesApp.DashStyle.DASH).getLineFill().setSolidFill('#2D8A4E');
-  joinBox.getFill().setSolidFill('#EAF7EF');
-  var joinText = joinBox.getText();
-  joinText.setText('#' + code + '\n' + SLIDEENGAGE_URL + '/join');
-  joinText.getTextStyle().setFontSize(14).setForegroundColor('#2D8A4E');
-  joinText.getRuns()[0].getTextStyle().setFontSize(28).setBold(true);
-
-  SlidesApp.getUi().alert('Q&A slide inserted!');
-}
-
-// ── INSERT WORD CLOUD SLIDE ─────────────────────────────────
-function insertWordCloudSlide() {
-  var code = getEventCode();
-  if (!code) return;
-
-  var slide = createSlide();
-  addBackground(slide, '#F4F7F4');
-
-  // Header
-  addTextBox(slide, '☁️ WORD CLOUD', 30, 20, 660, 40, 14, true, '#1A6BB5', SlidesApp.ParagraphAlignment.START);
-
-  // Prompt
-  addTextBox(slide, 'In ONE word, describe...', 30, 80, 660, 70, 32, true, '#1A1A2E', SlidesApp.ParagraphAlignment.CENTER);
-
-  // Placeholder word cloud area
-  var cloudArea = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, 60, 170, 600, 220);
-  cloudArea.getBorder().setWeight(1).getLineFill().setSolidFill('#E2EBE6');
-  cloudArea.getFill().setSolidFill('#FFFFFF');
-  var cloudText = cloudArea.getText();
-  cloudText.setText('Words will appear here as students submit them\n\n💡 Tip: Open your SlideEngage dashboard to see the live word cloud');
-  cloudText.getTextStyle().setFontSize(14).setForegroundColor('#6B7B8D');
-  cloudText.getParagraphs()[0].getRange().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
-
-  // Join info
-  addTextBox(slide, 'Join at: ' + SLIDEENGAGE_URL + '/join    Code: #' + code, 30, 440, 660, 30, 12, true, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
-
-  SlidesApp.getUi().alert('Word Cloud slide inserted! Edit the prompt question.');
-}
-
-// ── INSERT FEEDBACK SLIDE ───────────────────────────────────
-function insertFeedbackSlide() {
-  var code = getEventCode();
-  if (!code) return;
-
-  var slide = createSlide();
-  addBackground(slide, '#F4F7F4');
-
-  // Header
-  addTextBox(slide, '⭐ FEEDBACK', 30, 20, 660, 40, 14, true, '#D46B08', SlidesApp.ParagraphAlignment.START);
-
-  // Title
-  addTextBox(slide, 'Rate today\'s session', 30, 80, 660, 70, 36, true, '#1A1A2E', SlidesApp.ParagraphAlignment.CENTER);
-
-  // Stars
-  addTextBox(slide, '★  ★  ★  ★  ★', 30, 180, 660, 60, 48, false, '#FFD700', SlidesApp.ParagraphAlignment.CENTER);
-
-  // Instruction
-  addTextBox(slide, 'Your feedback is anonymous.\nRate and leave a comment using your device.', 60, 270, 600, 60, 16, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
-
-  // Join info
-  addTextBox(slide, 'Join at: ' + SLIDEENGAGE_URL + '/join    Code: #' + code, 30, 440, 660, 30, 12, true, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
-
-  SlidesApp.getUi().alert('Feedback slide inserted!');
-}
-
-// ── INSERT QR CODE SLIDE ────────────────────────────────────
-function insertQRCodeSlide() {
-  var code = getEventCode();
-  if (!code) return;
-
-  var slide = createSlide();
-  addBackground(slide, '#FFFFFF');
-
-  // Title
-  addTextBox(slide, '🎯 Join the session!', 30, 30, 660, 60, 32, true, '#1A1A2E', SlidesApp.ParagraphAlignment.CENTER);
-
-  // QR Code (fetched from API)
-  try {
-    var qrUrl = SLIDEENGAGE_URL + '/api/qrcode?code=' + code + '&format=png';
-    var response = UrlFetchApp.fetch(qrUrl);
-    var blob = response.getBlob();
-    var image = slide.insertImage(blob, 210, 100, 300, 300);
-  } catch (e) {
-    // If QR API not available, show placeholder
-    var placeholder = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, 210, 100, 300, 300);
-    placeholder.getBorder().setWeight(2).getLineFill().setSolidFill('#E2EBE6');
-    placeholder.getFill().setSolidFill('#F4F7F4');
-    var pText = placeholder.getText();
-    pText.setText('QR Code\n\n(Deploy your app first, then re-insert this slide)');
-    pText.getTextStyle().setFontSize(14).setForegroundColor('#6B7B8D');
-    pText.getParagraphs()[0].getRange().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
-  }
-
-  // Event code
-  addTextBox(slide, '#' + code, 30, 410, 660, 50, 36, true, '#2D8A4E', SlidesApp.ParagraphAlignment.CENTER);
-
-  // URL
-  addTextBox(slide, SLIDEENGAGE_URL + '/join?code=' + code, 30, 455, 660, 30, 14, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
-
-  SlidesApp.getUi().alert('QR Code slide inserted! Students can scan to join.');
-}
-
-// ── INSERT TITLE SLIDE ──────────────────────────────────────
-function insertTitleSlide() {
-  var code = getEventCode();
-  if (!code) return;
-
-  var slide = createSlide();
-  addBackground(slide, '#1A1A2E');
-
-  // Logo
-  addTextBox(slide, '🎯', 30, 30, 60, 60, 36, false, '#FFFFFF', SlidesApp.ParagraphAlignment.START);
-
-  // Title
-  addTextBox(slide, 'Interactive Session', 30, 120, 660, 80, 44, true, '#FFFFFF', SlidesApp.ParagraphAlignment.CENTER);
-
-  // Subtitle
-  addTextBox(slide, 'Powered by SlideEngage', 30, 210, 660, 40, 18, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
-
-  // Join box
-  var joinBox = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, 180, 290, 360, 90);
-  joinBox.getBorder().setWeight(2).getLineFill().setSolidFill('#2D8A4E');
-  joinBox.getFill().setSolidFill('#2D8A4E');
-  var joinText = joinBox.getText();
-  joinText.setText('Join at Slide Engage\n#' + code + '\n' + SLIDEENGAGE_URL + '/join?code=' + code);
-  joinText.getTextStyle().setFontSize(16).setBold(true).setForegroundColor('#FFFFFF');
-
-  // Instructions
-  addTextBox(slide, 'Open your browser or scan the QR code to participate', 30, 420, 660, 30, 12, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
-
-  SlidesApp.getUi().alert('Title slide inserted!');
-}
-
-// ── ABOUT ───────────────────────────────────────────────────
-function showAbout() {
-  var ui = SlidesApp.getUi();
-  ui.alert(
-    '🎯 SlideEngage',
-    'Version 1.0\n\n' +
-    'SlideEngage adds interactive polls, quizzes, Q&A, word clouds, and feedback directly into your Google Slides.\n\n' +
-    'Students join at: ' + SLIDEENGAGE_URL + '/join\n\n' +
-    'Current event code: #' + (getEventCode() || 'Not set') + '\n\n' +
-    'Need help? Visit ' + SLIDEENGAGE_URL,
-    ui.ButtonSet.OK
-  );
+function bar_(slide, left, top, width, height, percentage, color) {
+  rounded_(slide, left, top, width, height, '#E3E7E5', '#E3E7E5');
+  rounded_(slide, left, top, Math.max(4, width * Math.min(100, percentage) / 100), height, color, color);
 }

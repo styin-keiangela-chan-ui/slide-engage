@@ -61,7 +61,10 @@ export async function POST(req: NextRequest) {
     );
 
     const { password_hash, ...safe } = lecturer;
-    const response = NextResponse.json({ lecturer: safe });
+    const response = NextResponse.json({
+      lecturer: safe,
+      expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
+    });
     response.cookies.set(COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

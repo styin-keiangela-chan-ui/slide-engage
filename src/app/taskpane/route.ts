@@ -509,6 +509,43 @@ export function GET() {
           el("logout-button").classList.add("hidden");
         }
 
+        function parseStoredSession(raw) {
+          if (!raw) return null;
+          var parsed = JSON.parse(raw);
+          if (parsed && parsed.lecturer) return parsed;
+          if (parsed && parsed.id) {
+            return {
+              lecturer: parsed,
+              expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()
+            };
+          }
+          return null;
+        }
+
+        function isSessionExpired(session) {
+          if (!session || !session.expires_at) return false;
+          return Date.now() > new Date(session.expires_at).getTime();
+        }
+
+        function saveSession(data) {
+          lecturer = data.lecturer;
+          localStorage.setItem(SESSION_KEY, JSON.stringify({
+            lecturer: data.lecturer,
+            expires_at: data.expires_at || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()
+          }));
+        }
+
+        function clearSession() {
+          localStorage.removeItem(SESSION_KEY);
+          lecturer = null;
+          events = [];
+          selectedEvent = null;
+          interactions = [];
+          selectedInteraction = null;
+          clearInterval(resultsTimer);
+          stopLiveSlideRefresh();
+        }
+
         function safeJson(response) {
           return response.json().catch(function () {
             return {};
@@ -516,7 +553,9 @@ export function GET() {
         }
 
         function request(path, options) {
-          return fetch(path, options || {}).then(function (response) {
+          var requestOptions = options || {};
+          requestOptions.credentials = requestOptions.credentials || "same-origin";
+          return fetch(path, requestOptions).then(function (response) {
             return safeJson(response).then(function (data) {
               if (!response.ok) throw new Error(data.error || "Request failed");
               return data;
@@ -542,21 +581,37 @@ export function GET() {
         }
 
         function restoreSession() {
-          try {
-            var stored = localStorage.getItem(SESSION_KEY);
-            if (stored) {
-              lecturer = JSON.parse(stored);
-              addDebug("Auth loaded");
+          setStatus("login-status", "Checking login...", false);
+          request("/api/auth/session", { cache: "no-store" })
+            .then(function (data) {
+              saveSession(data);
+              setStatus("login-status", "", false);
+              addDebug("Auth cookie session valid");
               showApp();
               loadEvents();
-            } else {
-              addDebug("Auth empty");
-              showLogin();
-            }
-          } catch (error) {
-            addDebug("Storage unavailable: " + error.message);
-            showLogin();
-          }
+            })
+            .catch(function (sessionError) {
+              try {
+                var session = parseStoredSession(localStorage.getItem(SESSION_KEY));
+                if (session && !isSessionExpired(session)) {
+                  lecturer = session.lecturer;
+                  setStatus("login-status", "", false);
+                  addDebug("Auth loaded from Office storage");
+                  showApp();
+                  loadEvents();
+                  return;
+                }
+                clearSession();
+                addDebug("Auth empty: " + sessionError.message);
+                setStatus("login-status", "Session expired. Please sign in again.", true);
+                showLogin();
+              } catch (error) {
+                clearSession();
+                addDebug("Storage unavailable: " + error.message);
+                setStatus("login-status", "Please sign in to continue.", false);
+                showLogin();
+              }
+            });
         }
 
         function login() {
@@ -573,14 +628,16 @@ export function GET() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: email, password: password })
           }).then(function (data) {
-            lecturer = data.lecturer;
-            localStorage.setItem(SESSION_KEY, JSON.stringify(lecturer));
+            saveSession(data);
             setStatus("login-status", "", false);
             addDebug("Supabase connected");
             showApp();
             loadEvents();
           }).catch(function (error) {
-            setStatus("login-status", error.message, true);
+            var message = /Failed to fetch|NetworkError|Load failed/i.test(error.message)
+              ? "Network error. Check your internet connection and try again."
+              : error.message;
+            setStatus("login-status", message, true);
             addDebug("Login failed: " + error.message);
           }).finally(function () {
             setButtonLoading("login-button", false);
@@ -1796,12 +1853,9 @@ export function GET() {
         function bind() {
           el("login-button").onclick = login;
           el("logout-button").onclick = function () {
-            localStorage.removeItem(SESSION_KEY);
-            lecturer = null;
-            events = [];
-            selectedEvent = null;
-            clearInterval(resultsTimer);
-            stopLiveSlideRefresh();
+            request("/api/auth/session", { method: "DELETE" }).catch(function () {});
+            clearSession();
+            setStatus("login-status", "Signed out.", false);
             showLogin();
           };
           el("create-event-button").onclick = createEvent;
