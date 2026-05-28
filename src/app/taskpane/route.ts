@@ -320,56 +320,6 @@ export function GET() {
         font-weight: 800;
         line-height: 1.45;
       }
-      .fallback-panel {
-        margin-top: 10px;
-        border: 1px solid #cbead4;
-        border-radius: 14px;
-        background: #fbfffc;
-        padding: 12px;
-        box-shadow: 0 1px 2px rgba(25, 26, 46, 0.04);
-      }
-      .fallback-panel h3 {
-        margin: 0 0 6px;
-        font-size: 14px;
-        font-weight: 900;
-        color: var(--ink);
-      }
-      .fallback-panel p {
-        margin: 0 0 10px;
-        color: var(--muted);
-        font-size: 12px;
-        font-weight: 700;
-        line-height: 1.45;
-      }
-      .fallback-grid {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 8px;
-      }
-      .presenter-control {
-        border: 1px solid #cbead4;
-        border-radius: 14px;
-        background: linear-gradient(135deg, #fbfffc, #eef9f2);
-        padding: 12px;
-      }
-      .presenter-control h3 {
-        margin: 0;
-        font-size: 14px;
-        font-weight: 900;
-      }
-      .presenter-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-      }
-      .presenter-note {
-        border-left: 3px solid var(--green);
-        padding-left: 9px;
-        color: var(--muted);
-        font-size: 12px;
-        font-weight: 700;
-        line-height: 1.45;
-      }
     </style>
   </head>
   <body>
@@ -451,35 +401,12 @@ export function GET() {
               <div class="preview-title">Live editor preview</div>
               <div id="editor-preview" class="small muted">Choose an interaction type to start.</div>
             </div>
-            <div id="presenter-control" class="presenter-control hidden">
-              <div class="row">
-                <div>
-                  <h3>PowerPoint live control</h3>
-                  <p id="presenter-control-summary" class="small muted" style="margin-top:4px">Select an interaction to present.</p>
-                </div>
-                <span id="presenter-control-status" class="pill draft">draft</span>
-              </div>
-              <p class="presenter-note" style="margin-top:10px">
-                PowerPoint Mac does not support live embedded web updates inside slides. Use Open Live Presentation for realtime results, or Update Slide Snapshot to refresh the slide.
-              </p>
-              <div class="presenter-grid" style="margin-top:10px">
-                <button id="open-live-presentation-button" class="button full" type="button">Open Live Presentation</button>
-                <button id="refresh-snapshot-button" class="button secondary full" type="button">Refresh Snapshot</button>
-                <button id="update-slide-snapshot-button" class="button secondary full" type="button">Update Slide Snapshot</button>
-                <button id="copy-live-join-link-button" class="button secondary full" type="button">Copy Join Link</button>
-                <button id="copy-live-event-code-button" class="button secondary full" type="button">Copy Event Code</button>
-                <button id="reset-live-results-button" class="button danger full" type="button">Reset Results</button>
-              </div>
-            </div>
             <div class="toolbar">
               <button id="save-interaction-button" class="button" type="button">Save draft</button>
               <button id="present-slide-button" class="button secondary" type="button">Present in PowerPoint</button>
               <button id="go-live-button" class="button secondary" type="button">Go live</button>
               <button id="close-live-button" class="button secondary" type="button">Close</button>
-              <button id="show-results-button" class="button secondary" type="button">Show results</button>
               <button id="reset-results-button" class="button danger" type="button">Reset results</button>
-              <button id="previous-interaction-button" class="button secondary" type="button">Previous</button>
-              <button id="next-interaction-button" class="button secondary" type="button">Next</button>
             </div>
           </div>
         </section>
@@ -494,17 +421,6 @@ export function GET() {
         </section>
 
         <div id="app-status" class="status hidden"></div>
-        <section id="fallback-panel" class="fallback-panel hidden" aria-live="polite">
-          <h3>PowerPoint Mac fallback</h3>
-          <p id="fallback-message">PowerPoint Mac blocked direct slide insertion for this add-in. You can still present using these options.</p>
-          <div class="fallback-grid">
-            <button id="open-live-button" class="button full" type="button">Open live presentation</button>
-            <button id="download-image-button" class="button secondary full" type="button">Download presentation image</button>
-            <button id="download-pptx-button" class="button secondary full" type="button">Download PPTX</button>
-            <button id="copy-join-link-button" class="button secondary full" type="button">Copy join link</button>
-            <button id="copy-event-code-button" class="button secondary full" type="button">Copy event code</button>
-          </div>
-        </section>
       </section>
     </main>
 
@@ -521,7 +437,10 @@ export function GET() {
         var optionDrafts = [];
         var autosaveTimer = null;
         var resultsTimer = null;
-        var lastPresentationData = null;
+        var liveSlideTimer = null;
+        var liveSlideInteractionId = null;
+        var liveSlideRefreshing = false;
+        var liveSlideLastSignature = "";
 
         var templates = [
           { label: "Multiple choice", icon: "=", type: "poll", config: { poll_kind: "multiple_choice", results_visible: true, voting_open: true }, options: ["Option 1", "Option 2"] },
@@ -692,6 +611,7 @@ export function GET() {
             button.querySelector(".small.muted").textContent = "#" + event.event_code;
             button.querySelector("span").textContent = event.status || "closed";
             button.onclick = function () {
+              stopLiveSlideRefresh();
               selectedEvent = event;
               renderEvents();
               renderSelectedEvent();
@@ -932,23 +852,7 @@ export function GET() {
           renderOptionFields();
           renderSettings(config);
           renderEditorPreview();
-          renderPresenterControl();
           updateEditorButtons();
-        }
-
-        function renderPresenterControl() {
-          var panel = el("presenter-control");
-          if (!selectedInteraction || !selectedEvent) {
-            panel.classList.add("hidden");
-            return;
-          }
-          panel.classList.remove("hidden");
-          el("presenter-control-summary").textContent =
-            labelForInteraction(selectedInteraction) + " · #" + selectedEvent.event_code + " · " + (selectedInteraction.title || "Untitled");
-          var status = selectedInteraction.status || "draft";
-          var statusEl = el("presenter-control-status");
-          statusEl.className = "pill " + status;
-          statusEl.textContent = status;
         }
 
         function defaultQuestion(label) {
@@ -1141,16 +1045,7 @@ export function GET() {
           el("present-slide-button").disabled = !hasSelected;
           el("go-live-button").disabled = !hasSelected;
           el("close-live-button").disabled = !hasSelected;
-          el("show-results-button").disabled = !hasSelected;
           el("reset-results-button").disabled = !hasSelected;
-          el("open-live-presentation-button").disabled = !hasSelected;
-          el("refresh-snapshot-button").disabled = !hasSelected;
-          el("update-slide-snapshot-button").disabled = !hasSelected;
-          el("copy-live-join-link-button").disabled = !hasSelected;
-          el("copy-live-event-code-button").disabled = !hasSelected;
-          el("reset-live-results-button").disabled = !hasSelected;
-          el("previous-interaction-button").disabled = !interactions.length;
-          el("next-interaction-button").disabled = !interactions.length;
         }
 
         function renderEditorPreview() {
@@ -1190,7 +1085,7 @@ export function GET() {
           }).then(function (data) {
               selectedInteraction = data.interaction;
               setStatus("app-status", status === "live" ? "Interaction is live." : "Interaction closed.", false);
-              renderPresenterControl();
+              if (status !== "live" && liveSlideInteractionId === selectedInteraction.id) stopLiveSlideRefresh();
               loadInteractions();
             }).catch(function (error) {
               setStatus("app-status", error.message, true);
@@ -1215,89 +1110,28 @@ export function GET() {
           });
         }
 
-        function navigateInteraction(direction) {
-          if (!interactions.length) return;
-          var index = 0;
-          if (selectedInteraction) {
-            for (var i = 0; i < interactions.length; i += 1) {
-              if (interactions[i].id === selectedInteraction.id) index = i;
-            }
-          }
-          var nextIndex = (index + direction + interactions.length) % interactions.length;
-          openInteractionEditor(interactions[nextIndex], templateForInteraction(interactions[nextIndex]));
-        }
-
         function saveAndPresent() {
           saveEditor(false, function (interaction) {
-            presentInteraction(interaction);
+            presentInteraction(interaction, { startAutoRefresh: true });
           });
         }
 
-        function openLivePresentation() {
-          if (!selectedEvent) {
-            setStatus("app-status", "Select an event first.", true);
-            return;
-          }
-          var liveUrl = selectedInteraction ? interactionLiveUrl(selectedInteraction) : APP_URL + "/present/" + encodeURIComponent(selectedEvent.event_code);
-          setStatus("app-status", "Opening live presentation...", false);
-          window.open(liveUrl, "_blank", "noopener,noreferrer");
-        }
-
-        function refreshSnapshot() {
-          if (!selectedInteraction) {
-            setStatus("app-status", "Select an interaction first.", true);
-            return;
-          }
-          setButtonLoading("refresh-snapshot-button", true, "Refreshing");
-          setStatus("app-status", "Refreshing live result preview...", false);
-          loadResults(selectedInteraction.id);
-          setTimeout(function () {
-            setButtonLoading("refresh-snapshot-button", false);
-            setStatus("app-status", "Live result preview refreshed.", false);
-          }, 500);
-        }
-
-        function updateSlideSnapshot() {
-          if (!selectedInteraction) {
-            setStatus("app-status", "Select an interaction first.", true);
-            return;
-          }
-          setButtonLoading("update-slide-snapshot-button", true, "Updating");
-          setStatus("app-status", "Fetching latest results and updating slide snapshot...", false);
-          presentInteraction(selectedInteraction).finally(function () {
-            setButtonLoading("update-slide-snapshot-button", false);
-          });
-        }
-
-        function copySelectedJoinLink() {
-          if (!selectedEvent) {
-            setStatus("app-status", "Select an event first.", true);
-            return;
-          }
-          copyText(APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code), "Join link copied.");
-        }
-
-        function copySelectedEventCode() {
-          if (!selectedEvent) {
-            setStatus("app-status", "Select an event first.", true);
-            return;
-          }
-          copyText("#" + selectedEvent.event_code, "Event code copied.");
-        }
-
-        function presentInteraction(interaction) {
+        function presentInteraction(interaction, presentOptions) {
           if (!selectedEvent || !interaction) return;
-          setButtonLoading("present-slide-button", true, "Creating slide");
-          setStatus("app-status", "Creating PowerPoint slide...", false);
-          addDebug("Present interaction: " + (interaction.id || "missing id"));
+          presentOptions = presentOptions || {};
+          if (!presentOptions.silent) {
+            setButtonLoading("present-slide-button", true, "Creating slide");
+            setStatus("app-status", "Creating PowerPoint slide...", false);
+          }
+          addDebug((presentOptions.silent ? "Auto refresh interaction: " : "Present interaction: ") + (interaction.id || "missing id"));
           addDebug("Event code: " + selectedEvent.event_code);
           addDebug("Question: " + (interaction.title || "Untitled"));
-          var options = normalizeOptions(interaction.interaction_options || optionDrafts).map(function (option) {
+          var slideOptions = normalizeOptions(interaction.interaction_options || optionDrafts).map(function (option) {
             return { option_text: option.option_text, is_correct: !!option.is_correct };
           }).filter(function (option) {
             return !!option.option_text;
           });
-          addDebug("Options: " + options.length);
+          addDebug("Options: " + slideOptions.length);
           var snapshotUrl = interaction.type === "qa"
             ? "/api/qa?interaction_id=" + encodeURIComponent(interaction.id) + "&sort=popular"
             : "/api/results?interaction_id=" + encodeURIComponent(interaction.id);
@@ -1311,10 +1145,23 @@ export function GET() {
                 resultData = { results: resultData.questions || [], total_responses: (resultData.questions || []).length };
               }
               addDebug("Result snapshot responses: " + (resultData.total_responses || 0));
-              return insertInteractionSlide(interaction, options, resultData);
+              var signature = JSON.stringify({
+                id: interaction.id,
+                title: interaction.title,
+                status: interaction.status,
+                results: resultData.results || [],
+                total: resultData.total_responses || 0
+              });
+              if (presentOptions.silent && signature === liveSlideLastSignature) return true;
+              liveSlideLastSignature = signature;
+              return insertInteractionSlide(interaction, slideOptions, resultData, !!presentOptions.silent);
+            })
+            .then(function (inserted) {
+              if (inserted && presentOptions.startAutoRefresh) startLiveSlideRefresh(interaction);
+              return inserted;
             })
             .finally(function () {
-              setButtonLoading("present-slide-button", false);
+              if (!presentOptions.silent) setButtonLoading("present-slide-button", false);
             });
         }
 
@@ -1362,7 +1209,7 @@ export function GET() {
           return APP_URL + "/present/" + encodeURIComponent(selectedEvent.event_code);
         }
 
-        function insertInteractionSlide(interaction, options, resultData) {
+        function insertInteractionSlide(interaction, options, resultData, isAutoRefresh) {
           if (!selectedEvent) return Promise.resolve();
           var joinUrl = APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
           var liveUrl = interactionLiveUrl(interaction);
@@ -1372,7 +1219,7 @@ export function GET() {
           addDebug("PowerPoint.run available: " + (!!(window.PowerPoint && PowerPoint.run)));
           addDebug("setSelectedDataAsync available: " + (!!(window.Office && Office.context && Office.context.document && Office.context.document.setSelectedDataAsync)));
           addDebug("insertFileFromBase64Async available: " + (!!(window.Office && Office.context && Office.context.document && Office.context.document.insertFileFromBase64Async)));
-          setStatus("app-status", "Rendering preview...", false);
+          if (!isAutoRefresh) setStatus("app-status", "Rendering preview...", false);
           return request("/api/powerpoint/interaction-slide", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1392,50 +1239,45 @@ export function GET() {
             addDebug("Generated PPTX base64: " + (!!data.base64));
             addDebug("Generated slide image: " + (!!data.imageBase64));
             addDebug("Generated slide SVG: " + (!!data.svgBase64));
-            lastPresentationData = {
-              liveUrl: liveUrl,
-              joinUrl: joinUrl,
-              eventCode: selectedEvent.event_code,
-              pptxBase64: data.base64 || "",
-              svgBase64: data.svgBase64 || "",
-              pngBase64: data.imageBase64 || ""
-            };
-            return insertVisualSlide(data, interaction, liveUrl);
+            return insertVisualSlide(data, interaction, liveUrl, !!isAutoRefresh);
           }).catch(function (error) {
             setStatus("app-status", "Unable to create slide: " + error.message, true);
             addDebug("Create slide failed: " + error.message);
+            return false;
           });
         }
 
-        function insertVisualSlide(data, interaction, liveUrl) {
-          setStatus("app-status", "Inserting into PowerPoint slide...", false);
-          showOpenLiveButton(liveUrl);
+        function insertVisualSlide(data, interaction, liveUrl, isAutoRefresh) {
+          if (!isAutoRefresh) setStatus("app-status", "Inserting into PowerPoint slide...", false);
           if (data && data.imageBase64) {
-            return insertSlideImage(data.imageBase64, interaction, liveUrl)
+            return insertSlideImage(data.imageBase64, interaction, liveUrl, isAutoRefresh)
               .catch(function (imageError) {
                 addDebug("Image insertion failed: " + imageError.message);
-                if (isMacPowerPoint()) {
-                  activateFallbackPanel("Image insertion blocked by PowerPoint Mac. Trying text fallback...", liveUrl);
-                  return insertPresentationFallback(interaction, liveUrl);
+                if (isAutoRefresh) {
+                  stopLiveSlideRefresh();
+                  setStatus("app-status", "Automatic slide refresh stopped because PowerPoint blocked image replacement: " + imageError.message, true);
+                  return false;
                 }
+                if (isMacPowerPoint()) return insertPresentationFallback(interaction, liveUrl);
                 if (data.base64) return insertBase64Presentation(data.base64, interaction, liveUrl);
                 return insertPresentationText(interaction, liveUrl);
               });
           }
           if (data && data.svgBase64) {
-            setStatus("app-status", "Rendering preview image...", false);
+            if (!isAutoRefresh) setStatus("app-status", "Rendering preview image...", false);
             return svgBase64ToPngBase64(data.svgBase64)
               .then(function (pngBase64) {
                 addDebug("Rendered PNG from SVG: " + (!!pngBase64));
-                if (lastPresentationData) lastPresentationData.pngBase64 = pngBase64;
-                return insertSlideImage(pngBase64, interaction, liveUrl);
+                return insertSlideImage(pngBase64, interaction, liveUrl, isAutoRefresh);
               })
               .catch(function (imageError) {
                 addDebug("SVG preview insertion failed: " + imageError.message);
-                if (isMacPowerPoint()) {
-                  activateFallbackPanel("Image insertion blocked by PowerPoint Mac. Trying text fallback...", liveUrl);
-                  return insertPresentationFallback(interaction, liveUrl);
+                if (isAutoRefresh) {
+                  stopLiveSlideRefresh();
+                  setStatus("app-status", "Automatic slide refresh stopped because PowerPoint blocked image replacement: " + imageError.message, true);
+                  return false;
                 }
+                if (isMacPowerPoint()) return insertPresentationFallback(interaction, liveUrl);
                 if (data.base64) return insertBase64Presentation(data.base64, interaction, liveUrl);
                 return insertPresentationText(interaction, liveUrl);
               });
@@ -1448,42 +1290,31 @@ export function GET() {
           return !!(window.Office && Office.context && String(Office.context.platform || "").toLowerCase() === "mac");
         }
 
-        function showOpenLiveButton(liveUrl) {
-          var panel = el("fallback-panel");
-          var openButton = el("open-live-button");
-          panel.classList.remove("hidden");
-          openButton.onclick = function () {
-            setStatus("app-status", "Opening live presentation...", false);
-            window.open(liveUrl, "_blank", "noopener,noreferrer");
-          };
-          el("download-image-button").onclick = function () {
-            if (!lastPresentationData || !lastPresentationData.pngBase64) {
-              setStatus("app-status", "Presentation image is not ready yet.", true);
-              return;
-            }
-            downloadBase64("SlideEngage-" + selectedEvent.event_code + ".png", lastPresentationData.pngBase64, "image/png");
-          };
-          el("download-pptx-button").onclick = function () {
-            if (!lastPresentationData || !lastPresentationData.pptxBase64) {
-              setStatus("app-status", "PPTX file is not ready yet.", true);
-              return;
-            }
-            downloadBase64("SlideEngage-" + selectedEvent.event_code + ".pptx", lastPresentationData.pptxBase64, "application/vnd.openxmlformats-officedocument.presentationml.presentation");
-          };
-          el("copy-join-link-button").onclick = function () {
-            var joinUrl = lastPresentationData && lastPresentationData.joinUrl ? lastPresentationData.joinUrl : APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
-            copyText(joinUrl, "Join link copied.");
-          };
-          el("copy-event-code-button").onclick = function () {
-            copyText("#" + selectedEvent.event_code, "Event code copied.");
-          };
+        function startLiveSlideRefresh(interaction) {
+          stopLiveSlideRefresh();
+          if (!interaction || !interaction.id) return;
+          liveSlideInteractionId = interaction.id;
+          liveSlideLastSignature = "";
+          setStatus("app-status", "Live PowerPoint slide auto-refresh started.", false);
+          addDebug("Live slide refresh started for " + interaction.id);
+          liveSlideTimer = setInterval(function () {
+            if (liveSlideRefreshing || !selectedInteraction || selectedInteraction.id !== liveSlideInteractionId) return;
+            liveSlideRefreshing = true;
+            presentInteraction(selectedInteraction, { silent: true }).finally(function () {
+              liveSlideRefreshing = false;
+            });
+          }, 3000);
         }
 
-        function activateFallbackPanel(reason, liveUrl) {
-          addDebug("Fallback activated: " + reason);
-          el("fallback-message").textContent = "PowerPoint Mac does not support live embedded web updates inside slides. Use Open Live Presentation for realtime results, or Update Slide Snapshot to refresh the slide.";
-          showOpenLiveButton(liveUrl);
-          setStatus("app-status", reason, true);
+        function stopLiveSlideRefresh() {
+          if (liveSlideTimer) {
+            clearInterval(liveSlideTimer);
+            liveSlideTimer = null;
+            addDebug("Live slide refresh stopped");
+          }
+          liveSlideInteractionId = null;
+          liveSlideRefreshing = false;
+          liveSlideLastSignature = "";
         }
 
         function copyText(text, successMessage) {
@@ -1563,13 +1394,13 @@ export function GET() {
           });
         }
 
-        function insertSlideImage(imageBase64, interaction, liveUrl) {
+        function insertSlideImage(imageBase64, interaction, liveUrl, isAutoRefresh) {
           return new Promise(function (resolve, reject) {
             if (!(window.Office && Office.context && Office.context.document && Office.context.document.setSelectedDataAsync)) {
               reject(new Error("PowerPoint image insertion API is not available."));
               return;
             }
-            addDebug("Attempting image insertion into current slide canvas");
+            addDebug(isAutoRefresh ? "Attempting live snapshot replacement" : "Attempting image insertion into current slide canvas");
             Office.context.document.setSelectedDataAsync(
               imageBase64,
               {
@@ -1579,9 +1410,11 @@ export function GET() {
               },
               function (result) {
                 if (result.status === Office.AsyncResultStatus.Succeeded) {
-                  setStatus("app-status", "Slide inserted successfully. The current PowerPoint slide now contains the interaction preview.", false);
-                  addDebug("PowerPoint image inserted successfully");
-                  resolve();
+                  setStatus("app-status", isAutoRefresh
+                    ? "PowerPoint slide refreshed with latest results."
+                    : "Slide inserted successfully. Live snapshot auto-refresh is starting.", false);
+                  addDebug(isAutoRefresh ? "PowerPoint live snapshot refreshed" : "PowerPoint image inserted successfully");
+                  resolve(true);
                 } else {
                   var message = result.error && result.error.message ? result.error.message : "PowerPoint rejected the generated slide image.";
                   reject(new Error(message));
@@ -1614,7 +1447,7 @@ export function GET() {
                 resolve();
               });
             } else {
-              setStatus("app-status", "Unable to create a new slide in this Office host. Inserted a fallback live presentation link instead.", true);
+              setStatus("app-status", "Unable to create a new slide in this Office host. Inserted fallback slide text instead.", true);
               addDebug("insertFileFromBase64Async unsupported; using text fallback");
               insertPresentationFallback(interaction, liveUrl).then(resolve);
             }
@@ -1642,8 +1475,8 @@ export function GET() {
             "Live result area:\\n" +
             (interaction.type === "word_cloud" ? "Live responses will appear here." :
               interaction.type === "qa" ? "Live questions will appear here." :
-              interaction.type === "poll" || interaction.type === "quiz" ? "Live bars and percentages will appear in the live presentation." :
-              "Live responses will appear in the live presentation.");
+              interaction.type === "poll" || interaction.type === "quiz" ? "Live bars and percentages will appear in the refreshed PowerPoint snapshot." :
+              "Live responses will appear in the refreshed PowerPoint snapshot.");
         }
 
         function buildFallbackHtml(interaction, liveUrlOverride) {
@@ -1673,7 +1506,7 @@ export function GET() {
             }
             Office.context.document.setSelectedDataAsync(buildFallbackHtml(interaction, liveUrlOverride), { coercionType: Office.CoercionType.Html }, function (result) {
               if (result.status === Office.AsyncResultStatus.Succeeded) {
-                setStatus("app-status", "Inserted HTML fallback successfully. Use Open live presentation for realtime results.", false);
+                setStatus("app-status", "Inserted HTML fallback successfully. Automatic image refresh is not available for this fallback.", false);
                 addDebug("HTML fallback inserted successfully");
                 resolve();
               } else {
@@ -1690,16 +1523,14 @@ export function GET() {
             if (window.Office && Office.context && Office.context.document && Office.context.document.setSelectedDataAsync) {
               Office.context.document.setSelectedDataAsync(text, { coercionType: Office.CoercionType.Text }, function (result) {
                 if (result.status === Office.AsyncResultStatus.Succeeded) {
-                  setStatus("app-status", "Inserted text fallback successfully. Use Open live presentation for realtime results.", false);
+                  setStatus("app-status", "Inserted text fallback successfully. Automatic image refresh is not available for this fallback.", false);
                   addDebug("Text fallback inserted successfully");
                 } else {
                   var message = result.error && result.error.message ? result.error.message : "Unable to insert interaction.";
                   addDebug("Text fallback failed: " + message);
-                  if (message.toLowerCase().indexOf("permission") >= 0 || isMacPowerPoint()) {
-                    activateFallbackPanel("PowerPoint Mac blocks direct slide insertion for this add-in.", liveUrl);
-                  } else {
-                    setStatus("app-status", message, true);
-                  }
+                  setStatus("app-status", message.toLowerCase().indexOf("permission") >= 0 || isMacPowerPoint()
+                    ? "PowerPoint blocked slide insertion for this add-in. Automatic live slide refresh cannot start in this PowerPoint session."
+                    : message, true);
                 }
                 resolve();
               });
@@ -1889,6 +1720,7 @@ export function GET() {
             events = [];
             selectedEvent = null;
             clearInterval(resultsTimer);
+            stopLiveSlideRefresh();
             showLogin();
           };
           el("create-event-button").onclick = createEvent;
@@ -1906,18 +1738,9 @@ export function GET() {
           };
           el("save-interaction-button").onclick = function () { saveEditor(false); };
           el("present-slide-button").onclick = saveAndPresent;
-          el("open-live-presentation-button").onclick = openLivePresentation;
-          el("refresh-snapshot-button").onclick = refreshSnapshot;
-          el("update-slide-snapshot-button").onclick = updateSlideSnapshot;
-          el("copy-live-join-link-button").onclick = copySelectedJoinLink;
-          el("copy-live-event-code-button").onclick = copySelectedEventCode;
-          el("reset-live-results-button").onclick = resetResults;
           el("go-live-button").onclick = function () { setInteractionStatus("live"); };
           el("close-live-button").onclick = function () { setInteractionStatus("closed"); };
-          el("show-results-button").onclick = function () { if (selectedInteraction) loadResults(selectedInteraction.id); };
           el("reset-results-button").onclick = resetResults;
-          el("previous-interaction-button").onclick = function () { navigateInteraction(-1); };
-          el("next-interaction-button").onclick = function () { navigateInteraction(1); };
         }
 
         window.addEventListener("error", function (event) {
