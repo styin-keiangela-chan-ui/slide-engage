@@ -199,8 +199,10 @@ function buildPreviewSvg(body: InteractionSlideRequest, qrDataUri: string) {
   ${svgText(truncate(body.question, 72), 620, 270, { size: 48, weight: 900, color: '1A1A2E' })}
   <line x1="560" y1="306" x2="1848" y2="306" stroke="#E2EBE6" stroke-width="2"/>
   ${resultMarkup}
-  ${svgRoundRect(690, 885, 930, 54, 'EAF7EF', 'CBEAD4', 22)}
-  ${svgText(`Join at ${joinHost} and enter code #${eventCode}`, 1155, 922, { size: 24, weight: 900, color: '168A3A', anchor: 'middle' })}
+  ${svgText('Live results update in presenter view', 620, 832, { size: 28, weight: 900, color: '168A3A' })}
+  ${svgText(truncate(body.liveUrl, 78), 620, 868, { size: 20, weight: 700, color: '6B7B8D' })}
+  ${svgRoundRect(690, 902, 930, 54, 'EAF7EF', 'CBEAD4', 22)}
+  ${svgText(`Join at ${joinHost} and enter code #${eventCode}`, 1155, 939, { size: 24, weight: 900, color: '168A3A', anchor: 'middle' })}
 </svg>`;
 }
 
@@ -376,20 +378,30 @@ export async function POST(req: NextRequest) {
 
     slide.addShape(pptx.ShapeType.roundRect, {
       x: 3.85,
-      y: 5.92,
+      y: 5.64,
       w: 7.8,
-      h: 0.38,
+      h: 0.66,
       rectRadius: 0.06,
       fill: { color: 'EAF7EF' },
       line: { color: 'CBEAD4', width: 1 },
     });
+    slide.addText('Live results update in presenter view', {
+      x: 4.02,
+      y: 5.77,
+      w: 7.45,
+      h: 0.18,
+      fontSize: 11,
+      bold: true,
+      color: '168A3A',
+      fit: 'shrink',
+      margin: 0,
+    });
     slide.addText(`Open live view: ${liveUrl}`, {
       x: 4.02,
-      y: 6.02,
+      y: 6.04,
       w: 7.45,
       h: 0.16,
-      fontSize: 9,
-      bold: true,
+      fontSize: 8,
       color: '168A3A',
       fit: 'shrink',
       margin: 0,

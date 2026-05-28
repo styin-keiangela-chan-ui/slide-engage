@@ -346,6 +346,30 @@ export function GET() {
         grid-template-columns: 1fr;
         gap: 8px;
       }
+      .presenter-control {
+        border: 1px solid #cbead4;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #fbfffc, #eef9f2);
+        padding: 12px;
+      }
+      .presenter-control h3 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 900;
+      }
+      .presenter-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .presenter-note {
+        border-left: 3px solid var(--green);
+        padding-left: 9px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.45;
+      }
     </style>
   </head>
   <body>
@@ -426,6 +450,26 @@ export function GET() {
             <div class="preview">
               <div class="preview-title">Live editor preview</div>
               <div id="editor-preview" class="small muted">Choose an interaction type to start.</div>
+            </div>
+            <div id="presenter-control" class="presenter-control hidden">
+              <div class="row">
+                <div>
+                  <h3>PowerPoint live control</h3>
+                  <p id="presenter-control-summary" class="small muted" style="margin-top:4px">Select an interaction to present.</p>
+                </div>
+                <span id="presenter-control-status" class="pill draft">draft</span>
+              </div>
+              <p class="presenter-note" style="margin-top:10px">
+                PowerPoint Mac does not support live embedded web updates inside slides. Use Open Live Presentation for realtime results, or Update Slide Snapshot to refresh the slide.
+              </p>
+              <div class="presenter-grid" style="margin-top:10px">
+                <button id="open-live-presentation-button" class="button full" type="button">Open Live Presentation</button>
+                <button id="refresh-snapshot-button" class="button secondary full" type="button">Refresh Snapshot</button>
+                <button id="update-slide-snapshot-button" class="button secondary full" type="button">Update Slide Snapshot</button>
+                <button id="copy-live-join-link-button" class="button secondary full" type="button">Copy Join Link</button>
+                <button id="copy-live-event-code-button" class="button secondary full" type="button">Copy Event Code</button>
+                <button id="reset-live-results-button" class="button danger full" type="button">Reset Results</button>
+              </div>
             </div>
             <div class="toolbar">
               <button id="save-interaction-button" class="button" type="button">Save draft</button>
@@ -872,6 +916,7 @@ export function GET() {
               }));
           el("interaction-editor").classList.remove("hidden");
           renderEditor();
+          if (selectedInteraction) loadResults(selectedInteraction.id);
         }
 
         function renderEditor() {
@@ -887,7 +932,23 @@ export function GET() {
           renderOptionFields();
           renderSettings(config);
           renderEditorPreview();
+          renderPresenterControl();
           updateEditorButtons();
+        }
+
+        function renderPresenterControl() {
+          var panel = el("presenter-control");
+          if (!selectedInteraction || !selectedEvent) {
+            panel.classList.add("hidden");
+            return;
+          }
+          panel.classList.remove("hidden");
+          el("presenter-control-summary").textContent =
+            labelForInteraction(selectedInteraction) + " · #" + selectedEvent.event_code + " · " + (selectedInteraction.title || "Untitled");
+          var status = selectedInteraction.status || "draft";
+          var statusEl = el("presenter-control-status");
+          statusEl.className = "pill " + status;
+          statusEl.textContent = status;
         }
 
         function defaultQuestion(label) {
@@ -1082,6 +1143,12 @@ export function GET() {
           el("close-live-button").disabled = !hasSelected;
           el("show-results-button").disabled = !hasSelected;
           el("reset-results-button").disabled = !hasSelected;
+          el("open-live-presentation-button").disabled = !hasSelected;
+          el("refresh-snapshot-button").disabled = !hasSelected;
+          el("update-slide-snapshot-button").disabled = !hasSelected;
+          el("copy-live-join-link-button").disabled = !hasSelected;
+          el("copy-live-event-code-button").disabled = !hasSelected;
+          el("reset-live-results-button").disabled = !hasSelected;
           el("previous-interaction-button").disabled = !interactions.length;
           el("next-interaction-button").disabled = !interactions.length;
         }
@@ -1123,6 +1190,7 @@ export function GET() {
           }).then(function (data) {
               selectedInteraction = data.interaction;
               setStatus("app-status", status === "live" ? "Interaction is live." : "Interaction closed.", false);
+              renderPresenterControl();
               loadInteractions();
             }).catch(function (error) {
               setStatus("app-status", error.message, true);
@@ -1165,6 +1233,58 @@ export function GET() {
           });
         }
 
+        function openLivePresentation() {
+          if (!selectedEvent) {
+            setStatus("app-status", "Select an event first.", true);
+            return;
+          }
+          var liveUrl = selectedInteraction ? interactionLiveUrl(selectedInteraction) : APP_URL + "/present/" + encodeURIComponent(selectedEvent.event_code);
+          setStatus("app-status", "Opening live presentation...", false);
+          window.open(liveUrl, "_blank", "noopener,noreferrer");
+        }
+
+        function refreshSnapshot() {
+          if (!selectedInteraction) {
+            setStatus("app-status", "Select an interaction first.", true);
+            return;
+          }
+          setButtonLoading("refresh-snapshot-button", true, "Refreshing");
+          setStatus("app-status", "Refreshing live result preview...", false);
+          loadResults(selectedInteraction.id);
+          setTimeout(function () {
+            setButtonLoading("refresh-snapshot-button", false);
+            setStatus("app-status", "Live result preview refreshed.", false);
+          }, 500);
+        }
+
+        function updateSlideSnapshot() {
+          if (!selectedInteraction) {
+            setStatus("app-status", "Select an interaction first.", true);
+            return;
+          }
+          setButtonLoading("update-slide-snapshot-button", true, "Updating");
+          setStatus("app-status", "Fetching latest results and updating slide snapshot...", false);
+          presentInteraction(selectedInteraction).finally(function () {
+            setButtonLoading("update-slide-snapshot-button", false);
+          });
+        }
+
+        function copySelectedJoinLink() {
+          if (!selectedEvent) {
+            setStatus("app-status", "Select an event first.", true);
+            return;
+          }
+          copyText(APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code), "Join link copied.");
+        }
+
+        function copySelectedEventCode() {
+          if (!selectedEvent) {
+            setStatus("app-status", "Select an event first.", true);
+            return;
+          }
+          copyText("#" + selectedEvent.event_code, "Event code copied.");
+        }
+
         function presentInteraction(interaction) {
           if (!selectedEvent || !interaction) return;
           setButtonLoading("present-slide-button", true, "Creating slide");
@@ -1181,7 +1301,7 @@ export function GET() {
           var snapshotUrl = interaction.type === "qa"
             ? "/api/qa?interaction_id=" + encodeURIComponent(interaction.id) + "&sort=popular"
             : "/api/results?interaction_id=" + encodeURIComponent(interaction.id);
-          request(snapshotUrl, { cache: "no-store" })
+          return request(snapshotUrl, { cache: "no-store" })
             .catch(function (error) {
               addDebug("Result snapshot failed: " + error.message);
               return { results: [], total_responses: 0 };
@@ -1361,7 +1481,7 @@ export function GET() {
 
         function activateFallbackPanel(reason, liveUrl) {
           addDebug("Fallback activated: " + reason);
-          el("fallback-message").textContent = reason + " Use the live presentation window or download files below.";
+          el("fallback-message").textContent = "PowerPoint Mac does not support live embedded web updates inside slides. Use Open Live Presentation for realtime results, or Update Slide Snapshot to refresh the slide.";
           showOpenLiveButton(liveUrl);
           setStatus("app-status", reason, true);
         }
@@ -1786,6 +1906,12 @@ export function GET() {
           };
           el("save-interaction-button").onclick = function () { saveEditor(false); };
           el("present-slide-button").onclick = saveAndPresent;
+          el("open-live-presentation-button").onclick = openLivePresentation;
+          el("refresh-snapshot-button").onclick = refreshSnapshot;
+          el("update-slide-snapshot-button").onclick = updateSlideSnapshot;
+          el("copy-live-join-link-button").onclick = copySelectedJoinLink;
+          el("copy-live-event-code-button").onclick = copySelectedEventCode;
+          el("reset-live-results-button").onclick = resetResults;
           el("go-live-button").onclick = function () { setInteractionStatus("live"); };
           el("close-live-button").onclick = function () { setInteractionStatus("closed"); };
           el("show-results-button").onclick = function () { if (selectedInteraction) loadResults(selectedInteraction.id); };

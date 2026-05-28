@@ -1195,6 +1195,15 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
         </div>
       )}
 
+      {(isFullscreen || publicMode) && activeInteraction.type !== 'word_cloud' && (
+        <div className="mt-8 grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <EventQRCode event={event} variant={isFullscreen || publicMode ? 'dark' : 'light'} presentation={isFullscreen || publicMode} />
+          <div className="flex items-end">
+            <JoinBanner event={event} variant={isFullscreen || publicMode ? 'dark' : 'light'} presentation={isFullscreen || publicMode} />
+          </div>
+        </div>
+      )}
+
       <div className="mt-8">{content}</div>
     </div>
   );
