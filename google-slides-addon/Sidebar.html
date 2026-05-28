@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body{font-family:Arial,sans-serif;margin:0;background:#f6faf7;color:#17172f}
+      button,input,textarea,select{font:inherit}
+      .wrap{padding:14px}
+      .brand{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+      .logo{width:36px;height:36px;border-radius:10px;background:#168a3a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px}
+      .title{font-weight:800;font-size:18px}
+      .muted{color:#6b7b8d}
+      .small{font-size:12px}
+      .card{background:#fff;border:1px solid #dfe9e3;border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 8px 24px rgba(14,63,34,.06)}
+      .stack{display:flex;flex-direction:column;gap:8px}
+      .row{display:flex;gap:8px;align-items:center;justify-content:space-between}
+      .input{width:100%;box-sizing:border-box;border:1px solid #d6e2dc;border-radius:10px;padding:10px;background:#fff}
+      .btn{border:0;border-radius:10px;background:#168a3a;color:#fff;font-weight:800;padding:10px 12px;cursor:pointer}
+      .btn.secondary{background:#fff;color:#17172f;border:1px solid #d6e2dc}
+      .btn.danger{background:#fff;color:#b42318;border:1px solid #f0c6c6}
+      .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+      .item{border:1px solid #dfe9e3;border-radius:12px;padding:10px;background:#fff;cursor:pointer;text-align:left}
+      .item.active{border-color:#168a3a;background:#eaf7ef}
+      .pill{border-radius:999px;background:#eaf7ef;color:#168a3a;padding:4px 8px;font-size:12px;font-weight:800}
+      .status{padding:10px;border-radius:10px;background:#eaf7ef;color:#168a3a;font-weight:700}
+      .error{background:#fff0f0;color:#b42318}
+      .hidden{display:none}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="brand">
+        <div class="logo">🎯</div>
+        <div>
+          <div class="title">SlideEngage</div>
+          <div class="small muted">Google Slides Add-on</div>
+        </div>
+      </div>
+      <div id="status" class="status hidden"></div>
+
+      <section id="login" class="card stack">
+        <b>Lecturer login</b>
+        <input id="email" class="input" placeholder="Email">
+        <input id="password" class="input" type="password" placeholder="Password">
+        <button class="btn" onclick="login()">Sign in</button>
+      </section>
+
+      <section id="app" class="hidden">
+        <div class="row">
+          <b id="hello"></b>
+          <button class="btn secondary" onclick="logout()">Logout</button>
+        </div>
+
+        <div class="card stack">
+          <b>Events</b>
+          <select id="events" class="input" onchange="selectEvent()"></select>
+          <div class="row">
+            <input id="newEventName" class="input" placeholder="New event name">
+            <button class="btn" onclick="createEvent()">Create</button>
+          </div>
+          <div id="eventInfo" class="small muted"></div>
+        </div>
+
+        <div class="card stack">
+          <b>Create new interaction</b>
+          <div id="templates" class="grid"></div>
+        </div>
+
+        <div id="editor" class="card stack hidden">
+          <div class="row">
+            <b id="editorTitle">Editor</b>
+            <span id="interactionStatus" class="pill">draft</span>
+          </div>
+          <textarea id="question" class="input" rows="3" placeholder="Question"></textarea>
+          <div id="options" class="stack"></div>
+          <button id="addOption" class="btn secondary hidden" onclick="addOption()">Add option</button>
+          <button class="btn secondary" onclick="saveInteraction()">Save draft</button>
+          <button class="btn" onclick="insertSlide()">Present in Google Slides</button>
+          <div class="row">
+            <button class="btn secondary" onclick="goLive()">Go live</button>
+            <button class="btn secondary" onclick="closeLive()">Close</button>
+            <button class="btn danger" onclick="resetResults()">Reset</button>
+          </div>
+          <button class="btn secondary" onclick="updateSnapshot()">Update slide snapshot</button>
+        </div>
+
+        <div class="card stack">
+          <div class="row">
+            <b>Interactions</b>
+            <button class="btn secondary" onclick="refresh()">Refresh</button>
+          </div>
+          <div id="interactions" class="stack"></div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      var state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[]};
+      var templates=[
+        {label:"Multiple choice",type:"poll",options:["Option 1","Option 2"],config:{poll_kind:"multiple_choice",results_visible:true,voting_open:true}},
+        {label:"Open text",type:"feedback",options:[],config:{poll_kind:"open_text",include_open_text:true,anonymous:true,voting_open:true}},
+        {label:"Word cloud",type:"word_cloud",options:[],config:{max_words_per_participant:3,allow_duplicate_words:true,voting_open:true}},
+        {label:"Rating",type:"feedback",options:[],config:{poll_kind:"rating",include_star_ratings:true,scale:5,voting_open:true}},
+        {label:"Quiz",type:"quiz",options:["Correct answer","Distractor"],config:{time_limit_seconds:30,points:100,voting_open:true}},
+        {label:"Audience Q&A",type:"qa",options:[],config:{allow_anonymous_questions:true,moderation:false,voting_open:true}}
+      ];
+      function $(id){return document.getElementById(id)}
+      function show(m,e){var s=$("status");s.textContent=m||"";s.className="status"+(e?" error":"")+(m?"":" hidden")}
+      function call(name,args,ok){show("Loading...");google.script.run.withSuccessHandler(function(r){show("");ok&&ok(r)}).withFailureHandler(function(err){show(err.message||String(err),true)})[name].apply(null,args||[])}
+      function boot(){renderTemplates();call("getInitialState",[],function(r){state.session=r.session;state.events=r.events||[];state.selectedEvent=r.selectedEvent||null;state.interactions=r.interactions||[];render()})}
+      function render(){if(state.session){$("login").classList.add("hidden");$("app").classList.remove("hidden");$("hello").textContent=state.session.lecturer.name||state.session.lecturer.email}else{$("login").classList.remove("hidden");$("app").classList.add("hidden")}renderEvents();renderInteractions();renderEditor()}
+      function renderTemplates(){var box=$("templates");box.innerHTML="";templates.forEach(function(t){var b=document.createElement("button");b.className="item";b.textContent=t.label;b.onclick=function(){openTemplate(t)};box.appendChild(b)})}
+      function renderEvents(){var sel=$("events");sel.innerHTML="";state.events.forEach(function(e){var o=document.createElement("option");o.value=e.id;o.textContent=(e.event_name||"Untitled")+" (#"+e.event_code+")";if(state.selectedEvent&&state.selectedEvent.id===e.id)o.selected=true;sel.appendChild(o)});$("eventInfo").textContent=state.selectedEvent?"Code #"+state.selectedEvent.event_code+" · "+(state.selectedEvent.status||"closed"):"Select or create an event."}
+      function renderInteractions(){var list=$("interactions");list.innerHTML="";state.interactions.forEach(function(i){var row=document.createElement("div");row.className="item"+(state.selectedInteraction&&state.selectedInteraction.id===i.id?" active":"");row.innerHTML="<b>"+(i.title||"Untitled")+"</b><div class=\"small muted\">"+label(i)+" · "+(i.status||"draft")+"</div>";row.onclick=function(){openInteraction(i)};list.appendChild(row)})}
+      function renderEditor(){var ed=$("editor");if(!state.selectedInteraction&&!state.template){ed.classList.add("hidden");return}ed.classList.remove("hidden");$("editorTitle").textContent=state.template?state.template.label:label(state.selectedInteraction);$("interactionStatus").textContent=(state.selectedInteraction&&state.selectedInteraction.status)||"draft";$("question").value=(state.selectedInteraction&&state.selectedInteraction.title)||"";var needs=needsOptions();$("addOption").classList.toggle("hidden",!needs);var box=$("options");box.innerHTML="";state.options.forEach(function(o,idx){var input=document.createElement("input");input.className="input";input.value=o.option_text||o;input.placeholder="Option "+(idx+1);input.oninput=function(){state.options[idx]={option_text:input.value,is_correct:!!o.is_correct}};box.appendChild(input)})}
+      function label(i){return i.type==="poll"?"Multiple choice":i.type==="word_cloud"?"Word cloud":i.type==="quiz"?"Quiz":i.type==="qa"?"Audience Q&A":i.config&&i.config.poll_kind==="rating"?"Rating":"Open text"}
+      function needsOptions(){var t=state.template?state.template.type:(state.selectedInteraction&&state.selectedInteraction.type);return t==="poll"||t==="quiz"}
+      function editorPayload(){return{id:state.selectedInteraction&&state.selectedInteraction.id,event_id:state.selectedEvent&&state.selectedEvent.id,type:(state.template&&state.template.type)||(state.selectedInteraction&&state.selectedInteraction.type),title:$("question").value,config:(state.template&&state.template.config)||(state.selectedInteraction&&state.selectedInteraction.config)||{},options:needsOptions()?state.options:[]}}
+      function login(){call("login",[$("email").value,$("password").value],function(r){state.session=r;refresh()})}
+      function logout(){call("logout",[],function(){state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[]};render()})}
+      function refresh(){call("getInitialState",[],function(r){state.session=r.session;state.events=r.events||[];state.selectedEvent=r.selectedEvent||null;state.interactions=r.interactions||[];render()})}
+      function selectEvent(){call("selectEvent",[$("events").value],function(r){state.selectedEvent=r.selectedEvent;state.interactions=r.interactions||[];state.selectedInteraction=null;state.template=null;render()})}
+      function createEvent(){call("createEvent",[$("newEventName").value],function(r){$("newEventName").value="";state.events=r.events;state.selectedEvent=r.selectedEvent;state.interactions=[];render()})}
+      function openTemplate(t){if(!state.selectedEvent){show("Select or create an event first.",true);return}state.template=t;state.selectedInteraction=null;state.options=(t.options||[]).map(function(x,i){return{option_text:typeof x==="string"?x:x.option_text,is_correct:i===0&&t.type==="quiz"}});renderEditor()}
+      function openInteraction(i){state.selectedInteraction=i;state.template=null;state.options=(i.interaction_options||[]).sort(function(a,b){return(a.position||0)-(b.position||0)}).map(function(o){return{option_text:o.option_text,is_correct:!!o.is_correct}});renderEditor()}
+      function addOption(){state.options.push({option_text:"Option "+(state.options.length+1),is_correct:false});renderEditor()}
+      function saveInteraction(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();show("Saved.")})}
+      function goLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"live"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}
+      function closeLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"closed"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}
+      function resetResults(){if(!state.selectedInteraction)return;call("resetResults",[state.selectedInteraction.id],function(){show("Results reset.")})}
+      function insertSlide(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();call("insertInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Slide inserted.")})})}
+      function updateSnapshot(){if(!state.selectedInteraction)return;call("updateInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Slide snapshot updated.")})}
+      boot();
+    </script>
+  </body>
+</html>

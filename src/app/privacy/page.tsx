@@ -13,6 +13,9 @@ export default function PrivacyPage() {
           <p className="mt-4 text-sm leading-relaxed text-[#6B7B8D]">
             Student responses may be anonymous when the lecturer enables anonymous participation. Data is used only to run sessions, display live results, and provide analytics to the lecturer.
           </p>
+          <p className="mt-4 text-sm leading-relaxed text-[#6B7B8D]">
+            The PowerPoint add-in and Google Slides add-on use the same SlideEngage account and backend as the website. The Google Slides add-on requests access only to the current presentation so it can insert SlideEngage slides, QR codes, event codes, and result snapshots chosen by the lecturer.
+          </p>
         </section>
       </main>
     </>

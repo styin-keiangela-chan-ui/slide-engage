@@ -582,36 +582,26 @@ export function GET() {
 
         function restoreSession() {
           setStatus("login-status", "Checking login...", false);
-          request("/api/auth/session", { cache: "no-store" })
-            .then(function (data) {
-              saveSession(data);
+          try {
+            var session = parseStoredSession(localStorage.getItem(SESSION_KEY));
+            if (session && !isSessionExpired(session)) {
+              lecturer = session.lecturer;
               setStatus("login-status", "", false);
-              addDebug("Auth cookie session valid");
+              addDebug("Auth loaded from Office storage");
               showApp();
               loadEvents();
-            })
-            .catch(function (sessionError) {
-              try {
-                var session = parseStoredSession(localStorage.getItem(SESSION_KEY));
-                if (session && !isSessionExpired(session)) {
-                  lecturer = session.lecturer;
-                  setStatus("login-status", "", false);
-                  addDebug("Auth loaded from Office storage");
-                  showApp();
-                  loadEvents();
-                  return;
-                }
-                clearSession();
-                addDebug("Auth empty: " + sessionError.message);
-                setStatus("login-status", "Session expired. Please sign in again.", true);
-                showLogin();
-              } catch (error) {
-                clearSession();
-                addDebug("Storage unavailable: " + error.message);
-                setStatus("login-status", "Please sign in to continue.", false);
-                showLogin();
-              }
-            });
+              return;
+            }
+            clearSession();
+            addDebug("Auth empty or expired");
+            setStatus("login-status", session ? "Session expired. Please sign in again." : "Please sign in to continue.", !!session);
+            showLogin();
+          } catch (error) {
+            clearSession();
+            addDebug("Storage unavailable: " + error.message);
+            setStatus("login-status", "Please sign in to continue.", false);
+            showLogin();
+          }
         }
 
         function login() {
@@ -1853,7 +1843,6 @@ export function GET() {
         function bind() {
           el("login-button").onclick = login;
           el("logout-button").onclick = function () {
-            request("/api/auth/session", { method: "DELETE" }).catch(function () {});
             clearSession();
             setStatus("login-status", "Signed out.", false);
             showLogin();
