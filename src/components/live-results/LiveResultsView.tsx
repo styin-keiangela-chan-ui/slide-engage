@@ -87,7 +87,6 @@ function interactionLabel(interaction?: LiveInteraction | null) {
   if (interaction.type === 'word_cloud') return 'Word Cloud';
   if (interaction.type === 'qa') return 'Audience Q&A';
   if (kind === 'rating') return 'Rating';
-  if (kind === 'ideas') return 'Ideas';
   return 'Open Text';
 }
 

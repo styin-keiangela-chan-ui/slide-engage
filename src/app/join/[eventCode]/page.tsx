@@ -15,6 +15,7 @@ export default function StudentSessionPage() {
 
   const [liveInteractions, setLiveInteractions] = useState<Interaction[]>([]);
   const [loadingInt, setLoadingInt] = useState(true);
+  const [activeTab, setActiveTab] = useState<'polls' | 'qa'>('polls');
 
   // If not joined, redirect to join page
   useEffect(() => {
@@ -77,18 +78,28 @@ export default function StudentSessionPage() {
 
   return (
     <>
-      {/* Session nav */}
-      <div className="bg-white border-b border-[#E2EBE6] px-5 h-[52px] flex items-center justify-between sticky top-0 z-50">
-        <div className="font-bold text-[15px]">🎯 {participant.event_name}</div>
-        <span className="bg-[#EAF7EF] text-[#2D8A4E] px-3.5 py-1 rounded-full text-xs font-bold">
+      <div className="bg-[#168A3A] px-4 py-4 text-white sticky top-0 z-50 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="font-extrabold text-[15px]">🎯 {participant.event_name}</div>
+            <div className="text-xs text-white/75">Joined as {participant.display_name || 'Guest'}</div>
+          </div>
+          <button
+            onClick={handleLeave}
+            className="rounded-full border border-white/30 px-3 py-1.5 text-xs font-bold text-white/90"
+          >
+            Leave
+          </button>
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="inline-flex rounded-full bg-white/15 p-1 text-sm font-bold">
+            <button onClick={() => setActiveTab('polls')} className={`rounded-full px-4 py-1.5 ${activeTab === 'polls' ? 'bg-white text-[#168A3A]' : 'text-white'}`}>Polls</button>
+            <button onClick={() => setActiveTab('qa')} className={`rounded-full px-4 py-1.5 ${activeTab === 'qa' ? 'bg-white text-[#168A3A]' : 'text-white'}`}>Q&A</button>
+          </div>
+          <span className="bg-white/15 text-white px-3 py-1 rounded-full text-xs font-bold">
           🔴 LIVE · #{participant.event_code}
-        </span>
-        <button
-          onClick={handleLeave}
-          className="px-3.5 py-1.5 text-xs font-semibold border border-[#E2EBE6] rounded-[7px] hover:border-red-300 hover:text-red-500 transition"
-        >
-          Leave
-        </button>
+          </span>
+        </div>
       </div>
 
       <div className="max-w-[640px] mx-auto p-7">
@@ -107,7 +118,9 @@ export default function StudentSessionPage() {
                 {liveInteractions.length} live interactions are open for this event.
               </div>
             )}
-            {liveInteractions.map(interaction => (
+            {liveInteractions
+              .filter(interaction => activeTab === 'qa' ? interaction.type === 'qa' : interaction.type !== 'qa')
+              .map(interaction => (
               <InteractionCard
                 key={interaction.id}
                 interaction={interaction}
@@ -115,6 +128,18 @@ export default function StudentSessionPage() {
                 eventId={participant.event_id}
               />
             ))}
+            {activeTab === 'polls' && liveInteractions.filter(interaction => interaction.type !== 'qa').length === 0 && (
+              <div className="rounded-[20px] border border-[#E2EBE6] bg-white p-8 text-center shadow">
+                <h2 className="text-lg font-bold">There are no active polls at the moment.</h2>
+                <button onClick={() => setActiveTab('qa')} className="mt-5 rounded-[9px] bg-[#168A3A] px-5 py-2 text-sm font-bold text-white">Go to Q&A</button>
+              </div>
+            )}
+            {activeTab === 'qa' && liveInteractions.filter(interaction => interaction.type === 'qa').length === 0 && (
+              <div className="rounded-[20px] border border-[#E2EBE6] bg-white p-8 text-center shadow">
+                <h2 className="text-lg font-bold">There are no active Q&A sessions yet.</h2>
+                <p className="mt-2 text-sm text-[#6B7B8D]">Please wait for your lecturer to start Q&A.</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -129,6 +154,7 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [pollResults, setPollResults] = useState<any[]>([]);
 
   // For word cloud
   const [wordInput, setWordInput] = useState('');
@@ -233,6 +259,11 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
       if (res.ok) {
         setSubmitted(true);
         notifyRealtime('response_inserted');
+        if (interaction.config?.results_visible !== false) {
+          const resultRes = await fetch(`/api/results?interaction_id=${interaction.id}`, { cache: 'no-store' });
+          const resultData = await resultRes.json();
+          setPollResults(resultData.results || []);
+        }
       }
       else {
         const data = await res.json();
@@ -420,8 +451,27 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
               )}
             </>
           ) : (
-            <div className="text-center py-6 text-[#2D8A4E] font-bold text-base">
-              ✅ Vote submitted! Results showing on the lecturer&apos;s screen.
+            <div className="py-3">
+              <div className="mb-4 text-center text-[#2D8A4E] font-bold text-base">✅ Vote submitted!</div>
+              {interaction.config?.results_visible === false ? (
+                <p className="text-center text-sm font-semibold text-[#6B7B8D]">Results are hidden by the lecturer.</p>
+              ) : pollResults.length ? (
+                <div className="space-y-3">
+                  {pollResults.map(result => (
+                    <div key={result.option_id}>
+                      <div className="mb-1 flex justify-between text-sm font-bold">
+                        <span>{result.option_text}</span>
+                        <span>{result.percentage}%</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-[#E2EBE6]">
+                        <div className="h-2 rounded-full bg-[#168A3A]" style={{ width: `${result.percentage}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-sm font-semibold text-[#6B7B8D]">Waiting for responses.</p>
+              )}
             </div>
           )}
         </>
@@ -529,7 +579,10 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
           </div>
 
           {questions.length === 0 ? (
-            <p className="text-sm text-[#6B7B8D] text-center py-4">No questions yet. Be the first to ask!</p>
+            <div className="py-8 text-center">
+              <h3 className="text-base font-bold text-[#1A1A2E]">There are no questions asked yet.</h3>
+              <p className="mt-2 text-sm text-[#6B7B8D]">Ask the first one!</p>
+            </div>
           ) : (
             <div className="flex flex-col gap-2.5">
               {questions.map(q => (

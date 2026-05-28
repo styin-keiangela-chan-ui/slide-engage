@@ -4,14 +4,14 @@ import Link from 'next/link';
 
 const steps = [
   ['1', 'Install the add-on', 'Add SlideEngage to Google Slides and open it from the Extensions menu.'],
-  ['2', 'Create interactions', 'Add polls, Q&A, quizzes, word clouds and surveys directly from the sidebar.'],
+  ['2', 'Create interactions', 'Add polls, Q&A, quizzes and word clouds directly from the sidebar.'],
   ['3', 'Present live', 'Students join with a QR code or event code and answer from any device.'],
 ];
 
 const useCases = [
   ['Pulse check', 'Ask how confident students feel before starting a topic.'],
   ['Collect questions', 'Let students submit and upvote questions anonymously or by name.'],
-  ['Quick feedback', 'Run a short survey at the end of class or training.'],
+  ['Quick feedback', 'Collect a short rating or open text response at the end of class or training.'],
 ];
 
 export default function GoogleSlidesPollingPage() {

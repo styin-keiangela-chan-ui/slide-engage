@@ -48,6 +48,18 @@ export interface InteractionConfig {
   max_words_per_participant?: number;
   allow_multiple_answers?: boolean;
   allow_anonymous_questions?: boolean;
+  allow_duplicate_words?: boolean;
+  anonymous_mode?: boolean;
+  character_limit?: number;
+  downvotes_enabled?: boolean;
+  labels_enabled?: boolean;
+  moderation_enabled?: boolean;
+  paragraph_answer?: boolean;
+  poll_description_enabled?: boolean;
+  poll_kind?: string;
+  replies_enabled?: boolean;
+  results_visible?: boolean;
+  show_respondent_names?: boolean;
   ai_auto_answer_enabled?: boolean;
   include_star_ratings?: boolean;
   include_open_text?: boolean;

@@ -67,7 +67,7 @@ export default function LandingPage() {
         <div className="text-center text-[#6B7B8D] mb-12 text-[15px]">Designed for classrooms, webinars, and corporate trainings</div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {[
-            { icon: '📊', title: 'Live Polls', desc: 'Multiple choice, rating scales, and ranking polls that display results in real-time on your slide.' },
+            { icon: '📊', title: 'Live Polls', desc: 'Multiple choice polls and rating scales that display results in real-time on your slide.' },
             { icon: '🧠', title: 'Quizzes', desc: 'Gamified quizzes with timers, correct-answer reveals, and a live leaderboard after each question.' },
             { icon: '❓', title: 'Q&A Sessions', desc: 'Attendees submit questions and upvote their favourites. AI can auto-answer common questions.' },
             { icon: '☁️', title: 'Word Clouds', desc: 'Real-time word cloud that grows as participants submit their responses.' },

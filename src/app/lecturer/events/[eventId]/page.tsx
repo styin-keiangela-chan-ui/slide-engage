@@ -11,11 +11,8 @@ type InteractionKind =
   | 'multiple_choice'
   | 'word_cloud'
   | 'open_text'
-  | 'ideas'
-  | 'ranking'
   | 'rating'
-  | 'quiz'
-  | 'survey';
+  | 'quiz';
 
 type Template = {
   kind: InteractionKind;
@@ -32,7 +29,6 @@ type DraftState = {
   question: string;
   options: string[];
   correctIndex: number;
-  surveyQuestions: string[];
   config: {
     allowMultipleAnswers: boolean;
     wordLimit: number;
@@ -50,7 +46,6 @@ type DraftState = {
     timer: number;
     points: number;
     leaderboard: boolean;
-    requiredSurveyQuestions: boolean;
   };
 };
 
@@ -60,16 +55,6 @@ type SavedInteraction = Interaction & {
 
 const templates: Template[] = [
   {
-    kind: 'qa',
-    type: 'qa',
-    title: 'Audience Q&A',
-    label: 'Audience Q&A',
-    icon: '☷',
-    accent: '#D92D20',
-    preview: 'qa',
-    description: 'Collect, moderate, and upvote audience questions.',
-  },
-  {
     kind: 'multiple_choice',
     type: 'poll',
     title: 'Multiple choice',
@@ -78,16 +63,6 @@ const templates: Template[] = [
     accent: '#1A6BB5',
     preview: 'bars',
     description: 'Ask a question with answer options and live results.',
-  },
-  {
-    kind: 'word_cloud',
-    type: 'word_cloud',
-    title: 'Word cloud',
-    label: 'Word cloud',
-    icon: '☁',
-    accent: '#7B3F98',
-    preview: 'cloud',
-    description: 'Collect short words and visualize them live.',
   },
   {
     kind: 'open_text',
@@ -100,24 +75,14 @@ const templates: Template[] = [
     description: 'Collect free-text responses from participants.',
   },
   {
-    kind: 'ideas',
-    type: 'feedback',
-    title: 'Ideas',
-    label: 'Ideas',
-    icon: '♙',
-    accent: '#6A8F13',
-    preview: 'ideas',
-    description: 'Gather ideas on a voting board.',
-  },
-  {
-    kind: 'ranking',
-    type: 'poll',
-    title: 'Ranking',
-    label: 'Ranking',
-    icon: '▰',
-    accent: '#C2185B',
-    preview: 'rank',
-    description: 'Let participants rank items in order.',
+    kind: 'word_cloud',
+    type: 'word_cloud',
+    title: 'Word cloud',
+    label: 'Word cloud',
+    icon: '☁',
+    accent: '#7B3F98',
+    preview: 'cloud',
+    description: 'Collect short words and visualize them live.',
   },
   {
     kind: 'rating',
@@ -140,18 +105,18 @@ const templates: Template[] = [
     description: 'Run a scored quiz with a correct answer.',
   },
   {
-    kind: 'survey',
-    type: 'feedback',
-    title: 'Survey',
-    label: 'Survey',
-    icon: '▱',
-    accent: '#6B7280',
-    preview: 'survey',
-    description: 'Build a multi-question survey flow.',
+    kind: 'qa',
+    type: 'qa',
+    title: 'Audience Q&A',
+    label: 'Audience Q&A',
+    icon: '☷',
+    accent: '#D92D20',
+    preview: 'qa',
+    description: 'Collect, moderate, and upvote audience questions.',
   },
 ];
 
-const optionKinds: InteractionKind[] = ['multiple_choice', 'ranking', 'quiz'];
+const optionKinds: InteractionKind[] = ['multiple_choice', 'quiz'];
 const SIDEBAR_COLLAPSE_KEY = 'slideengage_interactions_sidebar_collapsed';
 
 function formatRange(event: Event | null) {
@@ -186,7 +151,6 @@ function baseDraft(template: Template): DraftState {
     question: '',
     options: needsOptions ? ['', ''] : [],
     correctIndex: 0,
-    surveyQuestions: template.kind === 'survey' ? [''] : [],
     config: {
       allowMultipleAnswers: false,
       wordLimit: 3,
@@ -204,7 +168,6 @@ function baseDraft(template: Template): DraftState {
       timer: 30,
       points: 1000,
       leaderboard: true,
-      requiredSurveyQuestions: true,
     },
   };
 }
@@ -501,31 +464,13 @@ export default function EventBuilderPage() {
     });
   }
 
-  function addSurveyQuestion() {
-    updateDraft(current => ({ ...current, surveyQuestions: [...current.surveyQuestions, ''] }));
-  }
-
-  function updateSurveyQuestion(index: number, value: string) {
-    updateDraft(current => ({
-      ...current,
-      surveyQuestions: current.surveyQuestions.map((question, questionIndex) => questionIndex === index ? value : question),
-    }));
-  }
-
-  function removeSurveyQuestion(index: number) {
-    updateDraft(current => ({
-      ...current,
-      surveyQuestions: current.surveyQuestions.filter((_, questionIndex) => questionIndex !== index),
-    }));
-  }
-
   const validation = useMemo(() => {
     if (!selectedTemplate || !draft) return { valid: false, reason: 'Choose an interaction type.' };
     if (event?.status !== 'live') return { valid: false, reason: 'Make this event active before starting an interaction.' };
     const question = draft.question.trim();
-    if (!question) return { valid: false, reason: selectedTemplate.kind === 'survey' ? 'Survey title is required.' : 'Question is required.' };
+    if (!question) return { valid: false, reason: 'Question is required.' };
 
-    if (selectedTemplate.kind === 'multiple_choice' || selectedTemplate.kind === 'ranking') {
+    if (selectedTemplate.kind === 'multiple_choice') {
       if (draft.options.filter(option => option.trim()).length < 2) return { valid: false, reason: 'Add at least 2 options.' };
     }
 
@@ -566,6 +511,9 @@ export default function EventBuilderPage() {
       paragraph_answer: draft.config.paragraphAnswer,
       upvotes_enabled: draft.config.upvotes,
       moderation_enabled: draft.config.moderation,
+      replies_enabled: false,
+      labels_enabled: draft.config.categoryTags,
+      downvotes_enabled: false,
       allow_anonymous_questions: draft.config.anonymousQuestions,
       voting_enabled: draft.config.voting,
       category_tags: draft.config.categoryTags,
@@ -574,8 +522,9 @@ export default function EventBuilderPage() {
       time_limit_seconds: draft.config.timer,
       points: draft.config.points,
       leaderboard: draft.config.leaderboard,
-      survey_questions: draft.surveyQuestions.filter(question => question.trim()),
-      required_survey_questions: draft.config.requiredSurveyQuestions,
+      results_visible: true,
+      show_respondent_names: false,
+      poll_description_enabled: false,
     };
 
     const createRes = await fetch('/api/interactions', {
@@ -775,6 +724,7 @@ export default function EventBuilderPage() {
   }
 
   const qaInteraction = useMemo(() => interactions.find(item => item.type === 'qa'), [interactions]);
+  const qaTemplate = useMemo(() => templates.find(template => template.kind === 'qa') || templates[templates.length - 1], []);
 
   if (authLoading || loading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
   if (!lecturer || !event) return null;
@@ -879,7 +829,7 @@ export default function EventBuilderPage() {
             <section className="mb-8">
               <h2 className="mb-3 text-sm font-bold text-[#5F5F5F]">Audience Q&A</h2>
               <button
-                onClick={() => qaInteraction ? setStatus('Audience Q&A already exists.') : openEditor(templates[0])}
+                onClick={() => qaInteraction ? setStatus('Audience Q&A already exists.') : openEditor(qaTemplate)}
                 className="flex w-full items-center justify-between rounded-[10px] border border-[#E2E2E2] bg-white p-4 text-left transition hover:border-[#168A3A]"
               >
                 <span className="flex items-center gap-3 text-sm text-[#777]">
@@ -1000,9 +950,6 @@ export default function EventBuilderPage() {
               onOptionRemove={removeOption}
               onCorrectIndexChange={value => updateDraft(current => ({ ...current, correctIndex: value }))}
               onConfigChange={updateConfig}
-              onSurveyQuestionAdd={addSurveyQuestion}
-              onSurveyQuestionChange={updateSurveyQuestion}
-              onSurveyQuestionRemove={removeSurveyQuestion}
             />
           ) : (
             <>
@@ -1059,9 +1006,6 @@ function InteractionEditor({
   onOptionRemove,
   onCorrectIndexChange,
   onConfigChange,
-  onSurveyQuestionAdd,
-  onSurveyQuestionChange,
-  onSurveyQuestionRemove,
 }: {
   template: Template;
   draft: DraftState;
@@ -1076,9 +1020,6 @@ function InteractionEditor({
   onOptionRemove: (index: number) => void;
   onCorrectIndexChange: (index: number) => void;
   onConfigChange: <K extends keyof DraftState['config']>(key: K, value: DraftState['config'][K]) => void;
-  onSurveyQuestionAdd: () => void;
-  onSurveyQuestionChange: (index: number, value: string) => void;
-  onSurveyQuestionRemove: (index: number) => void;
 }) {
   return (
     <div className="grid min-h-[calc(100vh-140px)] grid-cols-1 gap-6 xl:grid-cols-[minmax(420px,1fr)_420px]">
@@ -1098,12 +1039,12 @@ function InteractionEditor({
           </div>
 
           <label className="mb-6 block">
-            <span className="mb-2 block text-sm font-bold">{template.kind === 'survey' ? 'Survey title *' : 'Question *'}</span>
+            <span className="mb-2 block text-sm font-bold">Question *</span>
             <textarea
               value={draft.question}
               onChange={e => onQuestionChange(e.target.value)}
               rows={3}
-              placeholder={template.kind === 'survey' ? 'Untitled survey' : 'Ask your audience anything'}
+              placeholder="Ask your audience anything"
               className="w-full resize-none rounded-[10px] border border-[#DCDCDC] px-4 py-3 text-base outline-none transition focus:border-[#168A3A] focus:ring-2 focus:ring-[#EAF7EF]"
             />
           </label>
@@ -1116,9 +1057,6 @@ function InteractionEditor({
             onOptionRemove={onOptionRemove}
             onCorrectIndexChange={onCorrectIndexChange}
             onConfigChange={onConfigChange}
-            onSurveyQuestionAdd={onSurveyQuestionAdd}
-            onSurveyQuestionChange={onSurveyQuestionChange}
-            onSurveyQuestionRemove={onSurveyQuestionRemove}
           />
 
           <details className="mt-8 rounded-[10px] border border-[#E5E5E5] bg-[#FAFAFA] p-4">
@@ -1156,9 +1094,6 @@ function DynamicFields({
   onOptionRemove,
   onCorrectIndexChange,
   onConfigChange,
-  onSurveyQuestionAdd,
-  onSurveyQuestionChange,
-  onSurveyQuestionRemove,
 }: {
   template: Template;
   draft: DraftState;
@@ -1167,15 +1102,12 @@ function DynamicFields({
   onOptionRemove: (index: number) => void;
   onCorrectIndexChange: (index: number) => void;
   onConfigChange: <K extends keyof DraftState['config']>(key: K, value: DraftState['config'][K]) => void;
-  onSurveyQuestionAdd: () => void;
-  onSurveyQuestionChange: (index: number, value: string) => void;
-  onSurveyQuestionRemove: (index: number) => void;
 }) {
   if (optionKinds.includes(template.kind)) {
     return (
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-bold">{template.kind === 'ranking' ? 'Ranking items *' : 'Answer options *'}</h2>
+          <h2 className="text-sm font-bold">Answer options *</h2>
           {template.kind === 'multiple_choice' && (
             <ToggleLabel
               label="Multiple answers"
@@ -1197,7 +1129,6 @@ function DynamicFields({
                   ✓
                 </button>
               )}
-              {template.kind === 'ranking' && <span className="text-sm font-bold text-[#777]">{index + 1}</span>}
               <input
                 value={option}
                 onChange={e => onOptionChange(index, e.target.value)}
@@ -1250,18 +1181,12 @@ function DynamicFields({
   if (template.kind === 'qa') {
     return (
       <div className="grid gap-4 sm:grid-cols-2">
-        <ToggleLabel label="Upvotes" checked={draft.config.upvotes} onChange={value => onConfigChange('upvotes', value)} />
-        <ToggleLabel label="Moderation" checked={draft.config.moderation} onChange={value => onConfigChange('moderation', value)} />
+        <ToggleLabel label="Moderation" description="Review incoming questions" checked={draft.config.moderation} onChange={value => onConfigChange('moderation', value)} />
+        <ToggleLabel label="Replies" description="Allow participants to reply to questions" checked={draft.config.paragraphAnswer} onChange={value => onConfigChange('paragraphAnswer', value)} />
+        <NumberField label="Character limit" value={draft.config.characterLimit || 160} onChange={value => onConfigChange('characterLimit', value)} />
+        <ToggleLabel label="Labels" description="Categorize and organize questions using labels" checked={draft.config.categoryTags} onChange={value => onConfigChange('categoryTags', value)} />
+        <ToggleLabel label="Downvotes" description="Allow participants to downvote questions. Upvotes are always on." checked={draft.config.voting} onChange={value => onConfigChange('voting', value)} />
         <ToggleLabel label="Anonymous questions" checked={draft.config.anonymousQuestions} onChange={value => onConfigChange('anonymousQuestions', value)} />
-      </div>
-    );
-  }
-
-  if (template.kind === 'ideas') {
-    return (
-      <div className="grid gap-4 sm:grid-cols-2">
-        <ToggleLabel label="Voting" checked={draft.config.voting} onChange={value => onConfigChange('voting', value)} />
-        <ToggleLabel label="Category tags" checked={draft.config.categoryTags} onChange={value => onConfigChange('categoryTags', value)} />
       </div>
     );
   }
@@ -1286,30 +1211,7 @@ function DynamicFields({
     );
   }
 
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-bold">Survey questions</h2>
-        <ToggleLabel label="Required" checked={draft.config.requiredSurveyQuestions} onChange={value => onConfigChange('requiredSurveyQuestions', value)} />
-      </div>
-      <div className="space-y-3">
-        {draft.surveyQuestions.map((question, index) => (
-          <div key={index} className="flex items-center gap-3">
-            <span className="text-sm font-bold text-[#777]">{index + 1}</span>
-            <input
-              value={question}
-              onChange={e => onSurveyQuestionChange(index, e.target.value)}
-              placeholder={`Survey question ${index + 1}`}
-              className="min-w-0 flex-1 rounded-[9px] border border-[#DCDCDC] px-4 py-3 text-sm outline-none focus:border-[#168A3A]"
-            />
-            <button onClick={() => onSurveyQuestionRemove(index)} className="text-xl text-[#999]">×</button>
-          </div>
-        ))}
-      </div>
-      <button onClick={onSurveyQuestionAdd} className="mt-4 text-sm font-bold text-[#168A3A]">+ Add question block</button>
-      <button onClick={onSurveyQuestionAdd} className="ml-5 mt-4 text-sm font-bold text-[#168A3A]">+ Add section</button>
-    </div>
-  );
+  return null;
 }
 
 function LivePreview({ template, draft }: { template: Template; draft: DraftState }) {
@@ -1329,7 +1231,7 @@ function LivePreview({ template, draft }: { template: Template; draft: DraftStat
       <div className="overflow-hidden rounded-[16px] border border-[#E1E1E1] bg-white shadow-sm">
         <div className="border-b border-[#EFEFEF] px-5 py-4">
           <div className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: template.accent }}>{template.label}</div>
-          <h3 className="text-lg font-extrabold">{draft.question.trim() || (template.kind === 'survey' ? 'Untitled survey' : 'Your question will appear here')}</h3>
+          <h3 className="text-lg font-extrabold">{draft.question.trim() || 'Your question will appear here'}</h3>
         </div>
 
         <div className="min-h-[300px] p-5">
@@ -1385,14 +1287,6 @@ function LivePreview({ template, draft }: { template: Template; draft: DraftStat
             </div>
           )}
 
-          {template.kind === 'ideas' && (
-            <div className="grid gap-3">
-              {['Improve onboarding', 'Add weekly recap', 'More examples'].map(idea => (
-                <div key={idea} className="rounded-[10px] bg-[#F4F7F4] p-4 text-sm font-semibold">{idea}</div>
-              ))}
-            </div>
-          )}
-
           {template.kind === 'rating' && (
             <div className="flex justify-center gap-3 py-12 text-3xl text-[#E5AC00]">
               {Array.from({ length: Math.min(draft.config.maxScale, 10) }).map((_, index) => (
@@ -1401,30 +1295,19 @@ function LivePreview({ template, draft }: { template: Template; draft: DraftStat
             </div>
           )}
 
-          {template.kind === 'survey' && (
-            <div>
-              <div className="mb-4 h-2 rounded-full bg-[#E5E5E5]">
-                <div className="h-2 w-1/3 rounded-full bg-[#168A3A]" />
-              </div>
-              <div className="space-y-3">
-                {(draft.surveyQuestions.filter(question => question.trim()).length ? draft.surveyQuestions.filter(question => question.trim()) : ['Survey question preview']).map((question, index) => (
-                  <div key={`${question}-${index}`} className="rounded-[10px] border border-[#E5E5E5] p-4 text-sm font-semibold">
-                    {question}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </aside>
   );
 }
 
-function ToggleLabel({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+function ToggleLabel({ label, description, checked, onChange }: { label: string; description?: string; checked: boolean; onChange: (value: boolean) => void }) {
   return (
     <label className="flex items-center justify-between gap-3 rounded-[9px] border border-[#E5E5E5] bg-white px-4 py-3 text-sm font-semibold">
-      <span>{label}</span>
+      <span>
+        <span className="block">{label}</span>
+        {description && <span className="mt-1 block text-xs font-medium text-[#777]">{description}</span>}
+      </span>
       <button
         type="button"
         onClick={() => onChange(!checked)}

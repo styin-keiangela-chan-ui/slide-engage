@@ -49,7 +49,6 @@ export function getInteractionIcon(type: string): string {
     qa: '❓',
     word_cloud: '☁️',
     feedback: '⭐',
-    survey: '📝',
   };
   return icons[type] || '📋';
 }
@@ -62,7 +61,6 @@ export function getInteractionLabel(type: string): string {
     qa: 'Q&A',
     word_cloud: 'Word Cloud',
     feedback: 'Feedback',
-    survey: 'Survey',
   };
   return labels[type] || type;
 }

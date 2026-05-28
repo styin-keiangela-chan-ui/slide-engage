@@ -132,7 +132,7 @@ function addOpenText(slide: any, pptx: any, responses: any) {
   items.forEach((item: any, index: number) => {
     const y = 2.45 + index * 0.72;
     slide.addShape(pptx.ShapeType.roundRect, { x: 3.85, y, w: 8.25, h: 0.48, rectRadius: 0.04, fill: { color: 'F4F7F4' }, line: { color: 'DDEBE3', width: 1 } });
-    slide.addText(item.text || item.text_value || 'Response', { x: 4.05, y: y + 0.12, w: 7.85, h: 0.22, fontSize: 12, color: '1A1A2E', fit: 'shrink', margin: 0 });
+    slide.addText(item.question_text || item.text || item.text_value || 'Response', { x: 4.05, y: y + 0.12, w: 7.85, h: 0.22, fontSize: 12, color: '1A1A2E', fit: 'shrink', margin: 0 });
   });
 }
 

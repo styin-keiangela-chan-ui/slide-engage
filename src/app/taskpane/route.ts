@@ -446,7 +446,6 @@ export function GET() {
           { label: "Open text", icon: "T", type: "feedback", config: { poll_kind: "open_text", include_open_text: true, anonymous: true, voting_open: true } },
           { label: "Word cloud", icon: "W", type: "word_cloud", config: { max_words_per_participant: 3, allow_duplicate_words: true, voting_open: true } },
           { label: "Rating", icon: "*", type: "feedback", config: { poll_kind: "rating", include_star_ratings: true, scale: 5, voting_open: true } },
-          { label: "Ranking", icon: "#", type: "poll", config: { poll_kind: "ranking", voting_open: true }, options: ["Rank item 1", "Rank item 2"] },
           { label: "Quiz", icon: "Q", type: "quiz", config: { time_limit_seconds: 30, points: 100, voting_open: true }, options: [{ option_text: "Correct answer", is_correct: true }, { option_text: "Distractor", is_correct: false }] },
           { label: "Audience Q&A", icon: "?", type: "qa", config: { allow_anonymous_questions: true, moderation: false, voting_open: true } }
         ];
@@ -759,7 +758,6 @@ export function GET() {
 
         function labelForInteraction(interaction) {
           var config = interaction.config || {};
-          if (interaction.type === "poll" && config.poll_kind === "ranking") return "Ranking";
           if (interaction.type === "poll") return "Multiple choice";
           if (interaction.type === "quiz") return "Quiz";
           if (interaction.type === "word_cloud") return "Word cloud";
@@ -859,7 +857,6 @@ export function GET() {
           if (label === "Word cloud") return "In one word, describe today's topic";
           if (label === "Open text") return "What should we discuss next?";
           if (label === "Rating") return "How would you rate this session?";
-          if (label === "Ranking") return "Rank these items";
           if (label === "Quiz") return "Which answer is correct?";
           if (label === "Audience Q&A") return "What questions should we answer?";
           return "Untitled interaction";
@@ -919,6 +916,12 @@ export function GET() {
             holder.appendChild(numberSetting("Character limit", "character_limit", config.character_limit || 240));
             holder.appendChild(toggleSetting("Anonymous responses", "anonymous", config.anonymous !== false));
           }
+          if (editorTemplate.label === "Multiple choice") {
+            holder.appendChild(toggleSetting("Multiple answers", "allow_multiple_answers", !!config.allow_multiple_answers));
+            holder.appendChild(toggleSetting("Show respondent names", "show_respondent_names", !!config.show_respondent_names));
+            holder.appendChild(toggleSetting("Poll results visible", "results_visible", config.results_visible !== false));
+            holder.appendChild(toggleSetting("Poll description", "poll_description_enabled", !!config.poll_description_enabled));
+          }
           if (editorTemplate.label === "Rating") {
             holder.appendChild(numberSetting("Rating scale", "scale", config.scale || 5));
           }
@@ -928,6 +931,10 @@ export function GET() {
           }
           if (editorTemplate.label === "Audience Q&A") {
             holder.appendChild(toggleSetting("Moderation", "moderation", !!config.moderation));
+            holder.appendChild(toggleSetting("Replies", "replies_enabled", !!config.replies_enabled));
+            holder.appendChild(numberSetting("Character limit", "character_limit", config.character_limit || 160));
+            holder.appendChild(toggleSetting("Labels", "labels_enabled", !!config.labels_enabled));
+            holder.appendChild(toggleSetting("Downvotes", "downvotes_enabled", !!config.downvotes_enabled));
             holder.appendChild(toggleSetting("Anonymous questions", "allow_anonymous_questions", config.allow_anonymous_questions !== false));
           }
         }
@@ -1133,12 +1140,18 @@ export function GET() {
             return !!option.option_text;
           });
           addDebug("Options: " + options.length);
-          request("/api/results?interaction_id=" + encodeURIComponent(interaction.id), { cache: "no-store" })
+          var snapshotUrl = interaction.type === "qa"
+            ? "/api/qa?interaction_id=" + encodeURIComponent(interaction.id) + "&sort=popular"
+            : "/api/results?interaction_id=" + encodeURIComponent(interaction.id);
+          request(snapshotUrl, { cache: "no-store" })
             .catch(function (error) {
               addDebug("Result snapshot failed: " + error.message);
               return { results: [], total_responses: 0 };
             })
             .then(function (resultData) {
+              if (interaction.type === "qa") {
+                resultData = { results: resultData.questions || [], total_responses: (resultData.questions || []).length };
+              }
               addDebug("Result snapshot responses: " + (resultData.total_responses || 0));
               return insertInteractionSlide(interaction, options, resultData);
             })
@@ -1305,6 +1318,10 @@ export function GET() {
         }
 
         function loadResults(interactionId) {
+          if (selectedInteraction && selectedInteraction.type === "qa") {
+            loadQaResults(interactionId);
+            return;
+          }
           request("/api/results?interaction_id=" + encodeURIComponent(interactionId), { cache: "no-store" })
             .then(function (data) {
               renderResults(data);
@@ -1315,9 +1332,59 @@ export function GET() {
             });
         }
 
+        function loadQaResults(interactionId, archived) {
+          var url = "/api/qa?interaction_id=" + encodeURIComponent(interactionId) + "&sort=popular&archived=" + (archived ? "true" : "false");
+          request(url, { cache: "no-store" })
+            .then(function (data) {
+              renderQaResults(data.questions || [], !!archived);
+              startResultsPolling(interactionId);
+            })
+            .catch(function (error) {
+              setStatus("app-status", error.message, true);
+            });
+        }
+
+        function renderQaResults(questions, archived) {
+          var list = el("results-list");
+          list.innerHTML = "";
+          var header = document.createElement("div");
+          header.className = "interaction-item";
+          header.innerHTML = '<div class="row"><strong></strong><button class="button secondary small" type="button"></button></div><div class="small muted" style="margin-top:6px"></div>';
+          header.querySelector("strong").textContent = archived ? "Archive" : "Audience Q&A";
+          header.querySelector("button").textContent = archived ? "Show live questions" : "Archive";
+          header.querySelector("button").onclick = function () { loadQaResults(selectedInteraction.id, !archived); };
+          header.querySelector(".small.muted").textContent = archived
+            ? (questions.length ? questions.length + " archived questions" : "Your archive is empty. You do not have any questions in your archive.")
+            : (questions.length ? questions.length + " live questions" : "Your Q&A is ready. Your participants can ask new questions.");
+          list.appendChild(header);
+          questions.forEach(function (question) {
+            var row = document.createElement("div");
+            row.className = "interaction-item";
+            row.innerHTML = '<div class="row"><strong></strong><span class="pill"></span></div><div class="small muted" style="margin-top:6px"></div><button class="button secondary small" style="margin-top:10px" type="button"></button>';
+            row.querySelector("strong").textContent = question.question_text;
+            row.querySelector(".pill").textContent = (question.upvote_count || 0) + " upvotes";
+            row.querySelector(".small.muted").textContent = question.display_name || "Anonymous";
+            row.querySelector("button").textContent = archived ? "Restore" : "Archive";
+            row.querySelector("button").onclick = function () {
+              request("/api/qa", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: question.id, is_hidden: !archived })
+              }).then(function () {
+                loadQaResults(selectedInteraction.id, archived);
+              });
+            };
+            list.appendChild(row);
+          });
+        }
+
         function startResultsPolling(interactionId) {
           clearInterval(resultsTimer);
           resultsTimer = setInterval(function () {
+            if (selectedInteraction && selectedInteraction.type === "qa") {
+              loadQaResults(interactionId, false);
+              return;
+            }
             request("/api/results?interaction_id=" + encodeURIComponent(interactionId), { cache: "no-store" })
               .then(function (data) {
                 renderResults(data);

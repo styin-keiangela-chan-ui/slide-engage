@@ -21,9 +21,18 @@ export default function CreateInteractionModal({ type, isOpen, onClose, onSave }
     time_limit_seconds: 30,
     max_words_per_participant: 1,
     allow_anonymous_questions: true,
+    moderation_enabled: false,
+    replies_enabled: false,
+    character_limit: 160,
+    labels_enabled: false,
+    downvotes_enabled: false,
     ai_auto_answer_enabled: false,
     include_star_ratings: true,
     include_open_text: true,
+    allow_multiple_answers: false,
+    show_respondent_names: false,
+    results_visible: true,
+    poll_description_enabled: false,
   });
   const [saving, setSaving] = useState(false);
   const letters = 'ABCDEFGHIJ';
@@ -134,6 +143,29 @@ export default function CreateInteractionModal({ type, isOpen, onClose, onSave }
             <button onClick={addOption} className="px-3.5 py-1.5 text-[13px] font-semibold border border-[#E2EBE6] rounded-[7px] mt-2 hover:border-[#2D8A4E] hover:text-[#2D8A4E] transition">
               + Add option
             </button>
+            {type === 'poll' && (
+              <div className="mt-4 grid gap-3 rounded-[12px] border border-[#E2EBE6] bg-[#FAFCFA] p-4">
+                <label className="flex items-center justify-between gap-3 text-sm font-semibold">
+                  Multiple answers
+                  <input type="checkbox" checked={config.allow_multiple_answers} onChange={e => setConfig({ ...config, allow_multiple_answers: e.target.checked })} />
+                </label>
+                <label className="flex items-center justify-between gap-3 text-sm font-semibold">
+                  Show respondent names
+                  <input type="checkbox" checked={config.show_respondent_names} onChange={e => setConfig({ ...config, show_respondent_names: e.target.checked })} />
+                </label>
+                <label className="flex items-center justify-between gap-3 text-sm font-semibold">
+                  Poll results visible
+                  <input type="checkbox" checked={config.results_visible} onChange={e => setConfig({ ...config, results_visible: e.target.checked })} />
+                </label>
+                <label className="flex items-center justify-between gap-3 text-sm font-semibold">
+                  Poll description
+                  <input type="checkbox" checked={config.poll_description_enabled} onChange={e => setConfig({ ...config, poll_description_enabled: e.target.checked })} />
+                </label>
+                <div className="rounded-[10px] border border-dashed border-[#B8DEC5] bg-white px-4 py-6 text-center text-xs font-semibold text-[#6B7B8D]">
+                  Image upload placeholder
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -173,16 +205,32 @@ export default function CreateInteractionModal({ type, isOpen, onClose, onSave }
         {/* Q&A settings */}
         {type === 'qa' && (
           <>
-            <div className="mb-4">
-              <label className="text-[13px] font-semibold block mb-1.5">Allow anonymous questions</label>
-              <select
-                value={config.allow_anonymous_questions ? 'yes' : 'no'}
-                onChange={e => setConfig({ ...config, allow_anonymous_questions: e.target.value === 'yes' })}
-                className="w-full p-2.5 px-3.5 border-[1.5px] border-[#E2EBE6] rounded-[9px] text-sm"
-              >
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
+            <div className="mb-4 grid gap-3 rounded-[12px] border border-[#E2EBE6] bg-[#FAFCFA] p-4">
+              {[
+                ['moderation_enabled', 'Moderation', 'Review incoming questions'],
+                ['replies_enabled', 'Replies', 'Allow participants to reply to questions'],
+                ['labels_enabled', 'Labels', 'Categorize and organize questions using labels'],
+                ['downvotes_enabled', 'Downvotes', 'Allow participants to downvote questions. Upvotes are always on.'],
+                ['allow_anonymous_questions', 'Anonymous questions', 'Participants can ask without showing their name'],
+              ].map(([key, label, description]) => (
+                <label key={key} className="flex items-center justify-between gap-3 text-sm">
+                  <span>
+                    <span className="block font-bold">{label}</span>
+                    <span className="text-xs text-[#6B7B8D]">{description}</span>
+                  </span>
+                  <input type="checkbox" checked={Boolean((config as any)[key])} onChange={e => setConfig({ ...config, [key]: e.target.checked })} />
+                </label>
+              ))}
+              <label className="block text-sm font-bold">
+                Character limit
+                <input
+                  type="number"
+                  min={40}
+                  value={config.character_limit}
+                  onChange={e => setConfig({ ...config, character_limit: Number(e.target.value) })}
+                  className="mt-1 w-full p-2.5 px-3.5 border-[1.5px] border-[#E2EBE6] rounded-[9px] text-sm"
+                />
+              </label>
             </div>
           </>
         )}
