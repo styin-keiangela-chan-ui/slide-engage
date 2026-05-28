@@ -1209,7 +1209,12 @@ export function GET() {
           var joinUrl = APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
           var liveUrl = interactionLiveUrl(interaction);
           addDebug("Office host available: " + (!!(window.Office && Office.context)));
+          addDebug("Office host: " + (window.Office && Office.context ? Office.context.host || "unknown" : "unavailable"));
+          addDebug("Office platform: " + (window.Office && Office.context ? Office.context.platform || "unknown" : "unavailable"));
+          addDebug("PowerPoint.run available: " + (!!(window.PowerPoint && PowerPoint.run)));
+          addDebug("setSelectedDataAsync available: " + (!!(window.Office && Office.context && Office.context.document && Office.context.document.setSelectedDataAsync)));
           addDebug("insertFileFromBase64Async available: " + (!!(window.Office && Office.context && Office.context.document && Office.context.document.insertFileFromBase64Async)));
+          setStatus("app-status", "Rendering preview...", false);
           return request("/api/powerpoint/interaction-slide", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1226,16 +1231,105 @@ export function GET() {
               totalResponses: resultData.total_responses || 0
             })
           }).then(function (data) {
-            return insertBase64Presentation(data.base64, interaction, liveUrl);
+            addDebug("Generated PPTX base64: " + (!!data.base64));
+            addDebug("Generated slide image: " + (!!data.imageBase64));
+            addDebug("Generated slide SVG: " + (!!data.svgBase64));
+            return insertVisualSlide(data, interaction, liveUrl);
           }).catch(function (error) {
             setStatus("app-status", "Unable to create slide: " + error.message, true);
             addDebug("Create slide failed: " + error.message);
           });
         }
 
+        function insertVisualSlide(data, interaction, liveUrl) {
+          setStatus("app-status", "Inserting into PowerPoint slide...", false);
+          if (data && data.imageBase64) {
+            return insertSlideImage(data.imageBase64, interaction, liveUrl)
+              .catch(function (imageError) {
+                addDebug("Image insertion failed: " + imageError.message);
+                if (data.base64) return insertBase64Presentation(data.base64, interaction, liveUrl);
+                return insertPresentationText(interaction, liveUrl);
+              });
+          }
+          if (data && data.svgBase64) {
+            setStatus("app-status", "Rendering preview image...", false);
+            return svgBase64ToPngBase64(data.svgBase64)
+              .then(function (pngBase64) {
+                addDebug("Rendered PNG from SVG: " + (!!pngBase64));
+                return insertSlideImage(pngBase64, interaction, liveUrl);
+              })
+              .catch(function (imageError) {
+                addDebug("SVG preview insertion failed: " + imageError.message);
+                if (data.base64) return insertBase64Presentation(data.base64, interaction, liveUrl);
+                return insertPresentationText(interaction, liveUrl);
+              });
+          }
+          if (data && data.base64) return insertBase64Presentation(data.base64, interaction, liveUrl);
+          return insertPresentationText(interaction, liveUrl);
+        }
+
+        function svgBase64ToPngBase64(svgBase64) {
+          return new Promise(function (resolve, reject) {
+            try {
+              var image = new Image();
+              image.onload = function () {
+                try {
+                  var canvas = document.createElement("canvas");
+                  canvas.width = 1920;
+                  canvas.height = 1080;
+                  var ctx = canvas.getContext("2d");
+                  if (!ctx) throw new Error("Canvas is not available in this Office WebView.");
+                  ctx.fillStyle = "#F4F7F4";
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+                  var pngDataUrl = canvas.toDataURL("image/png");
+                  resolve(pngDataUrl.split(",")[1]);
+                } catch (error) {
+                  reject(error);
+                }
+              };
+              image.onerror = function () {
+                reject(new Error("Unable to render generated slide preview."));
+              };
+              image.src = "data:image/svg+xml;base64," + svgBase64;
+            } catch (error) {
+              reject(error);
+            }
+          });
+        }
+
+        function insertSlideImage(imageBase64, interaction, liveUrl) {
+          return new Promise(function (resolve, reject) {
+            if (!(window.Office && Office.context && Office.context.document && Office.context.document.setSelectedDataAsync)) {
+              reject(new Error("PowerPoint image insertion API is not available."));
+              return;
+            }
+            addDebug("Attempting image insertion into current slide canvas");
+            Office.context.document.setSelectedDataAsync(
+              imageBase64,
+              {
+                coercionType: Office.CoercionType.Image,
+                imageWidth: 960,
+                imageHeight: 540
+              },
+              function (result) {
+                if (result.status === Office.AsyncResultStatus.Succeeded) {
+                  setStatus("app-status", "Slide inserted successfully. The current PowerPoint slide now contains the interaction preview.", false);
+                  addDebug("PowerPoint image inserted successfully");
+                  resolve();
+                } else {
+                  var message = result.error && result.error.message ? result.error.message : "PowerPoint rejected the generated slide image.";
+                  reject(new Error(message));
+                }
+              }
+            );
+          });
+        }
+
         function insertBase64Presentation(base64, interaction, liveUrl) {
           return new Promise(function (resolve) {
             if (window.Office && Office.context && Office.context.document && Office.context.document.insertFileFromBase64Async) {
+              addDebug("Attempting generated PPTX insertion");
               Office.context.document.insertFileFromBase64Async(base64, function (result) {
                 if (result.status === Office.AsyncResultStatus.Succeeded) {
                   setStatus("app-status", "Slide created successfully. Open the live view in the taskpane or use the link on the slide for realtime results.", false);

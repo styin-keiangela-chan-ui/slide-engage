@@ -21,7 +21,188 @@ type InteractionSlideRequest = {
   totalResponses?: number;
 };
 
+type PreviewRow = {
+  label: string;
+  percentage?: number;
+  count: number;
+  correct?: boolean;
+};
+
 const colors = ['168A3A', '1A6BB5', 'D46B08', '8B1A4A', '7C3AED', '0F766E'];
+
+function xmlEscape(value: unknown) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function truncate(value: unknown, max = 92) {
+  const text = String(value ?? '').trim();
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function svgText(value: unknown, x: number, y: number, options: {
+  size?: number;
+  weight?: number;
+  color?: string;
+  anchor?: string;
+  family?: string;
+  opacity?: number;
+  rotate?: number;
+} = {}) {
+  const transform = options.rotate ? ` transform="rotate(${options.rotate} ${x} ${y})"` : '';
+  return `<text x="${x}" y="${y}"${transform} font-family="${options.family || 'Aptos, Arial, sans-serif'}" font-size="${options.size || 28}" font-weight="${options.weight || 400}" fill="#${options.color || '1A1A2E'}" text-anchor="${options.anchor || 'start'}" opacity="${options.opacity ?? 1}">${xmlEscape(value)}</text>`;
+}
+
+function svgRoundRect(x: number, y: number, width: number, height: number, fill: string, stroke = 'DDEBE3', radius = 24, opacity = 1) {
+  return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${radius}" fill="#${fill}" stroke="#${stroke}" stroke-width="2" opacity="${opacity}"/>`;
+}
+
+function previewRows(body: InteractionSlideRequest): PreviewRow[] {
+  const results = body.results;
+  if (body.interactionType === 'poll' || body.interactionType === 'quiz') {
+    const options = body.options?.length
+      ? body.options
+      : (Array.isArray(results) ? results.map((item: any) => ({ option_text: item.option_text, option_letter: item.option_letter, is_correct: item.is_correct })) : []);
+    return options.slice(0, 6).map((option, index) => {
+      const result = Array.isArray(results)
+        ? results.find((item: any) => item.option_text === option.option_text || item.option_letter === option.option_letter)
+        : null;
+      return {
+        label: `${option.option_letter || String.fromCharCode(65 + index)}. ${option.option_text || 'Option'}`,
+        percentage: Math.max(0, Math.min(100, Number(result?.percentage || 0))),
+        count: Number(result?.count || 0),
+        correct: !!option.is_correct,
+      };
+    });
+  }
+
+  if (body.interactionType === 'qa') {
+    return (Array.isArray(results) ? results : []).slice(0, 5).map((item: any) => ({
+      label: item.question_text || item.text || 'Question',
+      count: Number(item.upvote_count || item.upvotes || 0),
+    }));
+  }
+
+  if (body.interactionType === 'word_cloud') {
+    return (Array.isArray(results) ? results : []).slice(0, 18).map((item: any) => ({
+      label: item.word || item.text || item.text_value || 'Word',
+      count: Number(item.count || 1),
+    }));
+  }
+
+  const items = Array.isArray(results) ? results : (results?.text_responses || []);
+  return items.slice(0, 5).map((item: any) => ({
+    label: item.text || item.text_value || item.question_text || 'Response',
+    count: 0,
+  }));
+}
+
+function buildPreviewSvg(body: InteractionSlideRequest, qrDataUri: string) {
+  const width = 1920;
+  const height = 1080;
+  const label = body.interactionLabel || body.interactionType;
+  const rows = previewRows(body);
+  const eventCode = body.eventCode.replace(/^#/, '');
+  const joinHost = (() => {
+    try {
+      return new URL(body.joinUrl).host;
+    } catch {
+      return body.joinUrl.replace(/^https?:\/\//, '').split('/')[0];
+    }
+  })();
+
+  let resultMarkup = '';
+  if (body.interactionType === 'word_cloud') {
+    if (!rows.length) {
+      resultMarkup = svgText('Live responses will appear here', 1205, 560, { size: 44, weight: 800, color: 'A3AEA8', anchor: 'middle' });
+    } else {
+      const positions = [
+        [900, 330, -8], [1240, 280, 7], [1110, 465, 0], [1450, 420, -6], [820, 575, 5],
+        [1265, 645, -4], [1535, 610, 6], [980, 720, 0], [1380, 760, -9], [1620, 300, 8],
+        [740, 430, 0], [1130, 810, 5], [1510, 815, 0], [850, 830, -5], [1320, 525, 8],
+        [1640, 710, -6], [990, 245, 4], [720, 700, 0],
+      ];
+      const maxCount = Math.max(1, ...rows.map(row => row.count || 1));
+      resultMarkup = rows.map((row, index) => {
+        const [x, y, rotate] = positions[index % positions.length];
+        const fontSize = Math.round(42 + ((row.count || 1) / maxCount) * 68 - Math.floor(index / positions.length) * 8);
+        return svgText(truncate(row.label, 28), x, y, {
+          size: Math.max(30, Math.min(110, fontSize)),
+          weight: 900,
+          color: colors[index % colors.length],
+          anchor: 'middle',
+          rotate,
+        });
+      }).join('');
+    }
+  } else if (body.interactionType === 'poll' || body.interactionType === 'quiz') {
+    resultMarkup = rows.length
+      ? rows.map((row, index) => {
+          const y = 355 + index * 95;
+          const percentage = row.percentage || 0;
+          const barWidth = Math.max(14, 760 * (percentage / 100));
+          return [
+            svgText(truncate(row.label, 58), 690, y, { size: 29, weight: row.correct ? 900 : 700, color: '1A1A2E' }),
+            svgRoundRect(690, y + 24, 760, 22, 'E3E7E5', 'E3E7E5', 12),
+            svgRoundRect(690, y + 24, barWidth, 22, colors[index % colors.length], colors[index % colors.length], 12),
+            svgText(`${percentage}%`, 1495, y + 42, { size: 27, weight: 900, color: colors[index % colors.length] }),
+            svgText(`${row.count} votes`, 1595, y + 42, { size: 22, weight: 700, color: '6B7B8D' }),
+          ].join('');
+        }).join('')
+      : svgText('Waiting for responses', 1205, 560, { size: 48, weight: 900, color: 'A3AEA8', anchor: 'middle' });
+  } else if (body.interactionType === 'qa') {
+    resultMarkup = rows.length
+      ? rows.map((row, index) => {
+          const y = 340 + index * 112;
+          return [
+            svgRoundRect(690, y - 42, 930, 82, 'F4F7F4', 'DDEBE3', 18),
+            svgText(truncate(row.label, 74), 722, y + 8, { size: 27, weight: 800, color: '1A1A2E' }),
+            svgText(`+${row.count}`, 1540, y + 8, { size: 24, weight: 900, color: '168A3A' }),
+          ].join('');
+        }).join('')
+      : [
+          svgText('Ask your question', 1205, 505, { size: 52, weight: 900, color: '1A1A2E', anchor: 'middle' }),
+          svgText('Live questions will appear here', 1205, 560, { size: 31, weight: 700, color: 'A3AEA8', anchor: 'middle' }),
+        ].join('');
+  } else {
+    resultMarkup = rows.length
+      ? rows.map((row, index) => {
+          const y = 355 + index * 112;
+          return [
+            svgRoundRect(690, y - 45, 930, 82, 'F4F7F4', 'DDEBE3', 18),
+            svgText(truncate(row.label, 78), 722, y + 8, { size: 27, weight: 800, color: '1A1A2E' }),
+          ].join('');
+        }).join('')
+      : svgText('Live responses will appear here', 1205, 560, { size: 44, weight: 800, color: 'A3AEA8', anchor: 'middle' });
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect width="${width}" height="${height}" fill="#F4F7F4"/>
+  ${svgText('SlideEngage', 70, 68, { size: 28, weight: 900, color: '168A3A' })}
+  ${svgText('LIVE PRESENTATION', 620, 68, { size: 24, weight: 900, color: '6B7B8D' })}
+  ${svgRoundRect(72, 120, 430, 840, 'FFFFFF', 'DDEBE3', 28)}
+  ${svgText('Join at', 132, 190, { size: 31, weight: 700, color: '1A1A2E' })}
+  ${svgText(joinHost, 132, 236, { size: 33, weight: 900, color: '168A3A' })}
+  <image href="${qrDataUri}" x="132" y="300" width="300" height="300"/>
+  ${svgText('Scan QR code to join', 282, 655, { size: 26, weight: 800, color: '1A1A2E', anchor: 'middle' })}
+  ${svgRoundRect(132, 710, 300, 72, 'EAF7EF', 'CBEAD4', 18)}
+  ${svgText(`#${eventCode}`, 282, 760, { size: 42, weight: 900, color: '168A3A', anchor: 'middle' })}
+  ${svgText(truncate(body.joinUrl, 44), 282, 842, { size: 20, weight: 700, color: '6B7B8D', anchor: 'middle' })}
+  ${svgRoundRect(560, 120, 1288, 840, 'FFFFFF', 'DDEBE3', 28)}
+  ${svgText(label.toUpperCase(), 620, 190, { size: 22, weight: 900, color: '6B7B8D' })}
+  ${svgText(`${body.totalResponses || 0} responses`, 1745, 190, { size: 22, weight: 700, color: '6B7B8D', anchor: 'end' })}
+  ${svgText(truncate(body.question, 72), 620, 270, { size: 48, weight: 900, color: '1A1A2E' })}
+  <line x1="560" y1="306" x2="1848" y2="306" stroke="#E2EBE6" stroke-width="2"/>
+  ${resultMarkup}
+  ${svgRoundRect(690, 885, 930, 54, 'EAF7EF', 'CBEAD4', 22)}
+  ${svgText(`Join at ${joinHost} and enter code #${eventCode}`, 1155, 922, { size: 24, weight: 900, color: '168A3A', anchor: 'middle' })}
+</svg>`;
+}
 
 function addJoinPanel(slide: any, pptx: any, qrDataUri: string, eventCode: string, joinUrl: string) {
   slide.addShape(pptx.ShapeType.roundRect, {
@@ -174,6 +355,8 @@ export async function POST(req: NextRequest) {
       width: 520,
       color: { dark: '#000000', light: '#FFFFFF' },
     });
+    const previewSvg = buildPreviewSvg(body, qrDataUri);
+    const svgBase64 = Buffer.from(previewSvg).toString('base64');
 
     addJoinPanel(slide, pptx, qrDataUri, eventCode, joinUrl);
     addFrame(slide, pptx, body.interactionLabel || interactionType, question, body.totalResponses || 0);
@@ -213,7 +396,7 @@ export async function POST(req: NextRequest) {
     });
 
     const base64 = await pptx.write({ outputType: 'base64' });
-    return NextResponse.json({ base64 });
+    return NextResponse.json({ base64, svgBase64 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
