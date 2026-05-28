@@ -19,6 +19,7 @@ type InteractionSlideRequest = {
   liveUrl: string;
   results?: any;
   totalResponses?: number;
+  snapshotOnly?: boolean;
 };
 
 type PreviewRow = {
@@ -52,6 +53,21 @@ type Box = {
 };
 
 const colors = ['168A3A', '1A6BB5', 'D46B08', '8B1A4A', '7C3AED', '0F766E'];
+const qrCache = new Map<string, string>();
+
+async function getQrDataUri(joinUrl: string) {
+  const cached = qrCache.get(joinUrl);
+  if (cached) return cached;
+  const dataUri = await QRCode.toDataURL(joinUrl, {
+    errorCorrectionLevel: 'M',
+    margin: 3,
+    width: 520,
+    color: { dark: '#000000', light: '#FFFFFF' },
+  });
+  if (qrCache.size > 50) qrCache.clear();
+  qrCache.set(joinUrl, dataUri);
+  return dataUri;
+}
 
 function xmlEscape(value: unknown) {
   return String(value ?? '')
@@ -481,6 +497,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'question, interactionType, eventCode, joinUrl, and liveUrl required' }, { status: 400 });
     }
 
+    const qrDataUri = await getQrDataUri(joinUrl);
+    const previewSvg = buildPreviewSvg(body, qrDataUri);
+    const svgBase64 = Buffer.from(previewSvg).toString('base64');
+
+    if (body.snapshotOnly) {
+      return NextResponse.json({ svgBase64 });
+    }
+
     const pptx = new pptxgen();
     pptx.layout = 'LAYOUT_WIDE';
     pptx.author = 'SlideEngage';
@@ -492,15 +516,6 @@ export async function POST(req: NextRequest) {
     slide.background = { color: 'F4F7F4' };
     slide.addText('SlideEngage', { x: 0.35, y: 0.2, w: 2.3, h: 0.25, fontSize: 9, bold: true, color: '168A3A', margin: 0 });
     slide.addText('LIVE PRESENTATION', { x: 3.45, y: 0.2, w: 3.0, h: 0.3, fontSize: 10, bold: true, color: '6B7B8D', margin: 0 });
-
-    const qrDataUri = await QRCode.toDataURL(joinUrl, {
-      errorCorrectionLevel: 'M',
-      margin: 3,
-      width: 520,
-      color: { dark: '#000000', light: '#FFFFFF' },
-    });
-    const previewSvg = buildPreviewSvg(body, qrDataUri);
-    const svgBase64 = Buffer.from(previewSvg).toString('base64');
 
     addJoinPanel(slide, pptx, qrDataUri, eventCode, joinUrl);
     addFrame(slide, pptx, body.interactionLabel || interactionType, question, body.totalResponses || 0);

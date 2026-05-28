@@ -438,9 +438,20 @@ export function GET() {
         var autosaveTimer = null;
         var resultsTimer = null;
         var liveSlideTimer = null;
+        var liveSlideThrottleTimer = null;
         var liveSlideInteractionId = null;
         var liveSlideRefreshing = false;
+        var liveSlideSnapshotUpdating = false;
         var liveSlideLastSignature = "";
+        var liveSlideLastSnapshotAt = 0;
+        var liveSlideQueuedSnapshot = null;
+
+        var performanceConfig = {
+          realtimePreviewInterval: 1000,
+          slideSnapshotInterval: 3000,
+          maxWordsRendered: "adaptive",
+          disableHeavyAnimationInPowerPoint: true
+        };
 
         var templates = [
           { label: "Multiple choice", icon: "=", type: "poll", config: { poll_kind: "multiple_choice", results_visible: true, voting_open: true }, options: ["Option 1", "Option 2"] },
@@ -1155,8 +1166,10 @@ export function GET() {
                 total: resultData.total_responses || 0
               });
               if (presentOptions.silent && signature === liveSlideLastSignature) return true;
+              if (presentOptions.silent) {
+                return queueLiveSlideSnapshot(interaction, slideOptions, resultData, signature);
+              }
               liveSlideLastSignature = signature;
-              if (presentOptions.silent) addDebug("Live result changed; refreshing PowerPoint snapshot");
               return insertInteractionSlide(interaction, slideOptions, resultData, !!presentOptions.silent);
             })
             .then(function (inserted) {
@@ -1238,7 +1251,8 @@ export function GET() {
               joinUrl: joinUrl,
               liveUrl: liveUrl,
               results: resultData.results || [],
-              totalResponses: resultData.total_responses || 0
+              totalResponses: resultData.total_responses || 0,
+              snapshotOnly: !!isAutoRefresh
             })
           }).then(function (data) {
             if (!isAutoRefresh) {
@@ -1297,11 +1311,66 @@ export function GET() {
           return !!(window.Office && Office.context && String(Office.context.platform || "").toLowerCase() === "mac");
         }
 
+        function queueLiveSlideSnapshot(interaction, options, resultData, signature) {
+          liveSlideQueuedSnapshot = {
+            interaction: interaction,
+            options: options,
+            resultData: resultData,
+            signature: signature
+          };
+
+          if (liveSlideSnapshotUpdating) return Promise.resolve(true);
+
+          var now = Date.now();
+          var elapsed = now - liveSlideLastSnapshotAt;
+          var wait = Math.max(0, performanceConfig.slideSnapshotInterval - elapsed);
+
+          if (wait === 0) return flushLiveSlideSnapshot();
+
+          if (!liveSlideThrottleTimer) {
+            setStatus("app-status", "Live. Slide update queued.", false);
+            liveSlideThrottleTimer = setTimeout(function () {
+              liveSlideThrottleTimer = null;
+              flushLiveSlideSnapshot();
+            }, wait);
+          }
+
+          return Promise.resolve(true);
+        }
+
+        function flushLiveSlideSnapshot() {
+          if (!liveSlideQueuedSnapshot || liveSlideSnapshotUpdating) return Promise.resolve(true);
+          var snapshot = liveSlideQueuedSnapshot;
+          liveSlideQueuedSnapshot = null;
+          liveSlideSnapshotUpdating = true;
+          liveSlideLastSnapshotAt = Date.now();
+          liveSlideLastSignature = snapshot.signature;
+          setStatus("app-status", "Updating slide...", false);
+          addDebug("Live result changed; refreshing PowerPoint snapshot");
+          return insertInteractionSlide(snapshot.interaction, snapshot.options, snapshot.resultData, true)
+            .then(function (inserted) {
+              var age = Math.max(0, Math.round((Date.now() - liveSlideLastSnapshotAt) / 1000));
+              if (inserted) setStatus("app-status", "Live. Last updated " + age + "s ago.", false);
+              return inserted;
+            })
+            .finally(function () {
+              liveSlideSnapshotUpdating = false;
+              if (liveSlideQueuedSnapshot && !liveSlideThrottleTimer) {
+                liveSlideThrottleTimer = setTimeout(function () {
+                  liveSlideThrottleTimer = null;
+                  flushLiveSlideSnapshot();
+                }, performanceConfig.slideSnapshotInterval);
+              }
+            });
+        }
+
         function startLiveSlideRefresh(interaction) {
           stopLiveSlideRefresh();
           if (!interaction || !interaction.id) return;
           liveSlideInteractionId = interaction.id;
           liveSlideLastSignature = "";
+          liveSlideLastSnapshotAt = 0;
+          liveSlideQueuedSnapshot = null;
           setStatus("app-status", "Live PowerPoint slide auto-refresh started.", false);
           addDebug("Live slide refresh started for " + interaction.id);
           liveSlideTimer = setInterval(function () {
@@ -1310,7 +1379,7 @@ export function GET() {
             presentInteraction(selectedInteraction, { silent: true }).finally(function () {
               liveSlideRefreshing = false;
             });
-          }, 1000);
+          }, performanceConfig.realtimePreviewInterval);
         }
 
         function stopLiveSlideRefresh() {
@@ -1319,9 +1388,16 @@ export function GET() {
             liveSlideTimer = null;
             addDebug("Live slide refresh stopped");
           }
+          if (liveSlideThrottleTimer) {
+            clearTimeout(liveSlideThrottleTimer);
+            liveSlideThrottleTimer = null;
+          }
           liveSlideInteractionId = null;
           liveSlideRefreshing = false;
+          liveSlideSnapshotUpdating = false;
           liveSlideLastSignature = "";
+          liveSlideLastSnapshotAt = 0;
+          liveSlideQueuedSnapshot = null;
         }
 
         function copyText(text, successMessage) {
@@ -1654,7 +1730,7 @@ export function GET() {
                 renderResults(data);
               })
               .catch(function () {});
-          }, 4000);
+          }, performanceConfig.realtimePreviewInterval);
         }
 
         function renderResults(data) {
