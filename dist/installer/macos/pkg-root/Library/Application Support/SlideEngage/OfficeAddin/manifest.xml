@@ -27,5 +27,5 @@
     <SourceLocation DefaultValue="https://slide-engage.vercel.app/taskpane"/>
   </DefaultSettings>
 
-  <Permissions>ReadDocument</Permissions>
+  <Permissions>ReadWriteDocument</Permissions>
 </OfficeApp>

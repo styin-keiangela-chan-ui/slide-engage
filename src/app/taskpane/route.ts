@@ -320,6 +320,32 @@ export function GET() {
         font-weight: 800;
         line-height: 1.45;
       }
+      .fallback-panel {
+        margin-top: 10px;
+        border: 1px solid #cbead4;
+        border-radius: 14px;
+        background: #fbfffc;
+        padding: 12px;
+        box-shadow: 0 1px 2px rgba(25, 26, 46, 0.04);
+      }
+      .fallback-panel h3 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 900;
+        color: var(--ink);
+      }
+      .fallback-panel p {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.45;
+      }
+      .fallback-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
     </style>
   </head>
   <body>
@@ -424,7 +450,17 @@ export function GET() {
         </section>
 
         <div id="app-status" class="status hidden"></div>
-        <button id="open-live-button" class="button secondary full hidden" type="button">Open live presentation</button>
+        <section id="fallback-panel" class="fallback-panel hidden" aria-live="polite">
+          <h3>PowerPoint Mac fallback</h3>
+          <p id="fallback-message">PowerPoint Mac blocked direct slide insertion for this add-in. You can still present using these options.</p>
+          <div class="fallback-grid">
+            <button id="open-live-button" class="button full" type="button">Open live presentation</button>
+            <button id="download-image-button" class="button secondary full" type="button">Download presentation image</button>
+            <button id="download-pptx-button" class="button secondary full" type="button">Download PPTX</button>
+            <button id="copy-join-link-button" class="button secondary full" type="button">Copy join link</button>
+            <button id="copy-event-code-button" class="button secondary full" type="button">Copy event code</button>
+          </div>
+        </section>
       </section>
     </main>
 
@@ -441,6 +477,7 @@ export function GET() {
         var optionDrafts = [];
         var autosaveTimer = null;
         var resultsTimer = null;
+        var lastPresentationData = null;
 
         var templates = [
           { label: "Multiple choice", icon: "=", type: "poll", config: { poll_kind: "multiple_choice", results_visible: true, voting_open: true }, options: ["Option 1", "Option 2"] },
@@ -1235,6 +1272,14 @@ export function GET() {
             addDebug("Generated PPTX base64: " + (!!data.base64));
             addDebug("Generated slide image: " + (!!data.imageBase64));
             addDebug("Generated slide SVG: " + (!!data.svgBase64));
+            lastPresentationData = {
+              liveUrl: liveUrl,
+              joinUrl: joinUrl,
+              eventCode: selectedEvent.event_code,
+              pptxBase64: data.base64 || "",
+              svgBase64: data.svgBase64 || "",
+              pngBase64: data.imageBase64 || ""
+            };
             return insertVisualSlide(data, interaction, liveUrl);
           }).catch(function (error) {
             setStatus("app-status", "Unable to create slide: " + error.message, true);
@@ -1250,7 +1295,7 @@ export function GET() {
               .catch(function (imageError) {
                 addDebug("Image insertion failed: " + imageError.message);
                 if (isMacPowerPoint()) {
-                  setStatus("app-status", "Image insertion blocked by PowerPoint Mac. Trying text fallback...", true);
+                  activateFallbackPanel("Image insertion blocked by PowerPoint Mac. Trying text fallback...", liveUrl);
                   return insertPresentationFallback(interaction, liveUrl);
                 }
                 if (data.base64) return insertBase64Presentation(data.base64, interaction, liveUrl);
@@ -1262,12 +1307,13 @@ export function GET() {
             return svgBase64ToPngBase64(data.svgBase64)
               .then(function (pngBase64) {
                 addDebug("Rendered PNG from SVG: " + (!!pngBase64));
+                if (lastPresentationData) lastPresentationData.pngBase64 = pngBase64;
                 return insertSlideImage(pngBase64, interaction, liveUrl);
               })
               .catch(function (imageError) {
                 addDebug("SVG preview insertion failed: " + imageError.message);
                 if (isMacPowerPoint()) {
-                  setStatus("app-status", "Image insertion blocked by PowerPoint Mac. Trying text fallback...", true);
+                  activateFallbackPanel("Image insertion blocked by PowerPoint Mac. Trying text fallback...", liveUrl);
                   return insertPresentationFallback(interaction, liveUrl);
                 }
                 if (data.base64) return insertBase64Presentation(data.base64, interaction, liveUrl);
@@ -1283,12 +1329,88 @@ export function GET() {
         }
 
         function showOpenLiveButton(liveUrl) {
-          var button = el("open-live-button");
-          button.classList.remove("hidden");
-          button.onclick = function () {
+          var panel = el("fallback-panel");
+          var openButton = el("open-live-button");
+          panel.classList.remove("hidden");
+          openButton.onclick = function () {
             setStatus("app-status", "Opening live presentation...", false);
             window.open(liveUrl, "_blank", "noopener,noreferrer");
           };
+          el("download-image-button").onclick = function () {
+            if (!lastPresentationData || !lastPresentationData.pngBase64) {
+              setStatus("app-status", "Presentation image is not ready yet.", true);
+              return;
+            }
+            downloadBase64("SlideEngage-" + selectedEvent.event_code + ".png", lastPresentationData.pngBase64, "image/png");
+          };
+          el("download-pptx-button").onclick = function () {
+            if (!lastPresentationData || !lastPresentationData.pptxBase64) {
+              setStatus("app-status", "PPTX file is not ready yet.", true);
+              return;
+            }
+            downloadBase64("SlideEngage-" + selectedEvent.event_code + ".pptx", lastPresentationData.pptxBase64, "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+          };
+          el("copy-join-link-button").onclick = function () {
+            var joinUrl = lastPresentationData && lastPresentationData.joinUrl ? lastPresentationData.joinUrl : APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
+            copyText(joinUrl, "Join link copied.");
+          };
+          el("copy-event-code-button").onclick = function () {
+            copyText("#" + selectedEvent.event_code, "Event code copied.");
+          };
+        }
+
+        function activateFallbackPanel(reason, liveUrl) {
+          addDebug("Fallback activated: " + reason);
+          el("fallback-message").textContent = reason + " Use the live presentation window or download files below.";
+          showOpenLiveButton(liveUrl);
+          setStatus("app-status", reason, true);
+        }
+
+        function copyText(text, successMessage) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () {
+              setStatus("app-status", successMessage, false);
+            }).catch(function () {
+              fallbackCopyText(text, successMessage);
+            });
+            return;
+          }
+          fallbackCopyText(text, successMessage);
+        }
+
+        function fallbackCopyText(text, successMessage) {
+          var input = document.createElement("textarea");
+          input.value = text;
+          input.setAttribute("readonly", "readonly");
+          input.style.position = "fixed";
+          input.style.left = "-9999px";
+          document.body.appendChild(input);
+          input.select();
+          try {
+            document.execCommand("copy");
+            setStatus("app-status", successMessage, false);
+          } catch (error) {
+            setStatus("app-status", "Unable to copy. Please copy manually: " + text, true);
+          }
+          document.body.removeChild(input);
+        }
+
+        function downloadBase64(filename, base64, mimeType) {
+          var binary = atob(base64);
+          var bytes = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i += 1) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          var blob = new Blob([bytes], { type: mimeType });
+          var url = URL.createObjectURL(blob);
+          var link = document.createElement("a");
+          link.href = url;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+          setStatus("app-status", filename + " downloaded.", false);
         }
 
         function svgBase64ToPngBase64(svgBase64) {
@@ -1443,6 +1565,7 @@ export function GET() {
 
         function insertPresentationText(interaction, liveUrlOverride) {
           return new Promise(function (resolve) {
+            var liveUrl = liveUrlOverride || interactionLiveUrl(interaction);
             var text = buildFallbackText(interaction, liveUrlOverride);
             if (window.Office && Office.context && Office.context.document && Office.context.document.setSelectedDataAsync) {
               Office.context.document.setSelectedDataAsync(text, { coercionType: Office.CoercionType.Text }, function (result) {
@@ -1450,7 +1573,13 @@ export function GET() {
                   setStatus("app-status", "Inserted text fallback successfully. Use Open live presentation for realtime results.", false);
                   addDebug("Text fallback inserted successfully");
                 } else {
-                  setStatus("app-status", result.error && result.error.message ? result.error.message : "Unable to insert interaction.", true);
+                  var message = result.error && result.error.message ? result.error.message : "Unable to insert interaction.";
+                  addDebug("Text fallback failed: " + message);
+                  if (message.toLowerCase().indexOf("permission") >= 0 || isMacPowerPoint()) {
+                    activateFallbackPanel("PowerPoint Mac blocks direct slide insertion for this add-in.", liveUrl);
+                  } else {
+                    setStatus("app-status", message, true);
+                  }
                 }
                 resolve();
               });
