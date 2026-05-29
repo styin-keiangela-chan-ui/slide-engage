@@ -13,11 +13,13 @@ Create live polls, quizzes, word clouds, ratings, open text prompts, and Q&A in 
 - `https://www.googleapis.com/auth/presentations.currentonly`
 - `https://www.googleapis.com/auth/script.container.ui`
 - `https://www.googleapis.com/auth/script.external_request`
+- `https://www.googleapis.com/auth/userinfo.email`
 
 Why:
 - `presentations.currentonly`: insert and update SlideEngage slides in the current presentation only.
 - `script.container.ui`: show the SlideEngage sidebar in Google Slides.
 - `script.external_request`: call the public SlideEngage backend APIs.
+- `userinfo.email`: identify the Google account during add-on authorization and review.
 
 ## Required Public URLs
 

@@ -75,6 +75,15 @@ function login(email, password) {
   return data;
 }
 
+function authorizeSlideEngage() {
+  try {
+    UrlFetchApp.fetch(SLIDEENGAGE_URL, { muteHttpExceptions: true });
+    return { success: true };
+  } catch (error) {
+    throw normalizeFetchPermissionError_(error);
+  }
+}
+
 function logout() {
   PropertiesService.getUserProperties().deleteProperty(SESSION_KEY);
   return { success: true };
@@ -342,11 +351,32 @@ function apiFetch_(path, options) {
     headers: { 'Content-Type': 'application/json' },
   };
   if (options.payload) params.payload = JSON.stringify(options.payload);
-  var response = UrlFetchApp.fetch(SLIDEENGAGE_URL + path, params);
+  var response;
+  try {
+    response = UrlFetchApp.fetch(SLIDEENGAGE_URL + path, params);
+  } catch (error) {
+    throw normalizeFetchPermissionError_(error);
+  }
   var text = response.getContentText();
-  var data = text ? JSON.parse(text) : {};
+  var data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (error) {
+    throw new Error('SlideEngage returned an unreadable response. Please try again.');
+  }
   if (response.getResponseCode() >= 400) throw new Error(data.error || 'SlideEngage request failed.');
   return data;
+}
+
+function normalizeFetchPermissionError_(error) {
+  var message = error && error.message ? error.message : String(error || '');
+  if (/UrlFetchApp|external_request|permission|authorization|not have permission/i.test(message)) {
+    return new Error('Please authorize SlideEngage to connect to the internet.');
+  }
+  if (/Address unavailable|DNS|timed out|failed/i.test(message)) {
+    return new Error('Network error. SlideEngage could not reach the public website.');
+  }
+  return new Error(message || 'SlideEngage request failed.');
 }
 
 function findSlideForInteraction_(interactionId) {

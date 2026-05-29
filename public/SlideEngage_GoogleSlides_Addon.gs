@@ -37,7 +37,7 @@ function buildSidebarHtml_() {
     '</style></head><body><div class="wrap">' +
     '<div class="brand"><div class="logo">🎯</div><div><div class="title">SlideEngage</div><div class="small muted">Google Slides Add-on</div></div></div>' +
     '<div id="status" class="status hidden"></div>' +
-    '<section id="login" class="card stack"><b>Lecturer login</b><input id="email" class="input" placeholder="Email"><input id="password" class="input" type="password" placeholder="Password"><button class="btn" onclick="login()">Sign in</button></section>' +
+    '<section id="login" class="card stack"><b>Lecturer login</b><div class="small muted">Use the same SlideEngage website email/Gmail and password.</div><button class="btn secondary" onclick="authorize()">Authorize connection</button><input id="email" class="input" placeholder="Email"><input id="password" class="input" type="password" placeholder="Password"><button class="btn" onclick="login()">Sign in</button></section>' +
     '<section id="app" class="hidden">' +
     '<div class="row"><b id="hello"></b><button class="btn secondary" onclick="logout()">Logout</button></div>' +
     '<div class="card stack"><b>Events</b><select id="events" class="input" onchange="selectEvent()"></select><div class="row"><input id="newEventName" class="input" placeholder="New event name"><button class="btn" onclick="createEvent()">Create</button></div><div id="eventInfo" class="small muted"></div></div>' +
@@ -56,7 +56,7 @@ function buildSidebarHtml_() {
     'function renderInteractions(){var list=$("interactions");list.innerHTML="";state.interactions.forEach(function(i){var row=document.createElement("div");row.className="item"+(state.selectedInteraction&&state.selectedInteraction.id===i.id?" active":"");row.innerHTML="<b>"+(i.title||"Untitled")+"</b><div class=\\"small muted\\">"+label(i)+" · "+(i.status||"draft")+"</div>";row.onclick=function(){openInteraction(i)};list.appendChild(row)})}' +
     'function renderEditor(){var ed=$("editor");if(!state.selectedInteraction&&!state.template){ed.classList.add("hidden");return}ed.classList.remove("hidden");$("editorTitle").textContent=state.template?state.template.label:label(state.selectedInteraction);$("interactionStatus").textContent=(state.selectedInteraction&&state.selectedInteraction.status)||"draft";$("question").value=(state.selectedInteraction&&state.selectedInteraction.title)||"";var needs=needsOptions();$("addOption").classList.toggle("hidden",!needs);var box=$("options");box.innerHTML="";state.options.forEach(function(o,idx){var input=document.createElement("input");input.className="input";input.value=o.option_text||o;input.placeholder="Option "+(idx+1);input.oninput=function(){state.options[idx]={option_text:input.value,is_correct:!!o.is_correct}};box.appendChild(input)})}' +
     'function label(i){return i.type==="poll"?"Multiple choice":i.type==="word_cloud"?"Word cloud":i.type==="quiz"?"Quiz":i.type==="qa"?"Audience Q&A":i.config&&i.config.poll_kind==="rating"?"Rating":"Open text"}function needsOptions(){var t=state.template?state.template.type:(state.selectedInteraction&&state.selectedInteraction.type);return t==="poll"||t==="quiz"}' +
-    'function login(){call("login",[$("email").value,$("password").value],function(r){state.session=r;refresh()})}function logout(){call("logout",[],function(){state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[]};render()})}' +
+    'function authorize(){call("authorizeSlideEngage",[],function(){show("SlideEngage is authorized to connect to the internet.")})}function login(){call("login",[$("email").value,$("password").value],function(r){state.session=r;refresh()})}function logout(){call("logout",[],function(){state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[]};render()})}' +
     'function refresh(){call("getInitialState",[],function(r){state.session=r.session;state.events=r.events||[];state.selectedEvent=r.selectedEvent||null;state.interactions=r.interactions||[];render()})}function selectEvent(){call("selectEvent",[$("events").value],function(r){state.selectedEvent=r.selectedEvent;state.interactions=r.interactions||[];state.selectedInteraction=null;state.template=null;render()})}' +
     'function createEvent(){call("createEvent",[$("newEventName").value],function(r){$("newEventName").value="";state.events=r.events;state.selectedEvent=r.selectedEvent;state.interactions=[];render()})}function openTemplate(t){if(!state.selectedEvent){show("Select or create an event first.",true);return}state.template=t;state.selectedInteraction=null;state.options=(t.options||[]).map(function(x,i){return{option_text:typeof x==="string"?x:x.option_text,is_correct:i===0&&t.type==="quiz"}});renderEditor()}' +
     'function openInteraction(i){state.selectedInteraction=i;state.template=null;state.options=(i.interaction_options||[]).sort(function(a,b){return(a.position||0)-(b.position||0)}).map(function(o){return{option_text:o.option_text,is_correct:!!o.is_correct}});renderEditor()}' +
@@ -88,6 +88,15 @@ function login(email, password) {
   });
   saveSession_(data);
   return data;
+}
+
+function authorizeSlideEngage() {
+  try {
+    UrlFetchApp.fetch(SLIDEENGAGE_URL, { muteHttpExceptions: true });
+    return { success: true };
+  } catch (error) {
+    throw normalizeFetchPermissionError_(error);
+  }
 }
 
 function logout() {
@@ -331,11 +340,32 @@ function apiFetch_(path, options) {
     headers: { 'Content-Type': 'application/json' },
   };
   if (options.payload) params.payload = JSON.stringify(options.payload);
-  var response = UrlFetchApp.fetch(SLIDEENGAGE_URL + path, params);
+  var response;
+  try {
+    response = UrlFetchApp.fetch(SLIDEENGAGE_URL + path, params);
+  } catch (error) {
+    throw normalizeFetchPermissionError_(error);
+  }
   var text = response.getContentText();
-  var data = text ? JSON.parse(text) : {};
+  var data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (error) {
+    throw new Error('SlideEngage returned an unreadable response. Please try again.');
+  }
   if (response.getResponseCode() >= 400) throw new Error(data.error || 'SlideEngage request failed.');
   return data;
+}
+
+function normalizeFetchPermissionError_(error) {
+  var message = error && error.message ? error.message : String(error || '');
+  if (/UrlFetchApp|external_request|permission|authorization|not have permission/i.test(message)) {
+    return new Error('Please authorize SlideEngage to connect to the internet.');
+  }
+  if (/Address unavailable|DNS|timed out|failed/i.test(message)) {
+    return new Error('Network error. SlideEngage could not reach the public website.');
+  }
+  return new Error(message || 'SlideEngage request failed.');
 }
 
 function findSlideForInteraction_(interactionId) {

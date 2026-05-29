@@ -30,7 +30,16 @@ That means lecturers use the same email/Gmail and password as the SlideEngage we
 4. Save.
 5. Reload Google Slides.
 6. Open `SlideEngage > Open SlideEngage`.
+7. Click `Authorize connection` the first time, then approve the Google permission prompt.
 
 ## Production
 
 Use Google Workspace Marketplace publishing so users can install without copying Apps Script code manually. See `MARKETPLACE.md`.
+
+## Re-authorization After Scope Changes
+
+If you add or change scopes in `appsscript.json`, redeploy the Apps Script/add-on and ask users to authorize again. Without re-authorization, login/API calls can fail with:
+
+```text
+You do not have permission to call UrlFetchApp.fetch
+```
