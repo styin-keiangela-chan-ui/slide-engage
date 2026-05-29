@@ -353,8 +353,6 @@ export function GET() {
       </section>
 
       <section id="app-view" class="hidden">
-        <button id="present-button" class="button full" type="button">Present with SlideEngage</button>
-
         <section class="card">
           <div class="row">
             <h2 class="title" style="margin:0">Events</h2>
@@ -402,14 +400,10 @@ export function GET() {
               <div id="editor-preview" class="small muted">Choose an interaction type to start.</div>
             </div>
             <div class="toolbar">
-              <button id="present-slide-button" class="button" type="button">Present in PowerPoint</button>
-              <button id="present-live-button" class="button secondary" type="button">Present Live</button>
-              <button id="reset-results-button" class="button danger" type="button">Reset results</button>
-            </div>
-            <div class="toolbar">
-              <button id="save-interaction-button" class="button secondary small" type="button">Save draft</button>
-              <button id="go-live-button" class="button secondary small" type="button">Go live</button>
-              <button id="close-live-button" class="button secondary small" type="button">Close</button>
+              <button id="save-interaction-button" class="button secondary small" type="button">Save</button>
+              <button id="live-toggle-button" class="button secondary small" type="button">Go live</button>
+              <button id="reset-results-button" class="button danger small" type="button">Reset results</button>
+              <button id="present-live-button" class="button small" type="button">Present</button>
             </div>
           </div>
         </section>
@@ -1103,11 +1097,15 @@ export function GET() {
 
         function updateEditorButtons() {
           var hasSelected = !!selectedInteraction;
-          el("present-slide-button").disabled = !hasSelected;
           el("present-live-button").disabled = !hasSelected;
-          el("go-live-button").disabled = !hasSelected;
-          el("close-live-button").disabled = !hasSelected;
+          el("live-toggle-button").disabled = !hasSelected;
           el("reset-results-button").disabled = !hasSelected;
+          if (hasSelected) {
+            el("live-toggle-button").textContent = selectedInteraction.status === "live" ? "Close" : "Go live";
+            el("live-toggle-button").className = selectedInteraction.status === "live" ? "button secondary small" : "button secondary small";
+          } else {
+            el("live-toggle-button").textContent = "Go live";
+          }
         }
 
         function renderEditorPreview() {
@@ -1134,7 +1132,7 @@ export function GET() {
 
         function setInteractionStatus(status) {
           if (!selectedInteraction) return;
-          setButtonLoading(status === "live" ? "go-live-button" : "close-live-button", true, status === "live" ? "Starting" : "Closing");
+          setButtonLoading("live-toggle-button", true, status === "live" ? "Starting" : "Closing");
           var ready = status === "live" && selectedEvent && selectedEvent.status !== "live"
             ? updateEventStatus("live")
             : Promise.resolve();
@@ -1148,12 +1146,19 @@ export function GET() {
               selectedInteraction = data.interaction;
               setStatus("app-status", status === "live" ? "Interaction is live." : "Interaction closed.", false);
               if (status !== "live" && liveSlideInteractionId === selectedInteraction.id) stopLiveSlideRefresh();
+              updateEditorButtons();
               loadInteractions();
             }).catch(function (error) {
               setStatus("app-status", error.message, true);
             }).finally(function () {
-              setButtonLoading(status === "live" ? "go-live-button" : "close-live-button", false);
+              setButtonLoading("live-toggle-button", false);
+              updateEditorButtons();
             });
+        }
+
+        function toggleLiveStatus() {
+          if (!selectedInteraction) return;
+          setInteractionStatus(selectedInteraction.status === "live" ? "closed" : "live");
         }
 
         function resetResults() {
@@ -1173,18 +1178,18 @@ export function GET() {
           });
         }
 
-        function saveAndPresent() {
-          saveEditor(false, function (interaction) {
-            presentInteraction(interaction, { startAutoRefresh: true });
-          });
-        }
-
         function presenterUrl() {
           if (!selectedEvent || !selectedEvent.event_code) return "";
-          return APP_URL + "/present/" + encodeURIComponent(selectedEvent.event_code);
+          return APP_URL + "/present/" + encodeURIComponent(selectedEvent.event_code) + "?officePresenter=1";
         }
 
         function presentLive() {
+          saveEditor(false, function () {
+            openPresenterWindow();
+          });
+        }
+
+        function openPresenterWindow() {
           if (!selectedEvent) {
             setStatus("app-status", "Select an event before presenting live.", true);
             return;
@@ -1199,7 +1204,7 @@ export function GET() {
             return;
           }
           if (selectedInteraction.status !== "live") {
-            setStatus("app-status", "Tip: click Go live so students and the presenter view see this interaction.", false);
+            setStatus("app-status", "Tip: click Go live before Present so students see this interaction.", false);
           }
           addDebug("Opening live presenter: " + url);
           try {
@@ -1218,7 +1223,7 @@ export function GET() {
           if (!selectedEvent || !interaction) return;
           presentOptions = presentOptions || {};
           if (!presentOptions.silent) {
-            setButtonLoading("present-slide-button", true, "Creating slide");
+            setButtonLoading("present-live-button", true, "Creating slide");
             setStatus("app-status", "Creating PowerPoint slide...", false);
           }
           if (!presentOptions.silent) {
@@ -1264,12 +1269,8 @@ export function GET() {
               return inserted;
             })
             .finally(function () {
-              if (!presentOptions.silent) setButtonLoading("present-slide-button", false);
+              if (!presentOptions.silent) setButtonLoading("present-live-button", false);
             });
-        }
-
-        function savePoll() {
-          saveAndPresent();
         }
 
         function openPollEditor() {
@@ -1726,24 +1727,6 @@ export function GET() {
           }
         }
 
-        function present() {
-          if (!selectedEvent) {
-            setStatus("app-status", "Select an event first.", true);
-            return;
-          }
-          setButtonLoading("present-button", true, "Starting");
-          updateEventStatus("live")
-            .then(function () {
-              return insertJoiningSlide();
-            })
-            .catch(function (error) {
-              setStatus("app-status", error.message, true);
-            })
-            .finally(function () {
-              setButtonLoading("present-button", false);
-            });
-        }
-
         function loadResults(interactionId) {
           if (selectedInteraction && selectedInteraction.type === "qa") {
             loadQaResults(interactionId);
@@ -1888,7 +1871,6 @@ export function GET() {
             showLogin();
           };
           el("create-event-button").onclick = createEvent;
-          el("present-button").onclick = present;
           el("insert-join-button").onclick = insertJoiningSlide;
           el("close-editor").onclick = function () {
             el("interaction-editor").classList.add("hidden");
@@ -1901,10 +1883,8 @@ export function GET() {
             scheduleAutosave();
           };
           el("save-interaction-button").onclick = function () { saveEditor(false); };
-          el("present-slide-button").onclick = saveAndPresent;
           el("present-live-button").onclick = presentLive;
-          el("go-live-button").onclick = function () { setInteractionStatus("live"); };
-          el("close-live-button").onclick = function () { setInteractionStatus("closed"); };
+          el("live-toggle-button").onclick = toggleLiveStatus;
           el("reset-results-button").onclick = resetResults;
         }
 
