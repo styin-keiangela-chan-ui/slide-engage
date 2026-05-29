@@ -1158,12 +1158,13 @@ export function GET() {
 
         function resetResults() {
           if (!selectedInteraction) return;
-          if (!confirm("Reset all results for this interaction?")) return;
+          if (!confirm("Reset all participant responses for this interaction? This keeps the question, options, settings, and event.")) return;
           setButtonLoading("reset-results-button", true, "Resetting");
           request("/api/responses?interaction_id=" + encodeURIComponent(selectedInteraction.id), {
             method: "DELETE"
-          }).then(function () {
-            setStatus("app-status", "Results reset.", false);
+          }).then(function (data) {
+            addDebug("Reset results: interaction_id=" + (data.interaction_id || selectedInteraction.id) + ", responses_deleted=" + (data.responses_deleted || 0) + ", timestamp=" + (data.timestamp || new Date().toISOString()));
+            setStatus("app-status", data.message || "Results cleared successfully.", false);
             loadResults(selectedInteraction.id);
           }).catch(function (error) {
             setStatus("app-status", error.message, true);

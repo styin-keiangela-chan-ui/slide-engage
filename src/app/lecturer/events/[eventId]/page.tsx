@@ -696,14 +696,19 @@ export default function EventBuilderPage() {
   }
 
   async function resetResults(item: SavedInteraction) {
-    if (!window.confirm('Reset all votes for this interaction?')) return;
+    if (!window.confirm('Reset all participant responses for this interaction? This keeps the question, options, settings, and event.')) return;
     try {
       const res = await fetch(`/api/responses?interaction_id=${item.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Unable to reset results.');
       await patchInteractionConfig(item, { vote_count: 0 });
       setOpenMenuId(null);
-      setStatus('Results reset.');
+      console.log('SlideEngage reset results', {
+        interaction_id: data.interaction_id || item.id,
+        responses_deleted: data.responses_deleted || 0,
+        timestamp: data.timestamp,
+      });
+      setStatus(data.message || 'Results cleared successfully.');
     } catch (error: any) {
       setStatus(error.message);
     }

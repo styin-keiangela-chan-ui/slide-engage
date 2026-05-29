@@ -173,6 +173,18 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
   const [quizTime, setQuizTime] = useState<number>(interaction.config?.time_limit_seconds || 30);
   const [quizResult, setQuizResult] = useState<string | null>(null);
 
+  useEffect(() => {
+    setSelectedOptionId(null);
+    setSubmitted(false);
+    setPollResults([]);
+    setWordInput('');
+    setWordSubmitted(false);
+    setRating(0);
+    setFeedbackText('');
+    setFeedbackSubmitted(false);
+    setQuizResult(null);
+  }, [interaction.id, interaction.updated_at]);
+
   const notifyRealtime = useCallback(
     async (eventName: 'response_inserted' | 'qa_changed') => {
       await new Promise<void>(resolve => {
@@ -239,7 +251,7 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
     fetchQ();
     const interval = setInterval(fetchQ, 3000);
     return () => clearInterval(interval);
-  }, [interaction.id, interaction.type, participantId]);
+  }, [interaction.id, interaction.type, interaction.updated_at, participantId]);
 
   // ─ Submit handlers ─
 

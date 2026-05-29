@@ -236,6 +236,31 @@ export default function LecturerInteractionsPage() {
     setMessage('Interaction updated successfully.');
   }
 
+  async function resetEditingResults() {
+    if (!editingInteraction) return;
+    if (!window.confirm('Reset all participant responses for this interaction? This keeps the question, options, settings, and event.')) return;
+
+    setSavingEdit(true);
+    setError('');
+    setMessage('');
+
+    const res = await fetch(`/api/responses?interaction_id=${editingInteraction.id}`, { method: 'DELETE' });
+    const data = await res.json();
+    setSavingEdit(false);
+
+    if (!res.ok) {
+      setError(data.error || 'Unable to reset results.');
+      return;
+    }
+
+    console.log('SlideEngage reset results', {
+      interaction_id: data.interaction_id || editingInteraction.id,
+      responses_deleted: data.responses_deleted || 0,
+      timestamp: data.timestamp,
+    });
+    setMessage(data.message || 'Results cleared successfully.');
+  }
+
   async function toggleInteractionLive(interaction: EditableInteraction) {
     if (!selectedEvent) {
       setError('Please select or create an event before adding interactions.');
@@ -388,6 +413,7 @@ export default function LecturerInteractionsPage() {
                         saving={savingEdit}
                         onClose={closeEditor}
                         onSave={saveEditor}
+                        onReset={resetEditingResults}
                         onTitleChange={value => setDraft(current => current ? { ...current, title: value } : current)}
                         onConfigChange={setDraftConfig}
                         onOptionChange={setDraftOption}
@@ -413,6 +439,7 @@ function InteractionEditPanel({
   saving,
   onClose,
   onSave,
+  onReset,
   onTitleChange,
   onConfigChange,
   onOptionChange,
@@ -425,6 +452,7 @@ function InteractionEditPanel({
   saving: boolean;
   onClose: () => void;
   onSave: () => void;
+  onReset: () => void;
   onTitleChange: (value: string) => void;
   onConfigChange: (key: string, value: unknown) => void;
   onOptionChange: (index: number, value: string) => void;
@@ -561,6 +589,9 @@ function InteractionEditPanel({
       <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
         <button type="button" onClick={onClose} className="rounded-[9px] border border-[#DDE8E1] bg-white px-4 py-2 text-sm font-bold text-[#1A1A2E] hover:bg-[#F4F7F4]">
           Cancel
+        </button>
+        <button type="button" onClick={onReset} disabled={saving} className="rounded-[9px] border border-[#F2D5D5] bg-white px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">
+          Reset results
         </button>
         <button type="button" onClick={onSave} disabled={saving} className="rounded-[9px] bg-[#2D8A4E] px-4 py-2 text-sm font-bold text-white hover:bg-[#1A5C32] disabled:opacity-60">
           {saving ? 'Saving...' : 'Save changes'}

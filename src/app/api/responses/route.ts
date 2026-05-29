@@ -89,11 +89,83 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'interaction_id required' }, { status: 400 });
   }
 
-  const { error } = await supabase
+  const timestamp = new Date().toISOString();
+
+  const { data: interaction, error: interactionError } = await supabase
+    .from('interactions')
+    .select('id, type, config')
+    .eq('id', interactionId)
+    .single();
+
+  if (interactionError || !interaction) {
+    return NextResponse.json({ error: 'Interaction not found' }, { status: 404 });
+  }
+
+  const { data: deletedResponses, error: responseError } = await supabase
     .from('responses')
     .delete()
+    .eq('interaction_id', interactionId)
+    .select('id');
+
+  if (responseError) return NextResponse.json({ error: responseError.message }, { status: 500 });
+
+  const { data: qaQuestions } = await supabase
+    .from('qa_questions')
+    .select('id')
     .eq('interaction_id', interactionId);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ success: true });
+  let deletedUpvotesCount = 0;
+  let deletedQuestionsCount = 0;
+
+  const questionIds = (qaQuestions || []).map(question => question.id);
+
+  if (questionIds.length > 0) {
+    const { data: deletedUpvotes, error: upvoteError } = await supabase
+      .from('qa_upvotes')
+      .delete()
+      .in('question_id', questionIds)
+      .select('id');
+
+    if (upvoteError) return NextResponse.json({ error: upvoteError.message }, { status: 500 });
+    deletedUpvotesCount = deletedUpvotes?.length || 0;
+
+    const { data: deletedQuestions, error: questionError } = await supabase
+      .from('qa_questions')
+      .delete()
+      .eq('interaction_id', interactionId)
+      .select('id');
+
+    if (questionError) return NextResponse.json({ error: questionError.message }, { status: 500 });
+    deletedQuestionsCount = deletedQuestions?.length || 0;
+  }
+
+  await supabase
+    .from('interactions')
+    .update({
+      updated_at: timestamp,
+      config: {
+        ...((interaction as any).config || {}),
+        vote_count: 0,
+      },
+    })
+    .eq('id', interactionId);
+
+  const responsesDeleted = deletedResponses?.length || 0;
+  console.log('[SlideEngage] results reset', {
+    interaction_id: interactionId,
+    responses_deleted: responsesDeleted,
+    qa_questions_deleted: deletedQuestionsCount,
+    qa_upvotes_deleted: deletedUpvotesCount,
+    timestamp,
+  });
+
+  return NextResponse.json({
+    success: true,
+    message: 'Results cleared successfully.',
+    interaction_id: interactionId,
+    responses_deleted: responsesDeleted,
+    qa_questions_deleted: deletedQuestionsCount,
+    qa_upvotes_deleted: deletedUpvotesCount,
+    timestamp,
+  });
 }

@@ -130,7 +130,7 @@
       function saveInteraction(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();show("Saved.")})}
       function goLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"live"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}
       function closeLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"closed"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}
-      function resetResults(){if(!state.selectedInteraction)return;call("resetResults",[state.selectedInteraction.id],function(){show("Results reset.")})}
+      function resetResults(){if(!state.selectedInteraction)return;if(!confirm("Reset all participant responses for this interaction?"))return;call("resetResults",[state.selectedInteraction.id],function(result){show((result&&result.message)||"Results cleared successfully.")})}
       function insertSlide(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();call("insertInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Slide inserted.")})})}
       function updateSnapshot(){if(!state.selectedInteraction)return;call("updateInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Slide snapshot updated.")})}
       boot();
