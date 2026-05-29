@@ -63,6 +63,13 @@ export interface InteractionConfig {
   ai_auto_answer_enabled?: boolean;
   include_star_ratings?: boolean;
   include_open_text?: boolean;
+  max_scale?: number;
+  rating_mode?: 'star' | 'emoji' | 'number' | string;
+  upvotes_enabled?: boolean;
+  voting_enabled?: boolean;
+  category_tags?: boolean;
+  points?: number;
+  leaderboard?: boolean;
 }
 
 export interface Interaction {
