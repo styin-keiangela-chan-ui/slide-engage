@@ -402,11 +402,14 @@ export function GET() {
               <div id="editor-preview" class="small muted">Choose an interaction type to start.</div>
             </div>
             <div class="toolbar">
-              <button id="save-interaction-button" class="button" type="button">Save draft</button>
-              <button id="present-slide-button" class="button secondary" type="button">Present in PowerPoint</button>
-              <button id="go-live-button" class="button secondary" type="button">Go live</button>
-              <button id="close-live-button" class="button secondary" type="button">Close</button>
+              <button id="present-slide-button" class="button" type="button">Present in PowerPoint</button>
+              <button id="present-live-button" class="button secondary" type="button">Present Live</button>
               <button id="reset-results-button" class="button danger" type="button">Reset results</button>
+            </div>
+            <div class="toolbar">
+              <button id="save-interaction-button" class="button secondary small" type="button">Save draft</button>
+              <button id="go-live-button" class="button secondary small" type="button">Go live</button>
+              <button id="close-live-button" class="button secondary small" type="button">Close</button>
             </div>
           </div>
         </section>
@@ -1101,6 +1104,7 @@ export function GET() {
         function updateEditorButtons() {
           var hasSelected = !!selectedInteraction;
           el("present-slide-button").disabled = !hasSelected;
+          el("present-live-button").disabled = !hasSelected;
           el("go-live-button").disabled = !hasSelected;
           el("close-live-button").disabled = !hasSelected;
           el("reset-results-button").disabled = !hasSelected;
@@ -1172,6 +1176,41 @@ export function GET() {
           saveEditor(false, function (interaction) {
             presentInteraction(interaction, { startAutoRefresh: true });
           });
+        }
+
+        function presenterUrl() {
+          if (!selectedEvent || !selectedEvent.event_code) return "";
+          return APP_URL + "/present/" + encodeURIComponent(selectedEvent.event_code);
+        }
+
+        function presentLive() {
+          if (!selectedEvent) {
+            setStatus("app-status", "Select an event before presenting live.", true);
+            return;
+          }
+          if (!selectedInteraction) {
+            setStatus("app-status", "Select or create an interaction before presenting live.", true);
+            return;
+          }
+          var url = presenterUrl();
+          if (!url) {
+            setStatus("app-status", "Presenter URL is unavailable.", true);
+            return;
+          }
+          if (selectedInteraction.status !== "live") {
+            setStatus("app-status", "Tip: click Go live so students and the presenter view see this interaction.", false);
+          }
+          addDebug("Opening live presenter: " + url);
+          try {
+            if (window.Office && Office.context && Office.context.ui && Office.context.ui.openBrowserWindow) {
+              Office.context.ui.openBrowserWindow(url);
+            } else {
+              window.open(url, "_blank", "noopener,noreferrer");
+            }
+            setStatus("app-status", "Live presenter opened.", false);
+          } catch (error) {
+            setStatus("app-status", "Unable to open live presenter: " + (error && error.message ? error.message : "unknown error"), true);
+          }
         }
 
         function presentInteraction(interaction, presentOptions) {
@@ -1862,6 +1901,7 @@ export function GET() {
           };
           el("save-interaction-button").onclick = function () { saveEditor(false); };
           el("present-slide-button").onclick = saveAndPresent;
+          el("present-live-button").onclick = presentLive;
           el("go-live-button").onclick = function () { setInteractionStatus("live"); };
           el("close-live-button").onclick = function () { setInteractionStatus("closed"); };
           el("reset-results-button").onclick = resetResults;
