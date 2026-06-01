@@ -1,19 +1,28 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
 import { useAuth } from '@/hooks/useAuth';
 import type { Event } from '@/lib/types';
 
-type TabKey = 'all' | 'active' | 'past' | 'archived';
+type TabKey = 'all' | 'active' | 'past';
+type OwnerFilter = 'all' | 'mine' | 'organization';
+type DialogMode = 'create' | 'transfer' | 'duplicate' | 'delete' | null;
+
+type EventRow = Event & {
+  lecturers?: {
+    id: string;
+    email: string;
+    name: string;
+  } | null;
+};
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: 'all', label: 'All' },
-  { key: 'active', label: 'Active now' },
+  { key: 'active', label: 'Active & upcoming' },
   { key: 'past', label: 'Past' },
-  { key: 'archived', label: 'Archive bin' },
 ];
 
 function todayIso() {
@@ -26,7 +35,20 @@ function addDaysIso(days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function formatDateRange(event: Event) {
+function eventCode() {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
+function formatDate(date: string | null | undefined) {
+  if (!date) return 'No date';
+  return new Date(`${date.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function formatDateRange(event: EventRow) {
   const start = event.start_date || event.created_at?.slice(0, 10);
   const end = event.end_date || event.start_date || event.created_at?.slice(0, 10);
   if (!start) return 'No date set';
@@ -52,31 +74,62 @@ function formatDateRange(event: Event) {
   return `${startText} – ${endText}`;
 }
 
-function isPastEvent(event: Event) {
-  return event.status === 'closed' || event.status === 'draft';
+function relativeTime(value: string | null | undefined) {
+  if (!value) return 'Not updated yet';
+  const diff = Date.now() - new Date(value).getTime();
+  const minutes = Math.max(1, Math.round(diff / 60000));
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
-function isArchivedEvent(event: Event) {
-  return event.status === 'archived';
+function ownerName(event: EventRow, fallback: string) {
+  return event.lecturers?.name || event.lecturers?.email || fallback;
 }
 
-function eventCode() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
+function ownerEmail(event: EventRow, fallback: string) {
+  return event.lecturers?.email || fallback;
+}
+
+function isActiveOrUpcoming(event: EventRow) {
+  if (event.status === 'archived') return false;
+  if (event.status === 'live') return true;
+
+  const today = todayIso();
+  const end = event.end_date || event.start_date;
+  return Boolean(end && end >= today);
+}
+
+function isPastEvent(event: EventRow) {
+  return event.status !== 'archived' && !isActiveOrUpcoming(event);
+}
+
+function statusLabel(event: EventRow) {
+  if (event.status === 'live') return 'Active';
+  if (event.status === 'archived') return 'Archived';
+  if (isActiveOrUpcoming(event)) return 'Upcoming';
+  return 'Past';
 }
 
 export default function LecturerEventsPage() {
   const router = useRouter();
   const { lecturer, currentEvent, loading: authLoading, selectEvent, clearSelectedEvent } = useAuth();
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<EventRow[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [modalOpen, setModalOpen] = useState(false);
+  const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all');
+  const [dialog, setDialog] = useState<DialogMode>(null);
+  const [selectedEvent, setSelectedEvent] = useState<EventRow | null>(null);
   const [eventName, setEventName] = useState('');
   const [startDate, setStartDate] = useState(todayIso());
   const [endDate, setEndDate] = useState(addDaysIso(2));
+  const [duplicateCode, setDuplicateCode] = useState(eventCode());
+  const [transferEmail, setTransferEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     if (!authLoading && !lecturer) router.push('/lecturer/login');
@@ -92,6 +145,38 @@ export default function LecturerEventsPage() {
     const res = await fetch(`/api/events?lecturer_id=${lecturer.id}`, { cache: 'no-store' });
     const data = await res.json();
     setEvents(data.events || []);
+  }
+
+  function openCreateDialog() {
+    setError('');
+    setMessage('');
+    setDialog('create');
+    setEventName('');
+    setStartDate(todayIso());
+    setEndDate(addDaysIso(2));
+  }
+
+  function openDuplicateDialog(event: EventRow) {
+    setSelectedEvent(event);
+    setEventName(`${event.event_name} copy`);
+    setStartDate(event.start_date || todayIso());
+    setEndDate(event.end_date || event.start_date || addDaysIso(2));
+    setDuplicateCode(eventCode());
+    setError('');
+    setDialog('duplicate');
+  }
+
+  function openTransferDialog(event: EventRow) {
+    setSelectedEvent(event);
+    setTransferEmail('');
+    setError('');
+    setDialog('transfer');
+  }
+
+  function openDeleteDialog(event: EventRow) {
+    setSelectedEvent(event);
+    setError('');
+    setDialog('delete');
   }
 
   async function createEvent() {
@@ -127,117 +212,113 @@ export default function LecturerEventsPage() {
 
     setEvents(prev => [data.event, ...prev]);
     selectEvent(data.event);
-    setModalOpen(false);
-    setEventName('');
-    setStartDate(todayIso());
-    setEndDate(addDaysIso(2));
+    setDialog(null);
     router.push(`/lecturer/events/${data.event.id}`);
   }
 
-  async function renameEvent(event: Event) {
-    const nextName = window.prompt('Rename event', event.event_name)?.trim();
-    if (!nextName || nextName === event.event_name) return;
+  async function duplicateEvent() {
+    if (!lecturer || !selectedEvent || !eventName.trim()) return;
+    if (endDate < startDate) {
+      setError('End date must be after the start date.');
+      return;
+    }
 
+    setSaving(true);
+    setError('');
     const res = await fetch('/api/events', {
-      method: 'PATCH',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: event.id, event_name: nextName }),
+      body: JSON.stringify({
+        action: 'duplicate',
+        lecturer_id: lecturer.id,
+        source_event_id: selectedEvent.id,
+        event_name: eventName.trim(),
+        event_code: duplicateCode,
+        start_date: startDate,
+        end_date: endDate,
+      }),
     });
     const data = await res.json();
+    setSaving(false);
+
     if (!res.ok) {
-      setError(data.error || 'Unable to rename event.');
+      setError(data.error || 'Unable to duplicate event.');
       return;
     }
-    setEvents(prev => prev.map(item => item.id === event.id ? data.event : item));
-    selectEvent(data.event);
+
+    setEvents(prev => [data.event, ...prev]);
+    setDialog(null);
+    setSelectedEvent(data.event);
+    setMessage('Event duplicated without responses.');
   }
 
-  async function archiveEvent(event: Event) {
-    if (!window.confirm(`Archive "${event.event_name}"? It will stay in the database but disappear from active events.`)) return;
+  async function transferEvent() {
+    if (!selectedEvent || !transferEmail.trim()) return;
 
-    const res = await fetch(`/api/events?id=${event.id}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || 'Unable to archive event.');
-      return;
-    }
-    const archived = { ...event, status: 'archived' as const };
-    setEvents(prev => prev.map(item => item.id === event.id ? archived : item));
-    if (currentEvent?.id === event.id) clearSelectedEvent();
-  }
-
-  async function restoreEvent(event: Event) {
-    const res = await fetch('/api/events', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: event.id, status: 'closed' }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || 'Unable to restore event.');
-      return;
-    }
-    setEvents(prev => prev.map(item => item.id === event.id ? data.event : item));
-  }
-
-  async function activateEvent(event: Event) {
+    setSaving(true);
     setError('');
     const res = await fetch('/api/events', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: event.id, status: 'live' }),
+      body: JSON.stringify({ id: selectedEvent.id, transfer_email: transferEmail.trim() }),
     });
     const data = await res.json();
+    setSaving(false);
+
     if (!res.ok) {
-      setError(data.error || 'Unable to activate event.');
+      setError(data.error || 'Unable to transfer event.');
       return;
     }
-    setEvents(prev => prev.map(item => item.id === event.id ? data.event : item));
-    selectEvent(data.event);
+
+    setEvents(prev => prev.filter(item => item.id !== selectedEvent.id));
+    if (currentEvent?.id === selectedEvent.id) clearSelectedEvent();
+    setSelectedEvent(null);
+    setDialog(null);
+    setMessage('Event transferred.');
   }
 
-  async function closeEvent(event: Event) {
+  async function permanentlyDeleteEvent() {
+    if (!selectedEvent) return;
+
+    setSaving(true);
     setError('');
-    const res = await fetch('/api/events', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: event.id, status: 'closed' }),
-    });
+    const res = await fetch(`/api/events?id=${selectedEvent.id}&permanent=true`, { method: 'DELETE' });
     const data = await res.json();
+    setSaving(false);
+
     if (!res.ok) {
-      setError(data.error || 'Unable to close event.');
+      setError(data.error || 'Unable to delete event.');
       return;
     }
-    setEvents(prev => prev.map(item => item.id === event.id ? data.event : item));
-    selectEvent(data.event);
+
+    setEvents(prev => prev.filter(item => item.id !== selectedEvent.id));
+    if (currentEvent?.id === selectedEvent.id) clearSelectedEvent();
+    setDialog(null);
+    setSelectedEvent(null);
+    setMessage('Event deleted.');
   }
 
   const counts = useMemo(() => {
-    const activeEvents = events.filter(event => !isArchivedEvent(event));
-    const past = activeEvents.filter(isPastEvent).length;
-    const active = activeEvents.filter(event => event.status === 'live').length;
-    const archived = events.filter(isArchivedEvent).length;
+    const rows = events.filter(event => event.status !== 'archived');
     return {
-      all: activeEvents.length,
-      active,
-      past,
-      archived,
+      all: rows.length,
+      active: rows.filter(isActiveOrUpcoming).length,
+      past: rows.filter(isPastEvent).length,
     };
   }, [events]);
 
   const visibleEvents = useMemo(() => {
     return events.filter(event => {
-      const archived = isArchivedEvent(event);
-      const past = isPastEvent(event);
-      const matchesTab = activeTab === 'archived'
-        ? archived
-        : !archived && (activeTab === 'all' || (activeTab === 'past' ? past : event.status === 'live'));
-      const search = `${event.event_name} ${event.event_code} ${lecturer?.name || ''}`.toLowerCase();
+      if (event.status === 'archived') return false;
+      const matchesTab = activeTab === 'all'
+        || (activeTab === 'active' ? isActiveOrUpcoming(event) : isPastEvent(event));
+      const search = `${event.event_name} ${event.event_code} ${ownerName(event, lecturer?.name || '')} ${ownerEmail(event, lecturer?.email || '')}`.toLowerCase();
       const matchesSearch = search.includes(query.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || event.status === statusFilter;
-      return matchesTab && matchesSearch && matchesStatus;
+      const matchesOwner = ownerFilter === 'all'
+        || (ownerFilter === 'mine' ? event.lecturer_id === lecturer?.id : event.lecturer_id !== lecturer?.id);
+      return matchesTab && matchesSearch && matchesOwner;
     });
-  }, [activeTab, events, lecturer?.name, query, statusFilter]);
+  }, [activeTab, events, lecturer?.email, lecturer?.id, lecturer?.name, ownerFilter, query]);
 
   if (authLoading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
   if (!lecturer) return null;
@@ -247,222 +328,503 @@ export default function LecturerEventsPage() {
       <Navbar />
       <div className="flex h-[calc(100vh-64px)] overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto bg-[#F4F7F4]">
-          <div className="bg-white border-b border-[#E2EBE6] px-7 py-3.5 flex items-center justify-between">
-            <h1 className="text-lg font-bold">My event</h1>
-            <button
-              onClick={() => {
-                setError('');
-                setModalOpen(true);
-              }}
-              className="px-4 py-1.5 rounded-[7px] text-xs font-semibold bg-[#2D8A4E] text-white hover:bg-[#1A5C32] transition"
-            >
-              + Create event
-            </button>
-          </div>
-
+        <main className="flex-1 overflow-y-auto bg-[#F7FAF8]">
           <div className="p-7">
             {error && (
-              <div className="mb-5 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+              <div className="mb-5 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
                 {error}
               </div>
             )}
-
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <div className="flex flex-wrap gap-1 rounded-[10px] bg-[#F4F7F4] p-1">
-              {tabs.map(tab => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`flex items-center gap-1.5 rounded-[7px] px-4 py-1.5 text-[13px] font-semibold transition ${
-                    activeTab === tab.key
-                      ? 'bg-white text-[#1A1A2E] shadow-sm'
-                      : 'text-[#6B7B8D] hover:text-[#1A1A2E]'
-                  }`}
-                >
-                  {tab.label}
-                  <span className={`rounded px-1.5 py-0.5 text-[11px] ${activeTab === tab.key ? 'bg-[#2D8A4E] text-white' : 'bg-white text-[#6B7B8D]'}`}>
-                    {counts[tab.key]}
-                  </span>
-                </button>
-              ))}
+            {message && (
+              <div className="mb-5 rounded-[12px] border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-[#168A3A]">
+                {message}
               </div>
+            )}
+
+            <div className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
+              <div className="flex flex-wrap gap-4">
+                {tabs.map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`flex items-center gap-2 rounded-[12px] px-5 py-3 text-sm font-extrabold transition ${
+                      activeTab === tab.key
+                        ? 'border border-[#168A3A] bg-[#EAF7EF] text-[#168A3A]'
+                        : 'bg-transparent text-[#1A1A2E] hover:bg-white'
+                    }`}
+                  >
+                    {tab.label}
+                    <span className={`rounded-md px-2 py-0.5 text-xs ${activeTab === tab.key ? 'bg-[#168A3A] text-white' : 'bg-white text-[#6B7B8D]'}`}>
+                      {counts[tab.key]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={openCreateDialog}
+                className="h-12 rounded-[12px] bg-[#168A3A] px-6 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#0F6F2D]"
+              >
+                + Create event
+              </button>
             </div>
 
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex h-10 w-full max-w-[420px] items-center rounded-[9px] border border-[#E2EBE6] bg-white px-3.5">
-              <input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Search by name, owner, code"
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#6B7B8D]"
-              />
-              <span className="text-base text-[#6B7B8D]">⌕</span>
-            </div>
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="h-10 w-[190px] rounded-[9px] border border-[#E2EBE6] bg-white px-3.5 text-sm text-[#6B7B8D] outline-none"
-            >
-              <option value="all">All events</option>
-              <option value="live">Live</option>
-              <option value="closed">Closed</option>
-              <option value="archived">Archived</option>
-            </select>
-          </div>
+            <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+              <div className="flex h-12 w-full max-w-[520px] items-center rounded-[12px] border border-[#DDE8E1] bg-white px-4">
+                <input
+                  value={query}
+                  onChange={event => setQuery(event.target.value)}
+                  placeholder="Search by name, owner, code"
+                  className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[#1A1A2E] outline-none placeholder:text-[#6B7B8D]"
+                />
+                <span className="text-xl text-[#6B7B8D]">⌕</span>
+              </div>
 
-          <section className="overflow-hidden rounded-[14px] border border-[#E2EBE6] bg-white">
-            <div className="grid grid-cols-[44px_1fr_150px_220px] items-center border-b border-[#E2EBE6] bg-white px-5 py-4 text-xs font-bold text-[#1A1A2E]">
-              <input type="checkbox" className="h-4 w-4 rounded border-[#DADADA]" readOnly />
-              <div>Event details</div>
-              <div>Status</div>
-              <div className="text-right">More actions</div>
+              <select
+                value={ownerFilter}
+                onChange={event => setOwnerFilter(event.target.value as OwnerFilter)}
+                className="h-12 w-full rounded-[12px] border border-[#DDE8E1] bg-white px-4 text-sm font-semibold text-[#6B7B8D] outline-none md:w-[240px]"
+              >
+                <option value="all">All events</option>
+                <option value="mine">Created by me</option>
+                <option value="organization">Organization events</option>
+              </select>
             </div>
 
-            {visibleEvents.length === 0 ? (
-              <div className="px-7 py-10 text-center">
-                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[#EAF7EF] text-xl text-[#2D8A4E]">▥</div>
-                <h2 className="mb-1.5 text-base font-bold">{activeTab === 'archived' ? 'Archive bin is empty' : 'No events here yet'}</h2>
-                <p className="mb-6 text-sm text-[#6B7B8D]">
-                  {activeTab === 'archived'
-                    ? 'Archived events will appear here. You can restore them later.'
-                    : 'Create your first event to collect polls, Q&A, and live responses.'}
-                </p>
-                {activeTab !== 'archived' && (
-                  <button onClick={() => setModalOpen(true)} className="rounded-[9px] bg-[#2D8A4E] px-5 py-2 text-sm font-semibold text-white">
+            <section className="overflow-hidden rounded-[18px] border border-[#DDE8E1] bg-white shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
+              <div className="grid grid-cols-[44px_minmax(240px,1fr)_170px_150px] items-center border-b border-[#E2EBE6] px-6 py-4 text-sm font-extrabold text-[#1A1A2E]">
+                <input type="checkbox" className="h-4 w-4 rounded border-[#DADADA]" readOnly />
+                <div>Event details</div>
+                <div>Status</div>
+                <div className="text-right">More actions</div>
+              </div>
+
+              {visibleEvents.length === 0 ? (
+                <div className="px-7 py-14 text-center">
+                  <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-[#EAF7EF] text-2xl">📅</div>
+                  <h2 className="mb-1.5 text-base font-extrabold text-[#1A1A2E]">No events here yet</h2>
+                  <p className="mb-6 text-sm font-semibold text-[#6B7B8D]">Create an event to collect polls, Q&A, and live responses.</p>
+                  <button onClick={openCreateDialog} className="rounded-[10px] bg-[#168A3A] px-5 py-2.5 text-sm font-bold text-white">
                     Create event
                   </button>
-                )}
-              </div>
-            ) : (
-              visibleEvents.map(event => (
-                <div
-                  key={event.id}
-                  className="grid w-full grid-cols-[44px_1fr_150px_220px] items-center border-b border-[#E2EBE6] px-5 py-4 text-left transition last:border-b-0 hover:bg-[#FAFCFA]"
-                >
-                  <input type="checkbox" className="h-4 w-4 rounded border-[#DADADA]" readOnly onClick={e => e.stopPropagation()} />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      selectEvent(event);
-                      router.push(`/lecturer/events/${event.id}`);
-                    }}
-                    className="min-w-0 text-left"
-                  >
-                    <div className="text-sm font-semibold text-[#1A1A2E]">
-                      {event.event_name} <span className="ml-2 font-medium text-[#777]">(#{event.event_code})</span>
-                    </div>
-                    <div className="mt-0.5 text-xs text-[#6B7B8D]">{formatDateRange(event)}</div>
-                  </button>
-                  <div className="flex items-center gap-2 text-xs font-semibold text-[#6B7B8D]">
-                    <span className={`h-2 w-2 rounded-full ${event.status === 'live' ? 'bg-[#2D8A4E]' : event.status === 'archived' ? 'bg-[#9CA3AF]' : 'bg-[#9CA3AF]'}`} />
-                    <span className="capitalize">{event.status === 'live' ? 'Active now' : event.status === 'archived' ? 'archived' : 'past'}</span>
-                  </div>
-                  <div className="flex items-center justify-end gap-2 text-xs">
-                    <button onClick={() => renameEvent(event)} className="rounded border border-[#E2EBE6] px-2 py-1 font-semibold text-[#6B7B8D] hover:border-[#2D8A4E] hover:text-[#2D8A4E]">
-                      Rename
-                    </button>
-                    {event.status === 'archived' ? (
-                      <button onClick={() => restoreEvent(event)} className="rounded border border-[#E2EBE6] px-2 py-1 font-semibold text-[#2D8A4E] hover:border-[#2D8A4E]">
-                        Restore
-                      </button>
-                    ) : (
-                      <>
-                        {event.status === 'live' ? (
-                          <button onClick={() => closeEvent(event)} className="rounded border border-[#E2EBE6] px-2 py-1 font-semibold text-[#6B7B8D] hover:border-[#2D8A4E] hover:text-[#2D8A4E]">
-                            Close
-                          </button>
-                        ) : (
-                          <button onClick={() => activateEvent(event)} className="rounded border border-[#E2EBE6] px-2 py-1 font-semibold text-[#2D8A4E] hover:border-[#2D8A4E]">
-                            Make active
-                          </button>
-                        )}
-                        <button onClick={() => archiveEvent(event)} className="rounded border border-[#E2EBE6] px-2 py-1 font-semibold text-[#A33A3A] hover:border-[#A33A3A]">
-                          Archive
-                        </button>
-                      </>
-                    )}
-                  </div>
                 </div>
-              ))
-            )}
-          </section>
+              ) : (
+                visibleEvents.map(event => (
+                  <div
+                    key={event.id}
+                    className="grid grid-cols-[44px_minmax(240px,1fr)_170px_150px] items-center border-b border-[#E2EBE6] px-6 py-5 last:border-b-0 hover:bg-[#FAFCFA]"
+                  >
+                    <input type="checkbox" className="h-4 w-4 rounded border-[#DADADA]" readOnly />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        selectEvent(event);
+                        router.push(`/lecturer/events/${event.id}`);
+                      }}
+                      className="min-w-0 text-left"
+                    >
+                      <div className="truncate text-base font-extrabold text-[#1A1A2E]">
+                        {event.event_name} <span className="ml-2 font-semibold text-[#777]">(#{event.event_code})</span>
+                      </div>
+                      <div className="mt-1 text-sm font-semibold text-[#6B7B8D]">{formatDateRange(event)}</div>
+                    </button>
+                    <div className="text-sm font-bold text-[#6B7B8D]">
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2.5 w-2.5 rounded-full ${event.status === 'live' ? 'bg-[#168A3A]' : 'bg-[#A8B1BA]'}`} />
+                        <span>{statusLabel(event)}</span>
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-[#9AA6B2]">{relativeTime(event.updated_at || event.created_at)}</div>
+                    </div>
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => openDuplicateDialog(event)}
+                        title="Duplicate"
+                        className="grid h-9 w-9 place-items-center rounded-[9px] border border-[#DDE8E1] text-lg text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]"
+                      >
+                        ⧉
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEvent(event)}
+                        title="More actions"
+                        className="grid h-9 w-9 place-items-center rounded-[9px] text-xl font-bold text-[#1A1A2E] hover:bg-[#EAF7EF]"
+                      >
+                        ...
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </section>
 
-          <div className="mt-5 flex items-center justify-between text-sm text-[#6B7B8D]">
-            <div>Page 1</div>
-            <div className="flex items-center gap-5 text-[#C7C7C7]">
-              <span>‹ Previous</span>
-              <span>Next ›</span>
+            <div className="mt-5 flex items-center justify-between text-sm font-semibold text-[#6B7B8D]">
+              <div>Page 1</div>
+              <div className="flex items-center gap-5 text-[#C7C7C7]">
+                <span>‹ Previous</span>
+                <span>Next ›</span>
+              </div>
             </div>
-          </div>
           </div>
         </main>
       </div>
 
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-5">
-          <div className="w-full max-w-[640px] rounded-[14px] bg-white p-6 shadow-2xl">
-            <h2 className="mb-5 text-xl font-bold text-[#1A1A2E]">Create your event</h2>
-            <label className="mb-2 block text-sm font-semibold text-[#1A1A2E]">Give your event a name</label>
-            <input
-              value={eventName}
-              onChange={e => setEventName(e.target.value)}
-              placeholder="Event name"
-              className="mb-5 h-11 w-full rounded-[9px] border border-[#E2EBE6] px-3.5 text-sm outline-none placeholder:text-[#858585] focus:border-[#2D8A4E]"
-              autoFocus
-            />
+      {selectedEvent && !dialog && (
+        <DetailsDrawer
+          event={selectedEvent}
+          owner={ownerName(selectedEvent, lecturer.name)}
+          onClose={() => setSelectedEvent(null)}
+          onViewResults={() => {
+            selectEvent(selectedEvent);
+            router.push(`/lecturer/analytics?event_id=${selectedEvent.id}`);
+          }}
+          onDuplicate={() => openDuplicateDialog(selectedEvent)}
+          onTransfer={() => openTransferDialog(selectedEvent)}
+          onDelete={() => openDeleteDialog(selectedEvent)}
+        />
+      )}
 
-            <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <label>
-                <span className="mb-2 block text-sm font-semibold text-[#1A1A2E]">Start date</span>
-                <div className="relative">
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={e => {
-                      setStartDate(e.target.value);
-                      if (endDate < e.target.value) setEndDate(e.target.value);
-                    }}
-                    className="h-11 w-full rounded-[9px] border border-[#E2EBE6] px-3.5 text-sm outline-none focus:border-[#2D8A4E]"
-                  />
-                </div>
-              </label>
-              <label>
-                <span className="mb-2 block text-sm font-semibold text-[#1A1A2E]">End date</span>
-                <div className="relative">
-                  <input
-                    type="date"
-                    value={endDate}
-                    min={startDate}
-                    onChange={e => setEndDate(e.target.value)}
-                    className="h-11 w-full rounded-[9px] border border-[#E2EBE6] px-3.5 text-sm outline-none focus:border-[#2D8A4E]"
-                  />
-                </div>
-              </label>
-            </div>
+      {dialog === 'create' && (
+        <EventFormModal
+          title="Create your event"
+          actionLabel="Create event"
+          saving={saving}
+          eventName={eventName}
+          startDate={startDate}
+          endDate={endDate}
+          onNameChange={setEventName}
+          onStartChange={value => {
+            setStartDate(value);
+            if (endDate < value) setEndDate(value);
+          }}
+          onEndChange={setEndDate}
+          onCancel={() => setDialog(null)}
+          onSubmit={createEvent}
+          error={error}
+        />
+      )}
 
-            {error && <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-600">{error}</div>}
+      {dialog === 'duplicate' && selectedEvent && (
+        <DuplicateModal
+          saving={saving}
+          eventName={eventName}
+          startDate={startDate}
+          endDate={endDate}
+          eventCode={duplicateCode}
+          onNameChange={setEventName}
+          onStartChange={value => {
+            setStartDate(value);
+            if (endDate < value) setEndDate(value);
+          }}
+          onEndChange={setEndDate}
+          onCodeChange={setDuplicateCode}
+          onCancel={() => setDialog(null)}
+          onSubmit={duplicateEvent}
+          error={error}
+        />
+      )}
 
-            <div className="flex flex-col items-stretch justify-between gap-4 md:flex-row md:items-center">
-              <div className="rounded-[9px] border border-[#1A6BB5] bg-[#EAF5FF] px-3.5 py-2.5 text-sm text-[#1F1F1F]">
-                ⓘ Anyone with the code or link can participate
-              </div>
-              <div className="flex items-center justify-end gap-3">
-                <button onClick={() => setModalOpen(false)} className="rounded-[9px] px-4 py-2 text-sm font-semibold text-[#6B7B8D] hover:bg-[#F3F4F6]">
-                  Cancel
-                </button>
-                <button
-                  onClick={createEvent}
-                  disabled={saving}
-                  className="rounded-[9px] bg-[#2D8A4E] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1A5C32] disabled:opacity-60"
-                >
-                  {saving ? 'Creating...' : 'Create event'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {dialog === 'transfer' && selectedEvent && (
+        <TransferModal
+          saving={saving}
+          value={transferEmail}
+          onChange={setTransferEmail}
+          onCancel={() => setDialog(null)}
+          onSubmit={transferEvent}
+          error={error}
+        />
+      )}
+
+      {dialog === 'delete' && selectedEvent && (
+        <DeleteModal
+          saving={saving}
+          eventName={selectedEvent.event_name}
+          onCancel={() => setDialog(null)}
+          onSubmit={permanentlyDeleteEvent}
+          error={error}
+        />
       )}
     </>
+  );
+}
+
+function ModalShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-5">
+      <div className="w-full max-w-[720px] rounded-[18px] bg-white p-7 shadow-2xl">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function EventFormModal({
+  title,
+  actionLabel,
+  saving,
+  eventName,
+  startDate,
+  endDate,
+  onNameChange,
+  onStartChange,
+  onEndChange,
+  onCancel,
+  onSubmit,
+  error,
+}: {
+  title: string;
+  actionLabel: string;
+  saving: boolean;
+  eventName: string;
+  startDate: string;
+  endDate: string;
+  onNameChange: (value: string) => void;
+  onStartChange: (value: string) => void;
+  onEndChange: (value: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+  error?: string;
+}) {
+  return (
+    <ModalShell>
+      <h2 className="mb-6 text-2xl font-extrabold text-[#1A1A2E]">{title}</h2>
+      {error && (
+        <div className="mb-5 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+          {error}
+        </div>
+      )}
+      <label className="mb-2 block text-sm font-bold text-[#1A1A2E]">Give your event a name</label>
+      <input
+        value={eventName}
+        onChange={event => onNameChange(event.target.value)}
+        placeholder="Event name"
+        className="mb-5 h-12 w-full rounded-[12px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none placeholder:text-[#858585] focus:border-[#168A3A]"
+        autoFocus
+      />
+
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <DateField label="Start date" value={startDate} onChange={onStartChange} />
+        <DateField label="End date" value={endDate} min={startDate} onChange={onEndChange} />
+      </div>
+
+      <div className="flex flex-col items-stretch justify-between gap-4 md:flex-row md:items-center">
+        <div className="rounded-[10px] border border-[#1A6BB5] bg-[#EAF5FF] px-4 py-3 text-sm font-semibold text-[#1F1F1F]">
+          ⓘ Anyone with the code or link can participate
+        </div>
+        <div className="flex items-center justify-end gap-3">
+          <button onClick={onCancel} className="rounded-[10px] px-5 py-2.5 text-sm font-bold text-[#6B7B8D] hover:bg-[#F3F4F6]">
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={saving}
+            className="rounded-[10px] bg-[#168A3A] px-5 py-2.5 text-sm font-extrabold text-white transition hover:bg-[#0F6F2D] disabled:opacity-60"
+          >
+            {saving ? 'Saving...' : actionLabel}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+function DateField({ label, value, min, onChange }: { label: string; value: string; min?: string; onChange: (value: string) => void }) {
+  return (
+    <label>
+      <span className="mb-2 block text-sm font-bold text-[#1A1A2E]">{label}</span>
+      <input
+        type="date"
+        value={value}
+        min={min}
+        onChange={event => onChange(event.target.value)}
+        className="h-12 w-full rounded-[12px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]"
+      />
+    </label>
+  );
+}
+
+function DuplicateModal({
+  saving,
+  eventName,
+  startDate,
+  endDate,
+  eventCode,
+  onNameChange,
+  onStartChange,
+  onEndChange,
+  onCodeChange,
+  onCancel,
+  onSubmit,
+  error,
+}: {
+  saving: boolean;
+  eventName: string;
+  startDate: string;
+  endDate: string;
+  eventCode: string;
+  onNameChange: (value: string) => void;
+  onStartChange: (value: string) => void;
+  onEndChange: (value: string) => void;
+  onCodeChange: (value: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+  error?: string;
+}) {
+  return (
+    <ModalShell>
+      <h2 className="mb-6 text-2xl font-extrabold text-[#1A1A2E]">Duplicate your event</h2>
+      {error && (
+        <div className="mb-5 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+          {error}
+        </div>
+      )}
+      <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <DateField label="Start date" value={startDate} onChange={onStartChange} />
+        <DateField label="End date" value={endDate} min={startDate} onChange={onEndChange} />
+      </div>
+      <label className="mb-4 block">
+        <span className="mb-2 block text-sm font-bold text-[#1A1A2E]">Give your event a name</span>
+        <input value={eventName} onChange={event => onNameChange(event.target.value)} className="h-12 w-full rounded-[12px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]" />
+      </label>
+      <label className="mb-6 block">
+        <span className="mb-2 block text-sm font-bold text-[#1A1A2E]">Event code</span>
+        <input value={eventCode} onChange={event => onCodeChange(event.target.value.toUpperCase().replace('#', ''))} className="h-12 w-full rounded-[12px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]" />
+      </label>
+      <div className="flex justify-end gap-3">
+        <button onClick={onCancel} className="rounded-[10px] px-5 py-2.5 text-sm font-bold text-[#6B7B8D] hover:bg-[#F3F4F6]">Cancel</button>
+        <button onClick={onSubmit} disabled={saving || !eventName.trim() || !eventCode.trim()} className="rounded-[10px] bg-[#168A3A] px-5 py-2.5 text-sm font-extrabold text-white hover:bg-[#0F6F2D] disabled:opacity-60">
+          {saving ? 'Duplicating...' : 'Duplicate'}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function TransferModal({ saving, value, onChange, onCancel, onSubmit, error }: { saving: boolean; value: string; onChange: (value: string) => void; onCancel: () => void; onSubmit: () => void; error?: string }) {
+  const valid = /.+@.+\..+/.test(value.trim());
+  return (
+    <ModalShell>
+      <h2 className="mb-3 text-2xl font-extrabold text-[#1A1A2E]">Transfer event</h2>
+      <p className="mb-6 text-sm font-semibold text-[#6B7B8D]">Transfer your event to a new owner within your organization.</p>
+      {error && (
+        <div className="mb-5 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+          {error}
+        </div>
+      )}
+      <input
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        placeholder="Search by name or email"
+        className="mb-6 h-12 w-full rounded-[12px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]"
+        autoFocus
+      />
+      <div className="flex justify-end gap-3">
+        <button onClick={onCancel} className="rounded-[10px] px-5 py-2.5 text-sm font-bold text-[#6B7B8D] hover:bg-[#F3F4F6]">Cancel</button>
+        <button onClick={onSubmit} disabled={saving || !valid} className="rounded-[10px] bg-[#168A3A] px-5 py-2.5 text-sm font-extrabold text-white hover:bg-[#0F6F2D] disabled:opacity-60">
+          {saving ? 'Transferring...' : 'Transfer'}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function DeleteModal({ saving, eventName, onCancel, onSubmit, error }: { saving: boolean; eventName: string; onCancel: () => void; onSubmit: () => void; error?: string }) {
+  return (
+    <ModalShell>
+      <h2 className="mb-3 text-2xl font-extrabold text-[#1A1A2E]">Delete event?</h2>
+      <p className="mb-6 text-sm font-semibold text-[#6B7B8D]">
+        This will permanently delete <span className="font-extrabold text-[#1A1A2E]">{eventName}</span> and its interactions. This action cannot be undone.
+      </p>
+      {error && (
+        <div className="mb-5 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+          {error}
+        </div>
+      )}
+      <div className="flex justify-end gap-3">
+        <button onClick={onCancel} className="rounded-[10px] px-5 py-2.5 text-sm font-bold text-[#6B7B8D] hover:bg-[#F3F4F6]">Cancel</button>
+        <button onClick={onSubmit} disabled={saving} className="rounded-[10px] bg-red-600 px-5 py-2.5 text-sm font-extrabold text-white hover:bg-red-700 disabled:opacity-60">
+          {saving ? 'Deleting...' : 'Delete'}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function DetailsDrawer({
+  event,
+  owner,
+  onClose,
+  onViewResults,
+  onDuplicate,
+  onTransfer,
+  onDelete,
+}: {
+  event: EventRow;
+  owner: string;
+  onClose: () => void;
+  onViewResults: () => void;
+  onDuplicate: () => void;
+  onTransfer: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose}>
+      <aside
+        className="absolute right-0 top-0 h-full w-full max-w-[420px] overflow-y-auto bg-white p-6 shadow-2xl"
+        onClick={event => event.stopPropagation()}
+      >
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-extrabold text-[#1A1A2E]">{event.event_name}</h2>
+            <p className="mt-1 text-sm font-semibold text-[#6B7B8D]">{formatDateRange(event)}</p>
+          </div>
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full text-2xl text-[#6B7B8D] hover:bg-[#F3F4F6]">×</button>
+        </div>
+
+        <div className="space-y-3 rounded-[16px] border border-[#DDE8E1] bg-[#FAFCFA] p-4 text-sm font-semibold">
+          <InfoRow label="Made by" value={owner} />
+          <InfoRow label="Event code" value={`#${event.event_code}`} />
+          <InfoRow label="Status" value={statusLabel(event)} />
+          <InfoRow label="Last updated" value={relativeTime(event.updated_at || event.created_at)} />
+          <InfoRow label="Start date" value={formatDate(event.start_date)} />
+          <InfoRow label="End date" value={formatDate(event.end_date)} />
+        </div>
+
+        <div className="mt-6 space-y-3">
+          <ActionCard title="View results" description="See poll results, engagement and analysis of your event." icon="📜" onClick={onViewResults} />
+          <ActionCard title="Duplicate" description="Create a fresh event using interactions and settings from this event." icon="⧉" onClick={onDuplicate} />
+        </div>
+
+        <div className="mt-8 flex gap-3 border-t border-[#E2EBE6] pt-5">
+          <button onClick={onTransfer} className="flex-1 rounded-[10px] border border-[#DDE8E1] px-4 py-3 text-sm font-extrabold text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]">
+            Transfer
+          </button>
+          <button onClick={onDelete} className="flex-1 rounded-[10px] border border-red-200 px-4 py-3 text-sm font-extrabold text-red-600 hover:bg-red-50">
+            Delete
+          </button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <span className="text-[#6B7B8D]">{label}</span>
+      <span className="text-right text-[#1A1A2E]">{value}</span>
+    </div>
+  );
+}
+
+function ActionCard({ title, description, icon, onClick }: { title: string; description: string; icon: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex w-full gap-4 rounded-[16px] border border-[#DDE8E1] bg-white p-4 text-left transition hover:border-[#168A3A] hover:bg-[#F8FCF9]">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#EAF7EF] text-xl">{icon}</span>
+      <span>
+        <span className="block text-base font-extrabold text-[#1A1A2E]">{title}</span>
+        <span className="mt-1 block text-sm font-semibold text-[#6B7B8D]">{description}</span>
+      </span>
+    </button>
   );
 }
