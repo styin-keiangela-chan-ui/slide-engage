@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
+import DashboardShell from '@/components/ui/DashboardShell';
 import LiveResultsView from '@/components/live-results/LiveResultsView';
 
 export default function LiveResultsPage() {
@@ -28,7 +29,8 @@ export default function LiveResultsPage() {
       <Navbar />
       <div className="flex h-[calc(100vh-64px)]">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto">
+          <DashboardShell>
           <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h1 className="text-[28px] font-bold text-[#17172F]">Live Results</h1>
@@ -46,6 +48,7 @@ export default function LiveResultsPage() {
           </div>
 
           <LiveResultsView event={currentEvent} />
+          </DashboardShell>
         </main>
       </div>
     </div>

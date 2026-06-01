@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
 import SETooltip from '@/components/ui/SETooltip';
+import DashboardShell from '@/components/ui/DashboardShell';
 import { useAuth } from '@/hooks/useAuth';
 import type { Event } from '@/lib/types';
 
@@ -188,7 +189,8 @@ export default function LecturerAnalyticsPage() {
       <div className="flex h-[calc(100vh-64px)] overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto bg-[#F4F7F4]">
-          <div className="border-b border-[#E2EBE6] bg-white px-7 py-5">
+          <div className="border-b border-[#E2EBE6] bg-white">
+            <DashboardShell className="py-5">
             <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
               <div>
                 <h1 className="text-2xl font-extrabold text-[#1A1A2E]">Analytics</h1>
@@ -278,9 +280,10 @@ export default function LecturerAnalyticsPage() {
                 />
               </div>
             )}
+            </DashboardShell>
           </div>
 
-          <div className="space-y-6 p-7">
+          <DashboardShell className="space-y-6">
             {error && <div className="rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{error}</div>}
             {notice && <div className="rounded-[12px] border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-[#168A3A]">{notice}</div>}
 
@@ -350,7 +353,7 @@ export default function LecturerAnalyticsPage() {
                 </div>
               )}
             </section>
-          </div>
+          </DashboardShell>
         </main>
       </div>
     </>

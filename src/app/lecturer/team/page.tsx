@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
+import DashboardShell from '@/components/ui/DashboardShell';
 import { useAuth } from '@/hooks/useAuth';
 
 type Collaborator = {
@@ -81,16 +82,18 @@ export default function LecturerTeamPage() {
       <div className="flex h-[calc(100vh-64px)] overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto bg-[#F4F7F4]">
-          <div className="border-b border-[#E2EBE6] bg-white px-7 py-3.5">
+          <div className="border-b border-[#E2EBE6] bg-white">
+            <DashboardShell className="py-4">
             <h1 className="text-lg font-bold">Team</h1>
             <p className="text-xs text-[#6B7B8D]">
               {currentEvent ? `Manage guests for ${currentEvent.event_name} · #${currentEvent.event_code}` : 'Select an event to invite collaborators'}
             </p>
+            </DashboardShell>
           </div>
 
-          <div className="p-7">
+          <DashboardShell>
             {!currentEvent ? (
-              <div className="rounded-[14px] border border-[#E2EBE6] bg-white p-8 text-center">
+              <div className="rounded-[18px] border border-[#E2EBE6] bg-white p-8 text-center">
                 <h2 className="mb-2 text-xl font-extrabold">No event selected</h2>
                 <p className="mb-5 text-sm text-[#6B7B8D]">Guests can only be invited to one selected event at a time.</p>
                 <button onClick={() => router.push('/lecturer/events')} className="rounded-[9px] bg-[#2D8A4E] px-5 py-2 text-sm font-semibold text-white">
@@ -99,7 +102,7 @@ export default function LecturerTeamPage() {
               </div>
             ) : (
               <div className="grid gap-5 xl:grid-cols-[1fr_1.2fr]">
-                <section className="rounded-[14px] border border-[#E2EBE6] bg-white p-6">
+                <section className="rounded-[18px] border border-[#E2EBE6] bg-white p-6">
                   <h2 className="mb-4 text-base font-bold">Invite guest</h2>
                   <p className="mb-4 text-sm text-[#6B7B8D]">The invited Gmail must already have a SlideEngage account.</p>
                   <input
@@ -122,7 +125,7 @@ export default function LecturerTeamPage() {
                   {message && <p className="mt-4 text-sm font-semibold text-[#6B7B8D]">{message}</p>}
                 </section>
 
-                <section className="rounded-[14px] border border-[#E2EBE6] bg-white">
+                <section className="rounded-[18px] border border-[#E2EBE6] bg-white">
                   <div className="border-b border-[#E2EBE6] px-5 py-4 text-base font-bold">Event collaborators</div>
                   {collaborators.length === 0 ? (
                     <div className="px-5 py-8 text-sm text-[#6B7B8D]">No guests invited yet.</div>
@@ -142,7 +145,7 @@ export default function LecturerTeamPage() {
                 </section>
               </div>
             )}
-          </div>
+          </DashboardShell>
         </main>
       </div>
     </>

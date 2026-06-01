@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
 import SETooltip from '@/components/ui/SETooltip';
+import DashboardShell from '@/components/ui/DashboardShell';
 import { useAuth } from '@/hooks/useAuth';
 import type { Event, Interaction, InteractionOption } from '@/lib/types';
 
@@ -308,8 +309,9 @@ export default function LecturerInteractionsPage() {
       <Navbar />
       <div className="flex h-[calc(100vh-64px)] overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto bg-[#F4F7F4] p-7">
-          <div className="mb-5 flex flex-col justify-between gap-4 rounded-[14px] border border-[#E2EBE6] bg-white p-5 md:flex-row md:items-center">
+        <main className="flex-1 overflow-y-auto bg-[#F4F7F4]">
+          <DashboardShell>
+          <div className="mb-5 flex flex-col justify-between gap-4 rounded-[18px] border border-[#E2EBE6] bg-white p-5 md:flex-row md:items-center">
             <div>
               <h1 className="text-xl font-extrabold text-[#1A1A2E]">Interactions</h1>
               <p className="mt-1 text-sm text-[#6B7B8D]">
@@ -336,7 +338,7 @@ export default function LecturerInteractionsPage() {
             </div>
           )}
 
-          <section className="mb-5 rounded-[14px] border border-[#E2EBE6] bg-white p-5">
+          <section className="mb-5 rounded-[18px] border border-[#E2EBE6] bg-white p-5">
             <label className="mb-2 block text-sm font-bold text-[#1A1A2E]">Selected event</label>
             <select
               value={selectedEventId}
@@ -363,7 +365,7 @@ export default function LecturerInteractionsPage() {
             )}
           </section>
 
-          <section className="rounded-[14px] border border-[#E2EBE6] bg-white">
+          <section className="rounded-[18px] border border-[#E2EBE6] bg-white">
             <div className="border-b border-[#E2EBE6] px-5 py-4 text-sm font-bold text-[#1A1A2E]">
               Interactions for selected event
             </div>
@@ -441,6 +443,7 @@ export default function LecturerInteractionsPage() {
               </div>
             )}
           </section>
+          </DashboardShell>
         </main>
       </div>
     </>

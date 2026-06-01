@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
+import DashboardShell from '@/components/ui/DashboardShell';
 import { useAuth } from '@/hooks/useAuth';
 import { isLocalUrl, normalizePublicUrl } from '@/lib/public-url';
 import type { Event } from '@/lib/types';
@@ -125,7 +126,8 @@ export default function ShareAccessPage() {
       <Navbar />
       <div className="flex h-[calc(100vh-64px)] overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto bg-[#F4F7F4] p-7">
+        <main className="flex-1 overflow-y-auto bg-[#F4F7F4]">
+          <DashboardShell>
           <div className="mb-5 rounded-[18px] border border-[#DDE8E1] bg-white p-6 shadow-sm">
             <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
               <div>
@@ -251,6 +253,7 @@ export default function ShareAccessPage() {
               )}
             </aside>
           </div>
+          </DashboardShell>
         </main>
       </div>
     </>

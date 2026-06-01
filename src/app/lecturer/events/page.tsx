@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
 import SETooltip from '@/components/ui/SETooltip';
+import DashboardShell from '@/components/ui/DashboardShell';
 import { useAuth } from '@/hooks/useAuth';
 import type { Event } from '@/lib/types';
 
 type TabKey = 'all' | 'active' | 'past';
 type OwnerFilter = 'all' | 'mine' | 'organization';
 type DialogMode = 'create' | 'transfer' | 'duplicate' | 'delete' | null;
+type PopupPosition = { top: number; left: number } | null;
 
 type EventRow = Event & {
   lecturers?: {
@@ -123,6 +125,7 @@ export default function LecturerEventsPage() {
   const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all');
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [selectedEvent, setSelectedEvent] = useState<EventRow | null>(null);
+  const [popupPosition, setPopupPosition] = useState<PopupPosition>(null);
   const [eventName, setEventName] = useState('');
   const [startDate, setStartDate] = useState(todayIso());
   const [endDate, setEndDate] = useState(addDaysIso(2));
@@ -141,6 +144,31 @@ export default function LecturerEventsPage() {
     fetchEvents();
   }, [lecturer]);
 
+  useEffect(() => {
+    if (!selectedEvent || dialog || !popupPosition) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-event-action-popup]')) return;
+      setSelectedEvent(null);
+      setPopupPosition(null);
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setSelectedEvent(null);
+        setPopupPosition(null);
+      }
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [dialog, popupPosition, selectedEvent]);
+
   async function fetchEvents() {
     if (!lecturer) return;
     const res = await fetch(`/api/events?lecturer_id=${lecturer.id}`, { cache: 'no-store' });
@@ -151,6 +179,8 @@ export default function LecturerEventsPage() {
   function openCreateDialog() {
     setError('');
     setMessage('');
+    setSelectedEvent(null);
+    setPopupPosition(null);
     setDialog('create');
     setEventName('');
     setStartDate(todayIso());
@@ -159,6 +189,7 @@ export default function LecturerEventsPage() {
 
   function openDuplicateDialog(event: EventRow) {
     setSelectedEvent(event);
+    setPopupPosition(null);
     setEventName(`${event.event_name} copy`);
     setStartDate(event.start_date || todayIso());
     setEndDate(event.end_date || event.start_date || addDaysIso(2));
@@ -169,6 +200,7 @@ export default function LecturerEventsPage() {
 
   function openTransferDialog(event: EventRow) {
     setSelectedEvent(event);
+    setPopupPosition(null);
     setTransferEmail('');
     setError('');
     setDialog('transfer');
@@ -176,8 +208,24 @@ export default function LecturerEventsPage() {
 
   function openDeleteDialog(event: EventRow) {
     setSelectedEvent(event);
+    setPopupPosition(null);
     setError('');
     setDialog('delete');
+  }
+
+  function openActionPopup(event: EventRow, anchor: HTMLButtonElement) {
+    const rect = anchor.getBoundingClientRect();
+    const width = 380;
+    const viewportPadding = 18;
+    const left = Math.max(
+      viewportPadding,
+      Math.min(rect.right - width, window.innerWidth - width - viewportPadding)
+    );
+    const top = Math.min(rect.bottom + 10, Math.max(viewportPadding, window.innerHeight - 520));
+    setSelectedEvent(event);
+    setPopupPosition({ top, left });
+    setDialog(null);
+    setError('');
   }
 
   async function createEvent() {
@@ -250,6 +298,7 @@ export default function LecturerEventsPage() {
     setEvents(prev => [data.event, ...prev]);
     setDialog(null);
     setSelectedEvent(data.event);
+    setPopupPosition(null);
     setMessage('Event duplicated without responses.');
   }
 
@@ -274,6 +323,7 @@ export default function LecturerEventsPage() {
     setEvents(prev => prev.filter(item => item.id !== selectedEvent.id));
     if (currentEvent?.id === selectedEvent.id) clearSelectedEvent();
     setSelectedEvent(null);
+    setPopupPosition(null);
     setDialog(null);
     setMessage('Event transferred.');
   }
@@ -296,6 +346,7 @@ export default function LecturerEventsPage() {
     if (currentEvent?.id === selectedEvent.id) clearSelectedEvent();
     setDialog(null);
     setSelectedEvent(null);
+    setPopupPosition(null);
     setMessage('Event deleted.');
   }
 
@@ -330,7 +381,7 @@ export default function LecturerEventsPage() {
       <div className="flex h-[calc(100vh-64px)] overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto bg-[#F7FAF8]">
-          <div className="p-7">
+          <DashboardShell>
             {error && (
               <div className="mb-5 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
                 {error}
@@ -461,7 +512,7 @@ export default function LecturerEventsPage() {
                       <SETooltip text="More actions">
                         <button
                           type="button"
-                          onClick={() => setSelectedEvent(event)}
+                          onClick={clickEvent => openActionPopup(event, clickEvent.currentTarget)}
                           aria-label="More actions"
                           className="grid h-9 w-9 place-items-center rounded-[9px] text-xl font-bold text-[#1A1A2E] hover:bg-[#EAF7EF]"
                         >
@@ -481,15 +532,19 @@ export default function LecturerEventsPage() {
                 <span>Next ›</span>
               </div>
             </div>
-          </div>
+          </DashboardShell>
         </main>
       </div>
 
-      {selectedEvent && !dialog && (
-        <DetailsDrawer
+      {selectedEvent && popupPosition && !dialog && (
+        <EventActionPopup
           event={selectedEvent}
           owner={ownerName(selectedEvent, lecturer.name)}
-          onClose={() => setSelectedEvent(null)}
+          position={popupPosition}
+          onClose={() => {
+            setSelectedEvent(null);
+            setPopupPosition(null);
+          }}
           onViewResults={() => {
             selectEvent(selectedEvent);
             router.push(`/lecturer/analytics?event_id=${selectedEvent.id}`);
@@ -766,9 +821,10 @@ function DeleteModal({ saving, eventName, onCancel, onSubmit, error }: { saving:
   );
 }
 
-function DetailsDrawer({
+function EventActionPopup({
   event,
   owner,
+  position,
   onClose,
   onViewResults,
   onDuplicate,
@@ -777,6 +833,7 @@ function DetailsDrawer({
 }: {
   event: EventRow;
   owner: string;
+  position: { top: number; left: number };
   onClose: () => void;
   onViewResults: () => void;
   onDuplicate: () => void;
@@ -784,33 +841,55 @@ function DetailsDrawer({
   onDelete: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose}>
-      <aside
-        className="absolute right-0 top-0 h-full w-full max-w-[420px] overflow-y-auto bg-white p-6 shadow-2xl"
-        onClick={event => event.stopPropagation()}
-      >
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-extrabold text-[#1A1A2E]">{event.event_name}</h2>
-            <p className="mt-1 text-sm font-semibold text-[#6B7B8D]">{formatDateRange(event)}</p>
+    <aside
+      data-event-action-popup
+      className="fixed z-50 w-[min(380px,calc(100vw-32px))] overflow-hidden rounded-[18px] border border-[#E4EAE6] bg-white shadow-[0_22px_60px_rgba(15,23,42,0.18)]"
+      style={{ top: position.top, left: position.left }}
+    >
+      <div className="flex items-start justify-between gap-3 border-b border-[#EEF2EF] p-5">
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-black text-[#1A1A2E]">{event.event_name}</h2>
+          <p className="mt-1 text-sm font-semibold text-[#6B7B8D]">{formatDateRange(event)}</p>
+        </div>
+        <SETooltip text="Close actions">
+          <button onClick={onClose} aria-label="Close actions" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xl text-[#6B7B8D] hover:bg-[#F3F4F6]">×</button>
+        </SETooltip>
+      </div>
+
+      <div className="space-y-4 p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-lg font-black text-[#1A1A2E]">{event.event_name}</div>
+            <div className="mt-3 space-y-2 text-sm font-semibold text-[#4B5563]">
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true">📅</span>
+                <span>{formatDateRange(event)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true">♙</span>
+                <span className="truncate">{owner}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true">#</span>
+                <span>{event.event_code}</span>
+              </div>
+            </div>
           </div>
-          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full text-2xl text-[#6B7B8D] hover:bg-[#F3F4F6]">×</button>
+          <span className="shrink-0 rounded-[10px] bg-[#F3F4F6] px-3 py-2 text-sm font-bold text-[#4B5563]">
+            {relativeTime(event.updated_at || event.created_at)}
+          </span>
         </div>
 
-        <div className="space-y-3 rounded-[16px] border border-[#DDE8E1] bg-[#FAFCFA] p-4 text-sm font-semibold">
-          <InfoRow label="Made by" value={owner} />
-          <InfoRow label="Event code" value={`#${event.event_code}`} />
-          <InfoRow label="Status" value={statusLabel(event)} />
-          <InfoRow label="Last updated" value={relativeTime(event.updated_at || event.created_at)} />
-          <InfoRow label="Start date" value={formatDate(event.start_date)} />
-          <InfoRow label="End date" value={formatDate(event.end_date)} />
+        <div className="inline-flex rounded-full bg-[#EAF7EF] px-3 py-1 text-xs font-extrabold text-[#168A3A]">
+          {statusLabel(event)}
         </div>
 
-        <div className="mt-6 space-y-3">
+        <div className="space-y-3">
           <ActionCard
             title="View results"
             description="See poll results, engagement and analysis of your event."
-            icon="📜"
+            icon="↗"
+            iconClassName="bg-[#EAF4FF] text-[#1F6399]"
             tooltip="View analytics, engagement and results"
             onClick={onViewResults}
           />
@@ -818,25 +897,26 @@ function DetailsDrawer({
             title="Duplicate"
             description="Create a fresh event using interactions and settings from this event."
             icon="⧉"
+            iconClassName="bg-[#EAF7EF] text-[#168A3A]"
             tooltip="Create a copy of this event"
             onClick={onDuplicate}
           />
         </div>
 
-        <div className="mt-8 flex gap-3 border-t border-[#E2EBE6] pt-5">
+        <div className="grid grid-cols-2 overflow-hidden rounded-[12px] bg-[#F4F4F4]">
           <SETooltip text="Transfer ownership to another member" className="flex-1">
-            <button onClick={onTransfer} aria-label="Transfer ownership to another member" className="w-full rounded-[10px] border border-[#DDE8E1] px-4 py-3 text-sm font-extrabold text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]">
-              Transfer
+            <button onClick={onTransfer} aria-label="Transfer ownership to another member" className="w-full px-4 py-3 text-sm font-extrabold text-[#5B6470] hover:bg-[#EAF7EF] hover:text-[#168A3A]">
+              ↔ Transfer
             </button>
           </SETooltip>
           <SETooltip text="Permanently delete this event" className="flex-1">
-            <button onClick={onDelete} aria-label="Permanently delete this event" className="w-full rounded-[10px] border border-red-200 px-4 py-3 text-sm font-extrabold text-red-600 hover:bg-red-50">
-              Delete
+            <button onClick={onDelete} aria-label="Permanently delete this event" className="w-full border-l border-white px-4 py-3 text-sm font-extrabold text-red-600 hover:bg-red-50">
+              🗑 Delete
             </button>
           </SETooltip>
         </div>
-      </aside>
-    </div>
+      </div>
+    </aside>
   );
 }
 
@@ -849,12 +929,26 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ActionCard({ title, description, icon, tooltip, onClick }: { title: string; description: string; icon: string; tooltip: string; onClick: () => void }) {
+function ActionCard({
+  title,
+  description,
+  icon,
+  iconClassName = 'bg-[#EAF7EF] text-[#168A3A]',
+  tooltip,
+  onClick,
+}: {
+  title: string;
+  description: string;
+  icon: string;
+  iconClassName?: string;
+  tooltip: string;
+  onClick: () => void;
+}) {
   return (
     <SETooltip text={tooltip} className="w-full">
-      <button aria-label={tooltip} onClick={onClick} className="flex w-full gap-4 rounded-[16px] border border-[#DDE8E1] bg-white p-4 text-left transition hover:border-[#168A3A] hover:bg-[#F8FCF9]">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#EAF7EF] text-xl">{icon}</span>
-        <span>
+      <button aria-label={tooltip} onClick={onClick} className="flex w-full overflow-hidden rounded-[14px] border border-[#DDE8E1] bg-white text-left transition hover:border-[#168A3A] hover:shadow-sm">
+        <span className={`grid w-[92px] shrink-0 place-items-center text-3xl ${iconClassName}`}>{icon}</span>
+        <span className="px-4 py-4">
           <span className="block text-base font-extrabold text-[#1A1A2E]">{title}</span>
           <span className="mt-1 block text-sm font-semibold text-[#6B7B8D]">{description}</span>
         </span>
