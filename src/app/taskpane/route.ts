@@ -320,6 +320,53 @@ export function GET() {
         font-weight: 800;
         line-height: 1.45;
       }
+      [data-tooltip] {
+        position: relative;
+      }
+      [data-tooltip]::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% + 8px);
+        z-index: 9999;
+        max-width: 220px;
+        width: max-content;
+        transform: translateX(-50%) scale(0.96);
+        border-radius: 8px;
+        background: #1f2933;
+        color: white;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
+        padding: 6px 9px;
+        font-size: 11px;
+        font-weight: 900;
+        line-height: 1.25;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 180ms ease, transform 180ms ease;
+        white-space: normal;
+      }
+      [data-tooltip]::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% + 2px);
+        z-index: 9999;
+        transform: translateX(-50%) scale(0.96);
+        border: 4px solid transparent;
+        border-top-color: #1f2933;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 180ms ease, transform 180ms ease;
+      }
+      [data-tooltip]:hover::after,
+      [data-tooltip]:focus::after,
+      [data-tooltip]:focus-within::after,
+      [data-tooltip]:hover::before,
+      [data-tooltip]:focus::before,
+      [data-tooltip]:focus-within::before {
+        transform: translateX(-50%) scale(1);
+        opacity: 1;
+      }
     </style>
   </head>
   <body>
@@ -360,7 +407,7 @@ export function GET() {
           </div>
           <div class="row" style="margin-top:12px">
             <input id="event-name" class="input" placeholder="New event name" />
-            <button id="create-event-button" class="button" type="button">Create</button>
+          <button id="create-event-button" class="button" type="button" aria-label="Create a new event" data-tooltip="Create a new event">Create</button>
           </div>
           <div id="event-list" class="event-list" style="margin-top:12px"></div>
         </section>
@@ -374,7 +421,7 @@ export function GET() {
             <span id="selected-event-status" class="small muted"></span>
           </div>
           <img id="event-qr" class="qr" alt="Event QR code" />
-          <button id="insert-join-button" class="button secondary full" type="button">Insert joining instructions</button>
+          <button id="insert-join-button" class="button secondary full" type="button" aria-label="Insert QR code and event joining information into PowerPoint" data-tooltip="Insert QR code and event joining information into PowerPoint">Insert joining instructions</button>
         </section>
 
         <section id="interaction-card" class="card hidden">
@@ -400,10 +447,10 @@ export function GET() {
               <div id="editor-preview" class="small muted">Choose an interaction type to start.</div>
             </div>
             <div class="toolbar">
-              <button id="save-interaction-button" class="button secondary small" type="button">Save</button>
-              <button id="live-toggle-button" class="button secondary small" type="button">Go live</button>
-              <button id="reset-results-button" class="button danger small" type="button">Reset results</button>
-              <button id="present-live-button" class="button small" type="button">Present</button>
+              <button id="save-interaction-button" class="button secondary small" type="button" aria-label="Save changes without going live" data-tooltip="Save changes without going live">Save</button>
+              <button id="live-toggle-button" class="button secondary small" type="button" aria-label="Start accepting responses" data-tooltip="Start accepting responses">Go live</button>
+              <button id="reset-results-button" class="button danger small" type="button" aria-label="Clear all participant responses" data-tooltip="Clear all participant responses">Reset results</button>
+              <button id="present-live-button" class="button small" type="button" aria-label="Open fullscreen live presentation" data-tooltip="Open fullscreen live presentation">Present</button>
             </div>
           </div>
         </section>
@@ -741,6 +788,8 @@ export function GET() {
             var button = document.createElement("button");
             button.type = "button";
             button.className = "template";
+            button.setAttribute("aria-label", tooltipForTemplate(template.label));
+            button.setAttribute("data-tooltip", tooltipForTemplate(template.label));
             button.innerHTML = '<span class="template-icon"></span><span></span>';
             button.querySelector(".template-icon").textContent = template.icon;
             button.querySelector("span:last-child").textContent = template.label;
@@ -749,6 +798,22 @@ export function GET() {
             };
             list.appendChild(button);
           });
+        }
+
+        function tooltipForTemplate(label) {
+          if (label === "Multiple choice") return "Create a poll with answer options";
+          if (label === "Open text") return "Collect text responses from participants";
+          if (label === "Word cloud") return "Create a live word cloud";
+          if (label === "Rating") return "Collect rating feedback";
+          if (label === "Quiz") return "Create a scored quiz";
+          if (label === "Audience Q&A") return "Allow audience questions";
+          return "Create interaction";
+        }
+
+        function tooltipForStatus(status) {
+          if (status === "live") return "This interaction is currently accepting responses";
+          if (status === "closed") return "This interaction is closed";
+          return "This interaction is not live yet";
         }
 
         function loadInteractions() {
@@ -790,7 +855,11 @@ export function GET() {
               if (statusEl) {
                 statusEl.className = "status-pill pill " + (interaction.status || "draft");
                 statusEl.textContent = interaction.status || "draft";
+                statusEl.setAttribute("aria-label", tooltipForStatus(interaction.status || "draft"));
+                statusEl.setAttribute("data-tooltip", tooltipForStatus(interaction.status || "draft"));
               }
+              item.setAttribute("aria-label", "Edit question and settings");
+              item.setAttribute("data-tooltip", "Edit question and settings");
               item.onclick = function () {
                 try {
                   openInteractionEditor(interaction, templateForInteraction(interaction));
@@ -1103,8 +1172,12 @@ export function GET() {
           if (hasSelected) {
             el("live-toggle-button").textContent = selectedInteraction.status === "live" ? "Close" : "Go live";
             el("live-toggle-button").className = selectedInteraction.status === "live" ? "button secondary small" : "button secondary small";
+            el("live-toggle-button").setAttribute("aria-label", selectedInteraction.status === "live" ? "Stop accepting responses" : "Start accepting responses");
+            el("live-toggle-button").setAttribute("data-tooltip", selectedInteraction.status === "live" ? "Stop accepting responses" : "Start accepting responses");
           } else {
             el("live-toggle-button").textContent = "Go live";
+            el("live-toggle-button").setAttribute("aria-label", "Start accepting responses");
+            el("live-toggle-button").setAttribute("data-tooltip", "Start accepting responses");
           }
         }
 

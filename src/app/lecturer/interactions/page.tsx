@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
+import SETooltip from '@/components/ui/SETooltip';
 import { useAuth } from '@/hooks/useAuth';
 import type { Event, Interaction, InteractionOption } from '@/lib/types';
 
@@ -22,6 +23,12 @@ function statusLabel(status: string) {
   if (status === 'live') return 'Live';
   if (status === 'closed') return 'Closed';
   return 'Draft';
+}
+
+function statusTooltip(status: string) {
+  if (status === 'live') return 'This interaction is currently accepting responses';
+  if (status === 'closed') return 'This interaction is closed';
+  return 'This interaction is not live yet';
 }
 
 function typeLabel(interaction: EditableInteraction) {
@@ -388,22 +395,29 @@ export default function LecturerInteractionsPage() {
                         <button
                           type="button"
                           onClick={() => openEditor(interaction)}
+                          aria-label="Edit question and settings"
                           className="inline-flex items-center gap-1.5 rounded-full border border-[#DDE8E1] bg-white px-3 py-1 text-xs font-bold text-[#1A1A2E] transition hover:border-[#168A3A] hover:text-[#168A3A]"
                         >
-                          <span aria-hidden="true">✏</span>
-                          Edit
+                          <SETooltip text="Edit question and settings">
+                            <span className="inline-flex items-center gap-1.5">
+                              <span aria-hidden="true">✏</span>
+                              Edit
+                            </span>
+                          </SETooltip>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => toggleInteractionLive(interaction)}
-                          title={interaction.status === 'live' ? 'Set to closed' : 'Set to live'}
-                          className={`rounded-full px-2.5 py-1 text-xs font-bold transition hover:shadow-sm ${
-                          interaction.status === 'live'
-                            ? 'bg-[#EAF7EF] text-[#168A3A] hover:bg-[#D8F0E0]'
-                            : 'bg-[#F3F4F6] text-[#6B7B8D] hover:bg-[#EAF7EF] hover:text-[#168A3A]'
-                        }`}>
-                          {statusLabel(interaction.status)}
-                        </button>
+                        <SETooltip text={statusTooltip(interaction.status)}>
+                          <button
+                            type="button"
+                            onClick={() => toggleInteractionLive(interaction)}
+                            aria-label={statusTooltip(interaction.status)}
+                            className={`rounded-full px-2.5 py-1 text-xs font-bold transition hover:shadow-sm ${
+                            interaction.status === 'live'
+                              ? 'bg-[#EAF7EF] text-[#168A3A] hover:bg-[#D8F0E0]'
+                              : 'bg-[#F3F4F6] text-[#6B7B8D] hover:bg-[#EAF7EF] hover:text-[#168A3A]'
+                          }`}>
+                            {statusLabel(interaction.status)}
+                          </button>
+                        </SETooltip>
                       </div>
                     </div>
                     {editingInteraction?.id === interaction.id && draft && (
@@ -472,9 +486,11 @@ function InteractionEditPanel({
           <h3 className="text-sm font-extrabold text-[#1A1A2E]">Edit {typeLabel(interaction)}</h3>
           <p className="mt-1 text-xs text-[#6B7B8D]">Live interactions stay editable. Save updates so participants see the latest wording.</p>
         </div>
-        <span className="w-fit rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#6B7B8D] ring-1 ring-[#DDE8E1]">
-          {statusLabel(interaction.status)}
-        </span>
+        <SETooltip text={statusTooltip(interaction.status)}>
+          <span aria-label={statusTooltip(interaction.status)} className="w-fit rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#6B7B8D] ring-1 ring-[#DDE8E1]">
+            {statusLabel(interaction.status)}
+          </span>
+        </SETooltip>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -590,12 +606,16 @@ function InteractionEditPanel({
         <button type="button" onClick={onClose} className="rounded-[9px] border border-[#DDE8E1] bg-white px-4 py-2 text-sm font-bold text-[#1A1A2E] hover:bg-[#F4F7F4]">
           Cancel
         </button>
-        <button type="button" onClick={onReset} disabled={saving} className="rounded-[9px] border border-[#F2D5D5] bg-white px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">
-          Reset results
-        </button>
-        <button type="button" onClick={onSave} disabled={saving} className="rounded-[9px] bg-[#2D8A4E] px-4 py-2 text-sm font-bold text-white hover:bg-[#1A5C32] disabled:opacity-60">
-          {saving ? 'Saving...' : 'Save changes'}
-        </button>
+        <SETooltip text="Clear all participant responses">
+          <button type="button" aria-label="Clear all participant responses" onClick={onReset} disabled={saving} className="rounded-[9px] border border-[#F2D5D5] bg-white px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">
+            Reset results
+          </button>
+        </SETooltip>
+        <SETooltip text="Save changes without going live">
+          <button type="button" aria-label="Save changes without going live" onClick={onSave} disabled={saving} className="rounded-[9px] bg-[#2D8A4E] px-4 py-2 text-sm font-bold text-white hover:bg-[#1A5C32] disabled:opacity-60">
+            {saving ? 'Saving...' : 'Save changes'}
+          </button>
+        </SETooltip>
       </div>
     </div>
   );

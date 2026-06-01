@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
+import SETooltip from '@/components/ui/SETooltip';
 import { useAuth } from '@/hooks/useAuth';
 import type { Event } from '@/lib/types';
 
@@ -363,37 +364,46 @@ export default function LecturerEventsPage() {
 
               <button
                 onClick={openCreateDialog}
+                aria-label="Create a new event"
                 className="h-12 rounded-[12px] bg-[#168A3A] px-6 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#0F6F2D]"
               >
-                + Create event
+                <SETooltip text="Create a new event">+ Create event</SETooltip>
               </button>
             </div>
 
             <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
-              <div className="flex h-12 w-full max-w-[520px] items-center rounded-[12px] border border-[#DDE8E1] bg-white px-4">
+              <SETooltip text="Search events by name, owner, or event code" className="w-full max-w-[520px]">
+                <div className="flex h-12 w-full items-center rounded-[12px] border border-[#DDE8E1] bg-white px-4">
                 <input
                   value={query}
                   onChange={event => setQuery(event.target.value)}
                   placeholder="Search by name, owner, code"
+                  aria-label="Search events by name, owner, or event code"
                   className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[#1A1A2E] outline-none placeholder:text-[#6B7B8D]"
                 />
                 <span className="text-xl text-[#6B7B8D]">⌕</span>
-              </div>
+                </div>
+              </SETooltip>
 
-              <select
-                value={ownerFilter}
-                onChange={event => setOwnerFilter(event.target.value as OwnerFilter)}
-                className="h-12 w-full rounded-[12px] border border-[#DDE8E1] bg-white px-4 text-sm font-semibold text-[#6B7B8D] outline-none md:w-[240px]"
-              >
-                <option value="all">All events</option>
-                <option value="mine">Created by me</option>
-                <option value="organization">Organization events</option>
-              </select>
+              <SETooltip text="Filter events" className="w-full md:w-[240px]">
+                <select
+                  value={ownerFilter}
+                  onChange={event => setOwnerFilter(event.target.value as OwnerFilter)}
+                  aria-label="Filter events"
+                  className="h-12 w-full rounded-[12px] border border-[#DDE8E1] bg-white px-4 text-sm font-semibold text-[#6B7B8D] outline-none"
+                >
+                  <option value="all">All events</option>
+                  <option value="mine">Created by me</option>
+                  <option value="organization">Organization events</option>
+                </select>
+              </SETooltip>
             </div>
 
             <section className="overflow-hidden rounded-[18px] border border-[#DDE8E1] bg-white shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
               <div className="grid grid-cols-[44px_minmax(240px,1fr)_170px_150px] items-center border-b border-[#E2EBE6] px-6 py-4 text-sm font-extrabold text-[#1A1A2E]">
-                <input type="checkbox" className="h-4 w-4 rounded border-[#DADADA]" readOnly />
+                <SETooltip text="Select event">
+                  <input type="checkbox" aria-label="Select event" className="h-4 w-4 rounded border-[#DADADA]" readOnly />
+                </SETooltip>
                 <div>Event details</div>
                 <div>Status</div>
                 <div className="text-right">More actions</div>
@@ -414,7 +424,9 @@ export default function LecturerEventsPage() {
                     key={event.id}
                     className="grid grid-cols-[44px_minmax(240px,1fr)_170px_150px] items-center border-b border-[#E2EBE6] px-6 py-5 last:border-b-0 hover:bg-[#FAFCFA]"
                   >
-                    <input type="checkbox" className="h-4 w-4 rounded border-[#DADADA]" readOnly />
+                    <SETooltip text="Select event">
+                      <input type="checkbox" aria-label="Select event" className="h-4 w-4 rounded border-[#DADADA]" readOnly />
+                    </SETooltip>
                     <button
                       type="button"
                       onClick={() => {
@@ -436,22 +448,26 @@ export default function LecturerEventsPage() {
                       <div className="mt-1 text-xs font-semibold text-[#9AA6B2]">{relativeTime(event.updated_at || event.created_at)}</div>
                     </div>
                     <div className="flex items-center justify-end gap-3">
-                      <button
-                        type="button"
-                        onClick={() => openDuplicateDialog(event)}
-                        title="Duplicate"
-                        className="grid h-9 w-9 place-items-center rounded-[9px] border border-[#DDE8E1] text-lg text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]"
-                      >
-                        ⧉
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedEvent(event)}
-                        title="More actions"
-                        className="grid h-9 w-9 place-items-center rounded-[9px] text-xl font-bold text-[#1A1A2E] hover:bg-[#EAF7EF]"
-                      >
-                        ...
-                      </button>
+                      <SETooltip text="Duplicate event">
+                        <button
+                          type="button"
+                          onClick={() => openDuplicateDialog(event)}
+                          aria-label="Duplicate event"
+                          className="grid h-9 w-9 place-items-center rounded-[9px] border border-[#DDE8E1] text-lg text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]"
+                        >
+                          ⧉
+                        </button>
+                      </SETooltip>
+                      <SETooltip text="More actions">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedEvent(event)}
+                          aria-label="More actions"
+                          className="grid h-9 w-9 place-items-center rounded-[9px] text-xl font-bold text-[#1A1A2E] hover:bg-[#EAF7EF]"
+                        >
+                          ...
+                        </button>
+                      </SETooltip>
                     </div>
                   </div>
                 ))
@@ -791,17 +807,33 @@ function DetailsDrawer({
         </div>
 
         <div className="mt-6 space-y-3">
-          <ActionCard title="View results" description="See poll results, engagement and analysis of your event." icon="📜" onClick={onViewResults} />
-          <ActionCard title="Duplicate" description="Create a fresh event using interactions and settings from this event." icon="⧉" onClick={onDuplicate} />
+          <ActionCard
+            title="View results"
+            description="See poll results, engagement and analysis of your event."
+            icon="📜"
+            tooltip="View analytics, engagement and results"
+            onClick={onViewResults}
+          />
+          <ActionCard
+            title="Duplicate"
+            description="Create a fresh event using interactions and settings from this event."
+            icon="⧉"
+            tooltip="Create a copy of this event"
+            onClick={onDuplicate}
+          />
         </div>
 
         <div className="mt-8 flex gap-3 border-t border-[#E2EBE6] pt-5">
-          <button onClick={onTransfer} className="flex-1 rounded-[10px] border border-[#DDE8E1] px-4 py-3 text-sm font-extrabold text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]">
-            Transfer
-          </button>
-          <button onClick={onDelete} className="flex-1 rounded-[10px] border border-red-200 px-4 py-3 text-sm font-extrabold text-red-600 hover:bg-red-50">
-            Delete
-          </button>
+          <SETooltip text="Transfer ownership to another member" className="flex-1">
+            <button onClick={onTransfer} aria-label="Transfer ownership to another member" className="w-full rounded-[10px] border border-[#DDE8E1] px-4 py-3 text-sm font-extrabold text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]">
+              Transfer
+            </button>
+          </SETooltip>
+          <SETooltip text="Permanently delete this event" className="flex-1">
+            <button onClick={onDelete} aria-label="Permanently delete this event" className="w-full rounded-[10px] border border-red-200 px-4 py-3 text-sm font-extrabold text-red-600 hover:bg-red-50">
+              Delete
+            </button>
+          </SETooltip>
         </div>
       </aside>
     </div>
@@ -817,14 +849,16 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ActionCard({ title, description, icon, onClick }: { title: string; description: string; icon: string; onClick: () => void }) {
+function ActionCard({ title, description, icon, tooltip, onClick }: { title: string; description: string; icon: string; tooltip: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="flex w-full gap-4 rounded-[16px] border border-[#DDE8E1] bg-white p-4 text-left transition hover:border-[#168A3A] hover:bg-[#F8FCF9]">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#EAF7EF] text-xl">{icon}</span>
-      <span>
-        <span className="block text-base font-extrabold text-[#1A1A2E]">{title}</span>
-        <span className="mt-1 block text-sm font-semibold text-[#6B7B8D]">{description}</span>
-      </span>
-    </button>
+    <SETooltip text={tooltip} className="w-full">
+      <button aria-label={tooltip} onClick={onClick} className="flex w-full gap-4 rounded-[16px] border border-[#DDE8E1] bg-white p-4 text-left transition hover:border-[#168A3A] hover:bg-[#F8FCF9]">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#EAF7EF] text-xl">{icon}</span>
+        <span>
+          <span className="block text-base font-extrabold text-[#1A1A2E]">{title}</span>
+          <span className="mt-1 block text-sm font-semibold text-[#6B7B8D]">{description}</span>
+        </span>
+      </button>
+    </SETooltip>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import Sidebar from '@/components/ui/Sidebar';
+import SETooltip from '@/components/ui/SETooltip';
 import { useAuth } from '@/hooks/useAuth';
 import type { Event } from '@/lib/types';
 
@@ -161,6 +162,7 @@ export default function LecturerAnalyticsPage() {
       helper: `${metrics.created_events} created in selected period`,
       icon: '📅',
       accent: 'from-[#EAF7EF] to-white text-[#168A3A]',
+      tooltip: 'Number of currently active events',
     },
     {
       label: 'Questions',
@@ -168,6 +170,7 @@ export default function LecturerAnalyticsPage() {
       helper: `${metrics.active_interactions} active interactions`,
       icon: '❔',
       accent: 'from-[#EFF6FF] to-white text-[#1A6BB5]',
+      tooltip: 'Total audience questions received',
     },
     {
       label: 'Poll votes',
@@ -175,6 +178,7 @@ export default function LecturerAnalyticsPage() {
       helper: `${metrics.quiz_answers} quiz answers · ${metrics.response_rate}% response rate`,
       icon: '📜',
       accent: 'from-[#FFF7E8] to-white text-[#B36200]',
+      tooltip: 'Total participant votes submitted',
     },
   ];
 
@@ -205,25 +209,31 @@ export default function LecturerAnalyticsPage() {
                   ))}
                 </select>
 
-                <select
-                  value={rangePreset}
-                  onChange={event => setRangePreset(event.target.value as RangePreset)}
-                  className="h-11 rounded-[10px] border border-[#DDE8E1] bg-white px-3 text-sm font-semibold text-[#1A1A2E] outline-none focus:border-[#168A3A]"
-                >
-                  <option value="30">Last 30 days</option>
-                  <option value="90">Last 90 days</option>
-                  <option value="365">1 Year</option>
-                  <option value="custom">Custom range</option>
-                </select>
+                <SETooltip text="Select reporting period">
+                  <select
+                    value={rangePreset}
+                    onChange={event => setRangePreset(event.target.value as RangePreset)}
+                    aria-label="Select reporting period"
+                    className="h-11 rounded-[10px] border border-[#DDE8E1] bg-white px-3 text-sm font-semibold text-[#1A1A2E] outline-none focus:border-[#168A3A]"
+                  >
+                    <option value="30">Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                    <option value="365">1 Year</option>
+                    <option value="custom">Custom range</option>
+                  </select>
+                </SETooltip>
 
                 <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setExportOpen(open => !open)}
-                    className="h-11 rounded-[10px] bg-[#168A3A] px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#0F6F2D]"
-                  >
-                    Export ▾
-                  </button>
+                  <SETooltip text="Export analytics data">
+                    <button
+                      type="button"
+                      onClick={() => setExportOpen(open => !open)}
+                      aria-label="Export analytics data"
+                      className="h-11 rounded-[10px] bg-[#168A3A] px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#0F6F2D]"
+                    >
+                      Export ▾
+                    </button>
+                  </SETooltip>
                   {exportOpen && (
                     <div className="absolute right-0 top-12 z-20 w-52 overflow-hidden rounded-[12px] border border-[#DDE8E1] bg-white py-1 text-sm font-bold shadow-[0_16px_35px_rgba(15,23,42,0.14)]">
                       <button
@@ -276,16 +286,18 @@ export default function LecturerAnalyticsPage() {
 
             <div className="grid gap-5 lg:grid-cols-3">
               {overviewCards.map(card => (
-                <div key={card.label} className={`rounded-[18px] border border-[#DDE8E1] bg-gradient-to-br ${card.accent} p-6 shadow-[0_16px_40px_rgba(15,23,42,0.05)]`}>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#6B7B8D]">{card.label}</div>
-                      <div className="mt-4 text-5xl font-black text-[#1A1A2E]">{loading ? '...' : card.value}</div>
+                <SETooltip key={card.label} text={card.tooltip} className="w-full">
+                  <div aria-label={card.tooltip} className={`rounded-[18px] border border-[#DDE8E1] bg-gradient-to-br ${card.accent} p-6 shadow-[0_16px_40px_rgba(15,23,42,0.05)]`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#6B7B8D]">{card.label}</div>
+                        <div className="mt-4 text-5xl font-black text-[#1A1A2E]">{loading ? '...' : card.value}</div>
+                      </div>
+                      <div className="grid h-12 w-12 place-items-center rounded-full bg-white text-2xl shadow-sm">{card.icon}</div>
                     </div>
-                    <div className="grid h-12 w-12 place-items-center rounded-full bg-white text-2xl shadow-sm">{card.icon}</div>
+                    <p className="mt-4 text-sm font-semibold text-[#6B7B8D]">{card.helper}</p>
                   </div>
-                  <p className="mt-4 text-sm font-semibold text-[#6B7B8D]">{card.helper}</p>
-                </div>
+                </SETooltip>
               ))}
             </div>
 

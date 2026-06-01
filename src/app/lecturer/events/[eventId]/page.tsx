@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { launchInteraction } from '@/lib/realtime/socket';
+import SETooltip from '@/components/ui/SETooltip';
 import type { Event, Interaction, InteractionOption, InteractionType } from '@/lib/types';
 
 type InteractionKind =
@@ -118,6 +119,23 @@ const templates: Template[] = [
 
 const optionKinds: InteractionKind[] = ['multiple_choice', 'quiz'];
 const SIDEBAR_COLLAPSE_KEY = 'slideengage_interactions_sidebar_collapsed';
+
+function tooltipForTemplate(label: string) {
+  const normalized = label.toLowerCase();
+  if (normalized.includes('multiple')) return 'Create a poll with answer options';
+  if (normalized.includes('open text')) return 'Collect text responses from participants';
+  if (normalized.includes('word cloud')) return 'Create a live word cloud';
+  if (normalized.includes('rating')) return 'Collect rating feedback';
+  if (normalized.includes('quiz')) return 'Create a scored quiz';
+  if (normalized.includes('q&a')) return 'Allow audience questions';
+  return `Create ${label}`;
+}
+
+function tooltipForStatus(status?: string) {
+  if (status === 'live') return 'This interaction is currently accepting responses';
+  if (status === 'closed') return 'This interaction is closed';
+  return 'This interaction is not live yet';
+}
 
 function formatRange(event: Event | null) {
   if (!event) return '';
@@ -242,15 +260,16 @@ function IconButton({
   className?: string;
 }) {
   return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-[#555] transition hover:bg-[#F1F1F1] focus:outline-none focus:ring-2 focus:ring-[#168A3A]/25 ${className}`}
-    >
-      {children}
-    </button>
+    <SETooltip text={label}>
+      <button
+        type="button"
+        aria-label={label}
+        onClick={onClick}
+        className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-[#555] transition hover:bg-[#F1F1F1] focus:outline-none focus:ring-2 focus:ring-[#168A3A]/25 ${className}`}
+      >
+        {children}
+      </button>
+    </SETooltip>
   );
 }
 
@@ -738,9 +757,15 @@ export default function EventBuilderPage() {
     <main className="h-screen overflow-hidden bg-white text-[#1A1A2E]">
       <header className="flex h-[76px] items-center justify-between border-b border-[#E5E5E5] px-6">
         <div className="flex items-center gap-5">
-          <button onClick={() => router.push('/lecturer/events')} className="flex h-11 w-11 items-center justify-center rounded-full border border-[#E2E2E2] text-xl">
-            ←
-          </button>
+          <SETooltip text="Back to events">
+            <button
+              onClick={() => router.push('/lecturer/events')}
+              aria-label="Back to events"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-[#E2E2E2] text-xl"
+            >
+              ←
+            </button>
+          </SETooltip>
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EAF7EF] text-sm font-extrabold text-[#2D8A4E]">
               {event.event_name.slice(0, 1).toUpperCase()}
@@ -750,30 +775,46 @@ export default function EventBuilderPage() {
         </div>
 
         <div className="flex items-center gap-5 text-sm font-semibold text-[#5F5F5F]">
-          <button
-            onClick={() => router.push(`/lecturer/events/${event.id}/settings`)}
-            className="rounded-[8px] px-2 py-1 transition hover:bg-[#F4F7F4] hover:text-[#168A3A]"
-            title="Edit event settings"
-          >
-            ▣ {formatRange(event)}
-          </button>
+          <SETooltip text="Edit event settings">
+            <button
+              onClick={() => router.push(`/lecturer/events/${event.id}/settings`)}
+              aria-label="Edit event settings"
+              className="rounded-[8px] px-2 py-1 transition hover:bg-[#F4F7F4] hover:text-[#168A3A]"
+            >
+              ▣ {formatRange(event)}
+            </button>
+          </SETooltip>
           <span className="h-6 w-px bg-[#E2E2E2]" />
           <span># {event.event_code}</span>
           <span>♢ Public</span>
-          <button className="rounded-[8px] border border-[#168A3A] px-4 py-2 font-bold text-[#168A3A]">⌯ Share</button>
-          <button className="rounded-[8px] border border-[#168A3A] px-4 py-2 font-bold text-[#168A3A]">▻ Present</button>
-          <button className="text-xl text-[#168A3A]">...</button>
+          <SETooltip text="Share event access">
+            <button aria-label="Share event access" className="rounded-[8px] border border-[#168A3A] px-4 py-2 font-bold text-[#168A3A]">⌯ Share</button>
+          </SETooltip>
+          <SETooltip text="Present live event">
+            <button aria-label="Present live event" className="rounded-[8px] border border-[#168A3A] px-4 py-2 font-bold text-[#168A3A]">▻ Present</button>
+          </SETooltip>
+          <SETooltip text="More actions">
+            <button aria-label="More actions" className="text-xl text-[#168A3A]">...</button>
+          </SETooltip>
         </div>
       </header>
 
       <div className="flex h-[calc(100vh-76px)]">
         <aside className="flex w-[76px] flex-col items-center justify-between border-r border-[#E5E5E5] py-6">
           <div className="flex flex-col gap-7">
-            <button className="flex h-11 w-11 items-center justify-center rounded-full bg-[#EAF7EF] text-[#168A3A]">▤</button>
-            <button className="text-[#555]">↗</button>
-            <button onClick={() => router.push(`/lecturer/events/${event.id}/settings`)} className="text-[#555]">⚙</button>
+            <SETooltip text="Interactions">
+              <button aria-label="Interactions" className="flex h-11 w-11 items-center justify-center rounded-full bg-[#EAF7EF] text-[#168A3A]">▤</button>
+            </SETooltip>
+            <SETooltip text="Analytics">
+              <button aria-label="Analytics" className="text-[#555]">↗</button>
+            </SETooltip>
+            <SETooltip text="Event settings">
+              <button aria-label="Event settings" onClick={() => router.push(`/lecturer/events/${event.id}/settings`)} className="text-[#555]">⚙</button>
+            </SETooltip>
           </div>
-          <button className="flex h-9 w-9 items-center justify-center rounded-full border border-[#E2E2E2]">?</button>
+          <SETooltip text="Help">
+            <button aria-label="Help" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#E2E2E2]">?</button>
+          </SETooltip>
         </aside>
 
         <aside
@@ -804,45 +845,54 @@ export default function EventBuilderPage() {
               <h1 className="text-lg font-bold">My interactions</h1>
             </div>
             <div className="mb-8 flex gap-2">
-              <button
-                onClick={() => {
-                  if (event.status === 'archived') {
-                    setStatus('Restore this event before adding interactions.');
-                    return;
-                  }
-                  setShowTemplates(true);
-                  setSelectedTemplate(null);
-                  setDraft(null);
-                }}
-                disabled={event.status === 'archived'}
-                className="rounded-[9px] bg-[#168A3A] px-5 py-3 text-sm font-bold text-white"
-              >
-                + Add
-              </button>
-              <button
-                onClick={() => {
-                  setShowTemplates(true);
-                  setSelectedTemplate(null);
-                  setDraft(null);
-                }}
-                className="rounded-[9px] border border-[#E2E2E2] bg-white px-5 py-3 text-sm font-bold"
-              >
-                ▦ Templates
-              </button>
+              <SETooltip text="Create a new interaction">
+                <button
+                  onClick={() => {
+                    if (event.status === 'archived') {
+                      setStatus('Restore this event before adding interactions.');
+                      return;
+                    }
+                    setShowTemplates(true);
+                    setSelectedTemplate(null);
+                    setDraft(null);
+                  }}
+                  disabled={event.status === 'archived'}
+                  aria-label="Create a new interaction"
+                  className="rounded-[9px] bg-[#168A3A] px-5 py-3 text-sm font-bold text-white"
+                >
+                  + Add
+                </button>
+              </SETooltip>
+              <SETooltip text="Choose an interaction template">
+                <button
+                  onClick={() => {
+                    setShowTemplates(true);
+                    setSelectedTemplate(null);
+                    setDraft(null);
+                  }}
+                  aria-label="Choose an interaction template"
+                  className="rounded-[9px] border border-[#E2E2E2] bg-white px-5 py-3 text-sm font-bold"
+                >
+                  ▦ Templates
+                </button>
+              </SETooltip>
             </div>
 
             <section className="mb-8">
               <h2 className="mb-3 text-sm font-bold text-[#5F5F5F]">Audience Q&A</h2>
-              <button
-                onClick={() => qaInteraction ? setStatus('Audience Q&A already exists.') : openEditor(qaTemplate)}
-                className="flex w-full items-center justify-between rounded-[10px] border border-[#E2E2E2] bg-white p-4 text-left transition hover:border-[#168A3A]"
-              >
-                <span className="flex items-center gap-3 text-sm text-[#777]">
-                  <span className="text-2xl">☷</span>
-                  Add Q&A to collect questions from your audience
-                </span>
-                <span className="font-bold text-[#168A3A]">{qaInteraction ? 'Added' : 'Add'}</span>
-              </button>
+              <SETooltip text="Allow audience questions">
+                <button
+                  onClick={() => qaInteraction ? setStatus('Audience Q&A already exists.') : openEditor(qaTemplate)}
+                  aria-label="Allow audience questions"
+                  className="flex w-full items-center justify-between rounded-[10px] border border-[#E2E2E2] bg-white p-4 text-left transition hover:border-[#168A3A]"
+                >
+                  <span className="flex items-center gap-3 text-sm text-[#777]">
+                    <span className="text-2xl">☷</span>
+                    Add Q&A to collect questions from your audience
+                  </span>
+                  <span className="font-bold text-[#168A3A]">{qaInteraction ? 'Added' : 'Add'}</span>
+                </button>
+              </SETooltip>
             </section>
 
             <section>
@@ -869,7 +919,11 @@ export default function EventBuilderPage() {
                                 <span>{String(config.poll_kind || item.type).replaceAll('_', ' ')}</span>
                                 <span>•</span>
                                 <span>{voteCount} votes</span>
-                                {item.status === 'live' && <span className="rounded-full bg-[#EAF7EF] px-2 py-0.5 font-bold text-[#168A3A]">Live</span>}
+                                {item.status === 'live' && (
+                                  <SETooltip text={tooltipForStatus(item.status)}>
+                                    <span className="rounded-full bg-[#EAF7EF] px-2 py-0.5 font-bold text-[#168A3A]">Live</span>
+                                  </SETooltip>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -971,22 +1025,24 @@ export default function EventBuilderPage() {
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
                 {templates.map(template => (
-                  <button
-                    key={template.label}
-                    onClick={() => openEditor(template)}
-                    className="overflow-hidden rounded-[12px] border border-[#DCDCDC] bg-white text-left transition hover:-translate-y-0.5 hover:border-[#168A3A] hover:shadow-sm"
-                  >
-                    <div className="h-[145px] bg-[#F4F4F4] p-10">
-                      <Preview kind={template.preview} accent={template.accent} />
-                    </div>
-                    <div className="border-t border-[#E5E5E5] px-6 py-5">
-                      <div className="mb-2 flex items-center gap-4">
-                        <span className="text-2xl" style={{ color: template.accent }}>{template.icon}</span>
-                        <span className="text-lg font-bold">{template.label}</span>
+                  <SETooltip key={template.label} text={tooltipForTemplate(template.label)}>
+                    <button
+                      onClick={() => openEditor(template)}
+                      aria-label={tooltipForTemplate(template.label)}
+                      className="overflow-hidden rounded-[12px] border border-[#DCDCDC] bg-white text-left transition hover:-translate-y-0.5 hover:border-[#168A3A] hover:shadow-sm"
+                    >
+                      <div className="h-[145px] bg-[#F4F4F4] p-10">
+                        <Preview kind={template.preview} accent={template.accent} />
                       </div>
-                      <p className="text-xs leading-5 text-[#777]">{template.description}</p>
-                    </div>
-                  </button>
+                      <div className="border-t border-[#E5E5E5] px-6 py-5">
+                        <div className="mb-2 flex items-center gap-4">
+                          <span className="text-2xl" style={{ color: template.accent }}>{template.icon}</span>
+                          <span className="text-lg font-bold">{template.label}</span>
+                        </div>
+                        <p className="text-xs leading-5 text-[#777]">{template.description}</p>
+                      </div>
+                    </button>
+                  </SETooltip>
                 ))}
               </div>
             </>
@@ -1030,7 +1086,9 @@ function InteractionEditor({
     <div className="grid min-h-[calc(100vh-140px)] grid-cols-1 gap-6 xl:grid-cols-[minmax(420px,1fr)_420px]">
       <div className="rounded-[14px] border border-[#E5E5E5] bg-white">
         <div className="flex items-center justify-between border-b border-[#E5E5E5] px-6 py-4">
-          <button onClick={onBack} className="text-sm font-bold text-[#168A3A]">← Templates</button>
+          <SETooltip text="Back to interaction templates">
+            <button onClick={onBack} aria-label="Back to interaction templates" className="text-sm font-bold text-[#168A3A]">← Templates</button>
+          </SETooltip>
           <span className="text-xs font-semibold text-[#777]">{autoSaveState === 'saving' ? 'Saving draft...' : 'Draft saved'}</span>
         </div>
 
@@ -1075,13 +1133,16 @@ function InteractionEditor({
 
           <div className="mt-8 flex items-center justify-between">
             <p className={`text-sm font-semibold ${validation.valid ? 'text-[#168A3A]' : 'text-[#D92D20]'}`}>{validation.reason}</p>
-            <button
-              onClick={onStart}
-              disabled={!validation.valid || publishing}
-              className="rounded-[10px] bg-[#168A3A] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#0f6f2d] disabled:cursor-not-allowed disabled:bg-[#C9D7CE]"
-            >
-              {publishing ? 'Starting...' : template.kind === 'qa' ? 'Start Q&A' : 'Start interaction'}
-            </button>
+            <SETooltip text="Start accepting responses">
+              <button
+                onClick={onStart}
+                disabled={!validation.valid || publishing}
+                aria-label="Start accepting responses"
+                className="rounded-[10px] bg-[#168A3A] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#0f6f2d] disabled:cursor-not-allowed disabled:bg-[#C9D7CE]"
+              >
+                {publishing ? 'Starting...' : template.kind === 'qa' ? 'Start Q&A' : 'Start interaction'}
+              </button>
+            </SETooltip>
           </div>
         </div>
       </div>
@@ -1125,14 +1186,16 @@ function DynamicFields({
           {draft.options.map((option, index) => (
             <div key={index} className="flex items-center gap-3">
               {template.kind === 'quiz' && (
-                <button
-                  type="button"
-                  onClick={() => onCorrectIndexChange(index)}
-                  className={`flex h-9 w-9 items-center justify-center rounded-full border text-sm font-bold ${draft.correctIndex === index ? 'border-[#168A3A] bg-[#EAF7EF] text-[#168A3A]' : 'border-[#DCDCDC] text-[#777]'}`}
-                  title="Correct answer"
-                >
-                  ✓
-                </button>
+                <SETooltip text="Mark as correct answer">
+                  <button
+                    type="button"
+                    onClick={() => onCorrectIndexChange(index)}
+                    aria-label="Mark as correct answer"
+                    className={`flex h-9 w-9 items-center justify-center rounded-full border text-sm font-bold ${draft.correctIndex === index ? 'border-[#168A3A] bg-[#EAF7EF] text-[#168A3A]' : 'border-[#DCDCDC] text-[#777]'}`}
+                  >
+                    ✓
+                  </button>
+                </SETooltip>
               )}
               <input
                 value={option}
@@ -1140,18 +1203,22 @@ function DynamicFields({
                 placeholder={`Option ${index + 1}`}
                 className="min-w-0 flex-1 rounded-[9px] border border-[#DCDCDC] px-4 py-3 text-sm outline-none focus:border-[#168A3A]"
               />
-              <button
-                onClick={() => onOptionRemove(index)}
-                disabled={draft.options.length <= 2}
-                className="text-xl text-[#999] disabled:opacity-30"
-                title="Remove option"
-              >
-                ×
-              </button>
+              <SETooltip text="Remove option">
+                <button
+                  onClick={() => onOptionRemove(index)}
+                  disabled={draft.options.length <= 2}
+                  aria-label="Remove option"
+                  className="text-xl text-[#999] disabled:opacity-30"
+                >
+                  ×
+                </button>
+              </SETooltip>
             </div>
           ))}
         </div>
-        <button onClick={onOptionAdd} className="mt-4 text-sm font-bold text-[#168A3A]">+ Add option</button>
+        <SETooltip text="Add answer option">
+          <button onClick={onOptionAdd} aria-label="Add answer option" className="mt-4 text-sm font-bold text-[#168A3A]">+ Add option</button>
+        </SETooltip>
 
         {template.kind === 'quiz' && (
           <div className="mt-6 grid grid-cols-2 gap-4">
@@ -1230,7 +1297,9 @@ function LivePreview({ template, draft }: { template: Template; draft: DraftStat
           <h2 className="text-sm font-bold text-[#555]">Live preview</h2>
           <p className="text-xs text-[#888]">Participant view</p>
         </div>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#168A3A]">Draft</span>
+        <SETooltip text={tooltipForStatus('draft')}>
+          <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#168A3A]">Draft</span>
+        </SETooltip>
       </div>
 
       <div className="overflow-hidden rounded-[16px] border border-[#E1E1E1] bg-white shadow-sm">
@@ -1313,13 +1382,16 @@ function ToggleLabel({ label, description, checked, onChange }: { label: string;
         <span className="block">{label}</span>
         {description && <span className="mt-1 block text-xs font-medium text-[#777]">{description}</span>}
       </span>
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 rounded-full transition ${checked ? 'bg-[#168A3A]' : 'bg-[#9B9B9B]'}`}
-      >
-        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${checked ? 'left-5' : 'left-0.5'}`} />
-      </button>
+      <SETooltip text={`${checked ? 'Disable' : 'Enable'} ${label}`}>
+        <button
+          type="button"
+          onClick={() => onChange(!checked)}
+          aria-label={`${checked ? 'Disable' : 'Enable'} ${label}`}
+          className={`relative h-6 w-11 rounded-full transition ${checked ? 'bg-[#168A3A]' : 'bg-[#9B9B9B]'}`}
+        >
+          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${checked ? 'left-5' : 'left-0.5'}`} />
+        </button>
+      </SETooltip>
     </label>
   );
 }
