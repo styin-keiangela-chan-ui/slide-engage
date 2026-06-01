@@ -42,15 +42,6 @@ function eventCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
-function formatDate(date: string | null | undefined) {
-  if (!date) return 'No date';
-  return new Date(`${date.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
 function formatDateRange(event: EventRow) {
   const start = event.start_date || event.created_at?.slice(0, 10);
   const end = event.end_date || event.start_date || event.created_at?.slice(0, 10);
@@ -131,6 +122,8 @@ export default function LecturerEventsPage() {
   const [endDate, setEndDate] = useState(addDaysIso(2));
   const [duplicateCode, setDuplicateCode] = useState(eventCode());
   const [transferEmail, setTransferEmail] = useState('');
+  const [transferUserExists, setTransferUserExists] = useState(false);
+  const [checkingTransferUser, setCheckingTransferUser] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -169,6 +162,39 @@ export default function LecturerEventsPage() {
     };
   }, [dialog, popupPosition, selectedEvent]);
 
+  useEffect(() => {
+    if (dialog !== 'transfer') return;
+    const email = transferEmail.trim().toLowerCase();
+    setTransferUserExists(false);
+    setError('');
+
+    if (!/.+@.+\..+/.test(email)) {
+      setCheckingTransferUser(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingTransferUser(true);
+    const timeout = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/events?cohost_email=${encodeURIComponent(email)}`, { method: 'HEAD' });
+        if (!cancelled) {
+          setTransferUserExists(res.status === 204);
+          setError(res.status === 404 ? 'User not found in SlideEngage.' : '');
+        }
+      } catch {
+        if (!cancelled) setError('Unable to check this SlideEngage user.');
+      } finally {
+        if (!cancelled) setCheckingTransferUser(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [dialog, transferEmail]);
+
   async function fetchEvents() {
     if (!lecturer) return;
     const res = await fetch(`/api/events?lecturer_id=${lecturer.id}`, { cache: 'no-store' });
@@ -202,6 +228,8 @@ export default function LecturerEventsPage() {
     setSelectedEvent(event);
     setPopupPosition(null);
     setTransferEmail('');
+    setTransferUserExists(false);
+    setCheckingTransferUser(false);
     setError('');
     setDialog('transfer');
   }
@@ -215,13 +243,13 @@ export default function LecturerEventsPage() {
 
   function openActionPopup(event: EventRow, anchor: HTMLButtonElement) {
     const rect = anchor.getBoundingClientRect();
-    const width = 380;
+    const width = 360;
     const viewportPadding = 18;
     const left = Math.max(
       viewportPadding,
       Math.min(rect.right - width, window.innerWidth - width - viewportPadding)
     );
-    const top = Math.min(rect.bottom + 10, Math.max(viewportPadding, window.innerHeight - 520));
+    const top = Math.min(rect.bottom + 10, Math.max(viewportPadding, window.innerHeight - 470));
     setSelectedEvent(event);
     setPopupPosition({ top, left });
     setDialog(null);
@@ -303,7 +331,7 @@ export default function LecturerEventsPage() {
   }
 
   async function transferEvent() {
-    if (!selectedEvent || !transferEmail.trim()) return;
+    if (!selectedEvent || !transferEmail.trim() || !transferUserExists) return;
 
     setSaving(true);
     setError('');
@@ -393,13 +421,13 @@ export default function LecturerEventsPage() {
               </div>
             )}
 
-            <div className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
-              <div className="flex flex-wrap gap-4">
+            <div className="mb-5 flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
+              <div className="flex flex-wrap gap-3">
                 {tabs.map(tab => (
                   <button
                     key={tab.key}
                     onClick={() => setActiveTab(tab.key)}
-                    className={`flex items-center gap-2 rounded-[12px] px-5 py-3 text-sm font-extrabold transition ${
+                    className={`flex items-center gap-2 rounded-[11px] px-4 py-2.5 text-sm font-extrabold transition ${
                       activeTab === tab.key
                         ? 'border border-[#168A3A] bg-[#EAF7EF] text-[#168A3A]'
                         : 'bg-transparent text-[#1A1A2E] hover:bg-white'
@@ -416,7 +444,7 @@ export default function LecturerEventsPage() {
               <button
                 onClick={openCreateDialog}
                 aria-label="Create a new event"
-                className="h-12 rounded-[12px] bg-[#168A3A] px-6 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#0F6F2D]"
+                className="h-11 rounded-[11px] bg-[#168A3A] px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#0F6F2D]"
               >
                 <SETooltip text="Create a new event">+ Create event</SETooltip>
               </button>
@@ -424,7 +452,7 @@ export default function LecturerEventsPage() {
 
             <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
               <SETooltip text="Search events by name, owner, or event code" className="w-full max-w-[520px]">
-                <div className="flex h-12 w-full items-center rounded-[12px] border border-[#DDE8E1] bg-white px-4">
+                <div className="flex h-11 w-full items-center rounded-[11px] border border-[#DDE8E1] bg-white px-4">
                 <input
                   value={query}
                   onChange={event => setQuery(event.target.value)}
@@ -441,7 +469,7 @@ export default function LecturerEventsPage() {
                   value={ownerFilter}
                   onChange={event => setOwnerFilter(event.target.value as OwnerFilter)}
                   aria-label="Filter events"
-                  className="h-12 w-full rounded-[12px] border border-[#DDE8E1] bg-white px-4 text-sm font-semibold text-[#6B7B8D] outline-none"
+                  className="h-11 w-full rounded-[11px] border border-[#DDE8E1] bg-white px-4 text-sm font-semibold text-[#6B7B8D] outline-none"
                 >
                   <option value="all">All events</option>
                   <option value="mine">Created by me</option>
@@ -451,7 +479,7 @@ export default function LecturerEventsPage() {
             </div>
 
             <section className="overflow-hidden rounded-[18px] border border-[#DDE8E1] bg-white shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
-              <div className="grid grid-cols-[44px_minmax(240px,1fr)_170px_150px] items-center border-b border-[#E2EBE6] px-6 py-4 text-sm font-extrabold text-[#1A1A2E]">
+              <div className="grid grid-cols-[40px_minmax(220px,1fr)_150px_132px] items-center border-b border-[#E2EBE6] px-5 py-3.5 text-sm font-extrabold text-[#1A1A2E]">
                 <SETooltip text="Select event">
                   <input type="checkbox" aria-label="Select event" className="h-4 w-4 rounded border-[#DADADA]" readOnly />
                 </SETooltip>
@@ -462,7 +490,7 @@ export default function LecturerEventsPage() {
 
               {visibleEvents.length === 0 ? (
                 <div className="px-7 py-14 text-center">
-                  <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-[#EAF7EF] text-2xl">📅</div>
+                  <div className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-full bg-[#EAF7EF] text-xl">📅</div>
                   <h2 className="mb-1.5 text-base font-extrabold text-[#1A1A2E]">No events here yet</h2>
                   <p className="mb-6 text-sm font-semibold text-[#6B7B8D]">Create an event to collect polls, Q&A, and live responses.</p>
                   <button onClick={openCreateDialog} className="rounded-[10px] bg-[#168A3A] px-5 py-2.5 text-sm font-bold text-white">
@@ -473,7 +501,7 @@ export default function LecturerEventsPage() {
                 visibleEvents.map(event => (
                   <div
                     key={event.id}
-                    className="grid grid-cols-[44px_minmax(240px,1fr)_170px_150px] items-center border-b border-[#E2EBE6] px-6 py-5 last:border-b-0 hover:bg-[#FAFCFA]"
+                    className="grid grid-cols-[40px_minmax(220px,1fr)_150px_132px] items-center border-b border-[#E2EBE6] px-5 py-4 last:border-b-0 hover:bg-[#FAFCFA]"
                   >
                     <SETooltip text="Select event">
                       <input type="checkbox" aria-label="Select event" className="h-4 w-4 rounded border-[#DADADA]" readOnly />
@@ -504,7 +532,7 @@ export default function LecturerEventsPage() {
                           type="button"
                           onClick={() => openDuplicateDialog(event)}
                           aria-label="Duplicate event"
-                          className="grid h-9 w-9 place-items-center rounded-[9px] border border-[#DDE8E1] text-lg text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]"
+                          className="grid h-8 w-8 place-items-center rounded-[9px] border border-[#DDE8E1] text-base text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]"
                         >
                           ⧉
                         </button>
@@ -514,7 +542,7 @@ export default function LecturerEventsPage() {
                           type="button"
                           onClick={clickEvent => openActionPopup(event, clickEvent.currentTarget)}
                           aria-label="More actions"
-                          className="grid h-9 w-9 place-items-center rounded-[9px] text-xl font-bold text-[#1A1A2E] hover:bg-[#EAF7EF]"
+                          className="grid h-8 w-8 place-items-center rounded-[9px] text-lg font-bold text-[#1A1A2E] hover:bg-[#EAF7EF]"
                         >
                           ...
                         </button>
@@ -602,6 +630,8 @@ export default function LecturerEventsPage() {
           onChange={setTransferEmail}
           onCancel={() => setDialog(null)}
           onSubmit={transferEvent}
+          userExists={transferUserExists}
+          checking={checkingTransferUser}
           error={error}
         />
       )}
@@ -622,7 +652,7 @@ export default function LecturerEventsPage() {
 function ModalShell({ children }: { children: ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-5">
-      <div className="w-full max-w-[720px] rounded-[18px] bg-white p-7 shadow-2xl">
+      <div className="w-full max-w-[560px] rounded-[18px] bg-white p-6 shadow-2xl">
         {children}
       </div>
     </div>
@@ -658,7 +688,7 @@ function EventFormModal({
 }) {
   return (
     <ModalShell>
-      <h2 className="mb-6 text-2xl font-extrabold text-[#1A1A2E]">{title}</h2>
+      <h2 className="mb-5 text-xl font-extrabold text-[#1A1A2E]">{title}</h2>
       {error && (
         <div className="mb-5 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
           {error}
@@ -669,7 +699,7 @@ function EventFormModal({
         value={eventName}
         onChange={event => onNameChange(event.target.value)}
         placeholder="Event name"
-        className="mb-5 h-12 w-full rounded-[12px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none placeholder:text-[#858585] focus:border-[#168A3A]"
+        className="mb-5 h-11 w-full rounded-[11px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none placeholder:text-[#858585] focus:border-[#168A3A]"
         autoFocus
       />
 
@@ -708,7 +738,7 @@ function DateField({ label, value, min, onChange }: { label: string; value: stri
         value={value}
         min={min}
         onChange={event => onChange(event.target.value)}
-        className="h-12 w-full rounded-[12px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]"
+          className="h-11 w-full rounded-[11px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]"
       />
     </label>
   );
@@ -743,7 +773,7 @@ function DuplicateModal({
 }) {
   return (
     <ModalShell>
-      <h2 className="mb-6 text-2xl font-extrabold text-[#1A1A2E]">Duplicate your event</h2>
+      <h2 className="mb-5 text-xl font-extrabold text-[#1A1A2E]">Duplicate your event</h2>
       {error && (
         <div className="mb-5 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
           {error}
@@ -755,11 +785,11 @@ function DuplicateModal({
       </div>
       <label className="mb-4 block">
         <span className="mb-2 block text-sm font-bold text-[#1A1A2E]">Give your event a name</span>
-        <input value={eventName} onChange={event => onNameChange(event.target.value)} className="h-12 w-full rounded-[12px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]" />
+        <input value={eventName} onChange={event => onNameChange(event.target.value)} className="h-11 w-full rounded-[11px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]" />
       </label>
       <label className="mb-6 block">
         <span className="mb-2 block text-sm font-bold text-[#1A1A2E]">Event code</span>
-        <input value={eventCode} onChange={event => onCodeChange(event.target.value.toUpperCase().replace('#', ''))} className="h-12 w-full rounded-[12px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]" />
+        <input value={eventCode} onChange={event => onCodeChange(event.target.value.toUpperCase().replace('#', ''))} className="h-11 w-full rounded-[11px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]" />
       </label>
       <div className="flex justify-end gap-3">
         <button onClick={onCancel} className="rounded-[10px] px-5 py-2.5 text-sm font-bold text-[#6B7B8D] hover:bg-[#F3F4F6]">Cancel</button>
@@ -771,12 +801,30 @@ function DuplicateModal({
   );
 }
 
-function TransferModal({ saving, value, onChange, onCancel, onSubmit, error }: { saving: boolean; value: string; onChange: (value: string) => void; onCancel: () => void; onSubmit: () => void; error?: string }) {
+function TransferModal({
+  saving,
+  value,
+  onChange,
+  onCancel,
+  onSubmit,
+  userExists,
+  checking,
+  error,
+}: {
+  saving: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+  userExists: boolean;
+  checking: boolean;
+  error?: string;
+}) {
   const valid = /.+@.+\..+/.test(value.trim());
   return (
     <ModalShell>
-      <h2 className="mb-3 text-2xl font-extrabold text-[#1A1A2E]">Transfer event</h2>
-      <p className="mb-6 text-sm font-semibold text-[#6B7B8D]">Transfer your event to a new owner within your organization.</p>
+      <h2 className="mb-3 text-xl font-extrabold text-[#1A1A2E]">Transfer event</h2>
+      <p className="mb-5 text-sm font-semibold text-[#6B7B8D]">Transfer this event to a new owner within your organization.</p>
       {error && (
         <div className="mb-5 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
           {error}
@@ -786,12 +834,17 @@ function TransferModal({ saving, value, onChange, onCancel, onSubmit, error }: {
         value={value}
         onChange={event => onChange(event.target.value)}
         placeholder="Search by name or email"
-        className="mb-6 h-12 w-full rounded-[12px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]"
+        className="mb-5 h-11 w-full rounded-[11px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]"
         autoFocus
       />
+      {valid && !error && (
+        <p className="mb-5 text-xs font-bold text-[#6B7B8D]">
+          {checking ? 'Checking SlideEngage account...' : userExists ? 'SlideEngage user found.' : 'Enter a registered SlideEngage email.'}
+        </p>
+      )}
       <div className="flex justify-end gap-3">
         <button onClick={onCancel} className="rounded-[10px] px-5 py-2.5 text-sm font-bold text-[#6B7B8D] hover:bg-[#F3F4F6]">Cancel</button>
-        <button onClick={onSubmit} disabled={saving || !valid} className="rounded-[10px] bg-[#168A3A] px-5 py-2.5 text-sm font-extrabold text-white hover:bg-[#0F6F2D] disabled:opacity-60">
+        <button onClick={onSubmit} disabled={saving || !valid || !userExists || checking} className="rounded-[10px] bg-[#168A3A] px-5 py-2.5 text-sm font-extrabold text-white hover:bg-[#0F6F2D] disabled:opacity-60">
           {saving ? 'Transferring...' : 'Transfer'}
         </button>
       </div>
@@ -802,7 +855,7 @@ function TransferModal({ saving, value, onChange, onCancel, onSubmit, error }: {
 function DeleteModal({ saving, eventName, onCancel, onSubmit, error }: { saving: boolean; eventName: string; onCancel: () => void; onSubmit: () => void; error?: string }) {
   return (
     <ModalShell>
-      <h2 className="mb-3 text-2xl font-extrabold text-[#1A1A2E]">Delete event?</h2>
+      <h2 className="mb-3 text-xl font-extrabold text-[#1A1A2E]">Delete event?</h2>
       <p className="mb-6 text-sm font-semibold text-[#6B7B8D]">
         This will permanently delete <span className="font-extrabold text-[#1A1A2E]">{eventName}</span> and its interactions. This action cannot be undone.
       </p>
@@ -843,45 +896,37 @@ function EventActionPopup({
   return (
     <aside
       data-event-action-popup
-      className="fixed z-50 w-[min(380px,calc(100vw-32px))] overflow-hidden rounded-[18px] border border-[#E4EAE6] bg-white shadow-[0_22px_60px_rgba(15,23,42,0.18)]"
+      className="fixed z-50 w-[min(360px,calc(100vw-32px))] overflow-hidden rounded-[16px] border border-[#E4EAE6] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.16)]"
       style={{ top: position.top, left: position.left }}
     >
-      <div className="flex items-start justify-between gap-3 border-b border-[#EEF2EF] p-5">
-        <div className="min-w-0">
-          <h2 className="truncate text-xl font-black text-[#1A1A2E]">{event.event_name}</h2>
-          <p className="mt-1 text-sm font-semibold text-[#6B7B8D]">{formatDateRange(event)}</p>
-        </div>
-        <SETooltip text="Close actions">
-          <button onClick={onClose} aria-label="Close actions" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xl text-[#6B7B8D] hover:bg-[#F3F4F6]">×</button>
-        </SETooltip>
-      </div>
-
-      <div className="space-y-4 p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="truncate text-lg font-black text-[#1A1A2E]">{event.event_name}</div>
-            <div className="mt-3 space-y-2 text-sm font-semibold text-[#4B5563]">
-              <div className="flex items-center gap-2">
-                <span aria-hidden="true">📅</span>
-                <span>{formatDateRange(event)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span aria-hidden="true">♙</span>
-                <span className="truncate">{owner}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span aria-hidden="true">#</span>
-                <span>{event.event_code}</span>
-              </div>
+      <div className="space-y-4 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-2.5 text-sm font-semibold text-[#4B5563]">
+            <h2 className="truncate text-lg font-black text-[#1A1A2E]">{event.event_name}</h2>
+            <div className="flex items-center gap-2">
+              <span className="text-base" aria-hidden="true">📅</span>
+              <span>{formatDateRange(event)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-base" aria-hidden="true">♙</span>
+              <span className="truncate">{owner}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-base font-black" aria-hidden="true">#</span>
+              <span>{event.event_code}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#168A3A]" aria-hidden="true" />
+              <span>{statusLabel(event)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-base" aria-hidden="true">↻</span>
+              <span>{relativeTime(event.updated_at || event.created_at)}</span>
             </div>
           </div>
-          <span className="shrink-0 rounded-[10px] bg-[#F3F4F6] px-3 py-2 text-sm font-bold text-[#4B5563]">
-            {relativeTime(event.updated_at || event.created_at)}
-          </span>
-        </div>
-
-        <div className="inline-flex rounded-full bg-[#EAF7EF] px-3 py-1 text-xs font-extrabold text-[#168A3A]">
-          {statusLabel(event)}
+          <SETooltip text="Close actions">
+            <button onClick={onClose} aria-label="Close actions" className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-lg text-[#6B7B8D] hover:bg-[#F3F4F6]">×</button>
+          </SETooltip>
         </div>
 
         <div className="space-y-3">
@@ -905,12 +950,12 @@ function EventActionPopup({
 
         <div className="grid grid-cols-2 overflow-hidden rounded-[12px] bg-[#F4F4F4]">
           <SETooltip text="Transfer ownership to another member" className="flex-1">
-            <button onClick={onTransfer} aria-label="Transfer ownership to another member" className="w-full px-4 py-3 text-sm font-extrabold text-[#5B6470] hover:bg-[#EAF7EF] hover:text-[#168A3A]">
+            <button onClick={onTransfer} aria-label="Transfer ownership to another member" className="w-full px-3 py-2.5 text-sm font-extrabold text-[#5B6470] hover:bg-[#EAF7EF] hover:text-[#168A3A]">
               ↔ Transfer
             </button>
           </SETooltip>
           <SETooltip text="Permanently delete this event" className="flex-1">
-            <button onClick={onDelete} aria-label="Permanently delete this event" className="w-full border-l border-white px-4 py-3 text-sm font-extrabold text-red-600 hover:bg-red-50">
+            <button onClick={onDelete} aria-label="Permanently delete this event" className="w-full border-l border-white px-3 py-2.5 text-sm font-extrabold text-red-600 hover:bg-red-50">
               🗑 Delete
             </button>
           </SETooltip>
@@ -947,9 +992,9 @@ function ActionCard({
   return (
     <SETooltip text={tooltip} className="w-full">
       <button aria-label={tooltip} onClick={onClick} className="flex w-full overflow-hidden rounded-[14px] border border-[#DDE8E1] bg-white text-left transition hover:border-[#168A3A] hover:shadow-sm">
-        <span className={`grid w-[92px] shrink-0 place-items-center text-3xl ${iconClassName}`}>{icon}</span>
-        <span className="px-4 py-4">
-          <span className="block text-base font-extrabold text-[#1A1A2E]">{title}</span>
+        <span className={`grid w-[76px] shrink-0 place-items-center text-2xl ${iconClassName}`}>{icon}</span>
+        <span className="px-3.5 py-3.5">
+          <span className="block text-sm font-extrabold text-[#1A1A2E]">{title}</span>
           <span className="mt-1 block text-sm font-semibold text-[#6B7B8D]">{description}</span>
         </span>
       </button>

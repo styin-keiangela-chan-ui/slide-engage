@@ -298,7 +298,7 @@ export async function PATCH(req: NextRequest) {
         .single();
 
       if (ownerError || !newOwner) {
-        return NextResponse.json({ error: 'This user is not registered with SlideEngage yet.' }, { status: 404 });
+        return NextResponse.json({ error: 'User not found in SlideEngage.' }, { status: 404 });
       }
 
       updates.lecturer_id = newOwner.id;
