@@ -27,6 +27,33 @@ function percentage(part: number, total: number) {
   return Math.min(100, Math.round((part / total) * 100));
 }
 
+function inRange(value: string | null | undefined, range: DateRange) {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  const fromTime = range.from ? new Date(range.from).getTime() : Number.NEGATIVE_INFINITY;
+  const toTime = range.to ? new Date(range.to).getTime() : Number.POSITIVE_INFINITY;
+  return time >= fromTime && time <= toTime;
+}
+
+function activityPeriod(dates: Array<string | null | undefined>) {
+  const validDates = dates
+    .filter(Boolean)
+    .map(date => new Date(date as string))
+    .filter(date => !Number.isNaN(date.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  if (validDates.length === 0) return 'No activity';
+
+  const format = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const first = format.format(validDates[0]);
+  const last = format.format(validDates[validDates.length - 1]);
+  return first === last ? first : `${first} - ${last}`;
+}
+
 // GET /api/analytics?lecturer_id=xxx&from=2026-01-01&to=2026-01-31
 export async function GET(req: NextRequest) {
   const lecturerId = req.nextUrl.searchParams.get('lecturer_id');
@@ -41,6 +68,12 @@ export async function GET(req: NextRequest) {
   if (!lecturerId) {
     return NextResponse.json({ error: 'lecturer_id required' }, { status: 400 });
   }
+
+  const { data: lecturer } = await supabase
+    .from('lecturers')
+    .select('id, name, email')
+    .eq('id', lecturerId)
+    .single();
 
   const { data: events, error: eventsError } = await supabase
     .from('events')
@@ -71,6 +104,7 @@ export async function GET(req: NextRequest) {
       },
       events: events || [],
       recent_events: [],
+      account_activity: [],
       range: { from, to },
     });
   }
@@ -201,6 +235,11 @@ export async function GET(req: NextRequest) {
   const engagementActions = responseCount + questions + upvotes;
   const possibleActions = Math.max(1, (participants || 0) * Math.max(1, activeInteractions || interactionIds.length));
   const responseRate = percentage(responseCount, Math.max(1, (participants || 0) * Math.max(1, interactionIds.length)));
+  const rangeInteractions = (interactions || []).filter(interaction => inRange(interaction.created_at, range));
+  const activityDates = [
+    ...scopedEvents.filter(event => inRange(event.created_at, range)).map(event => event.created_at),
+    ...rangeInteractions.map(interaction => interaction.created_at),
+  ];
 
   return NextResponse.json({
     metrics: {
@@ -225,6 +264,18 @@ export async function GET(req: NextRequest) {
       created_at: event.created_at,
       interaction_count: (interactions || []).filter(interaction => interaction.event_id === event.id).length,
     })),
+    account_activity: [
+      {
+        user_id: lecturer?.id || lecturerId,
+        name: lecturer?.name || 'Lecturer',
+        email: lecturer?.email || '',
+        events: createdEvents,
+        interactions: rangeInteractions.length,
+        questions,
+        votes: pollVotes + quizAnswers,
+        activity_period: activityPeriod(activityDates),
+      },
+    ],
     range: { from, to },
   });
 }
