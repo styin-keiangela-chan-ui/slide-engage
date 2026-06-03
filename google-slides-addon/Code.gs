@@ -178,12 +178,36 @@ function resetResults(interactionId) {
   });
 }
 
+function deleteInteraction(interactionId, eventId) {
+  requireSession_();
+  apiFetch_('/api/interactions?id=' + encodeURIComponent(interactionId), {
+    method: 'delete',
+  });
+  return { success: true, interactions: listInteractions_(eventId) };
+}
+
 function insertInteractionSlide(eventId, interactionId) {
   return drawInteractionSlide_(eventId, interactionId, false);
 }
 
 function updateInteractionSlide(eventId, interactionId) {
   return drawInteractionSlide_(eventId, interactionId, true);
+}
+
+function getInteractionSlideState(interactionId) {
+  return { exists: !!findSlideForInteraction_(interactionId) };
+}
+
+function getLivePresenterUrl(eventId) {
+  var event = apiFetch_('/api/events?id=' + encodeURIComponent(eventId), { method: 'get' }).event;
+  return presenterUrl_(event);
+}
+
+function presentLiveSlide(eventId, interactionId, insertNew) {
+  var result = drawInteractionSlide_(eventId, interactionId, !insertNew);
+  var event = apiFetch_('/api/events?id=' + encodeURIComponent(eventId), { method: 'get' }).event;
+  result.presenter_url = presenterUrl_(event);
+  return result;
 }
 
 function updateSelectedInteractionSnapshot() {
@@ -239,6 +263,11 @@ function renderSlide_(slide, event, interaction, resultData) {
   rounded_(slide, 220, 60, 470, 405, '#FFFFFF', '#DDEBE3');
   text_(slide, interaction.title || 'Untitled interaction', 250, 92, 410, 55, 24, true, '#17172F');
   renderResults_(slide, interaction, resultData);
+}
+
+function presenterUrl_(event) {
+  var code = event.event_code || event.code;
+  return SLIDEENGAGE_URL + '/present/' + encodeURIComponent(code);
 }
 
 function renderResults_(slide, interaction, data) {
@@ -382,6 +411,9 @@ function apiFetch_(path, options) {
     data = text ? JSON.parse(text) : {};
   } catch (error) {
     throw new Error('SlideEngage returned an unreadable response. Please try again.');
+  }
+  if (response.getResponseCode() === 401 && path === '/api/auth/login') {
+    throw new Error('Invalid SlideEngage email or password.');
   }
   if (response.getResponseCode() >= 400) throw new Error(data.error || 'SlideEngage request failed.');
   return data;

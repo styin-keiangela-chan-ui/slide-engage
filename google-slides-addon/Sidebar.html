@@ -5,28 +5,31 @@
     <style>
       body{font-family:Arial,sans-serif;margin:0;background:#f6faf7;color:#17172f}
       button,input,textarea,select{font:inherit}
+      button{cursor:pointer}
       .wrap{padding:14px}
       .brand{display:flex;align-items:center;gap:10px;margin-bottom:14px}
       .logo{width:36px;height:36px;border-radius:10px;background:#168a3a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px}
       .title{font-weight:800;font-size:18px}
-      .muted{color:#6b7b8d}
-      .small{font-size:12px}
+      .muted{color:#6b7b8d}.small{font-size:12px}.hidden{display:none}
       .card{background:#fff;border:1px solid #dfe9e3;border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 8px 24px rgba(14,63,34,.06)}
-      .stack{display:flex;flex-direction:column;gap:8px}
-      .row{display:flex;gap:8px;align-items:center;justify-content:space-between}
-      .input{width:100%;box-sizing:border-box;border:1px solid #d6e2dc;border-radius:10px;padding:10px;background:#fff}
-      .btn{border:0;border-radius:10px;background:#168a3a;color:#fff;font-weight:800;padding:10px 12px;cursor:pointer}
+      .stack{display:flex;flex-direction:column;gap:8px}.row{display:flex;gap:8px;align-items:center;justify-content:space-between}.row.wraprow{flex-wrap:wrap}
+      .input{width:100%;box-sizing:border-box;border:1px solid #d6e2dc;border-radius:10px;padding:10px;background:#fff;color:#17172f}
+      .btn{border:0;border-radius:10px;background:#168a3a;color:#fff;font-weight:800;padding:10px 12px}
       .btn.secondary{background:#fff;color:#17172f;border:1px solid #d6e2dc}
       .btn.danger{background:#fff;color:#b42318;border:1px solid #f0c6c6}
+      .btn.smallbtn{padding:7px 9px;font-size:12px}
+      .btn:disabled{opacity:.55;cursor:not-allowed}
       .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-      .item{border:1px solid #dfe9e3;border-radius:12px;padding:10px;background:#fff;cursor:pointer;text-align:left}
+      .template{border:1px solid #dfe9e3;border-radius:12px;padding:10px;background:#fff;text-align:left;font-weight:800}
+      .template:hover,.item:hover{border-color:#168a3a;background:#f3fbf6}
+      .item{border:1px solid #dfe9e3;border-radius:12px;padding:10px;background:#fff;text-align:left}
       .item.active{border-color:#168a3a;background:#eaf7ef}
-      .pill{border-radius:999px;background:#eaf7ef;color:#168a3a;padding:4px 8px;font-size:12px;font-weight:800}
+      .pill{border-radius:999px;padding:4px 8px;font-size:11px;font-weight:800;text-transform:capitalize}
+      .pill.draft{background:#f3f4f6;color:#5b6470}.pill.live{background:#eaf7ef;color:#168a3a}.pill.closed{background:#fff3e2;color:#b85b00}
       .status{padding:10px;border-radius:10px;background:#eaf7ef;color:#168a3a;font-weight:700}
-      .error{background:#fff0f0;color:#b42318}
-      .permission{background:#fff8e6;color:#7a4b00;border:1px solid #f3d184}
+      .error{background:#fff0f0;color:#b42318}.permission{background:#fff8e6;color:#7a4b00;border:1px solid #f3d184}
       .link{color:#168a3a;font-weight:800;text-decoration:none}
-      .hidden{display:none}
+      .divider{height:1px;background:#e6eee9;margin:3px 0}
     </style>
   </head>
   <body>
@@ -42,7 +45,7 @@
 
       <section id="login" class="card stack">
         <b>Lecturer login</b>
-        <div class="small muted">Use the same SlideEngage website email/Gmail and password.</div>
+        <div class="small muted">Use your SlideEngage website email/Gmail and password.</div>
         <div id="permission" class="status permission hidden"></div>
         <button class="btn secondary" onclick="authorize()">Authorize connection</button>
         <input id="email" class="input" placeholder="Email">
@@ -53,91 +56,124 @@
       <section id="app" class="hidden">
         <div class="row">
           <b id="hello"></b>
-          <button class="btn secondary" onclick="logout()">Logout</button>
+          <button class="btn secondary smallbtn" onclick="logout()">Logout</button>
         </div>
 
         <div class="card stack">
-          <b>Events</b>
+          <b>Selected event</b>
           <select id="events" class="input" onchange="selectEvent()"></select>
+          <div id="eventInfo" class="small muted">Select or create an event.</div>
           <div class="row">
             <input id="newEventName" class="input" placeholder="New event name">
-            <button class="btn" onclick="createEvent()">Create</button>
+            <button class="btn smallbtn" onclick="createEvent()">Create</button>
           </div>
-          <div id="eventInfo" class="small muted"></div>
         </div>
 
         <div class="card stack">
-          <b>Create new interaction</b>
+          <b>Create interaction</b>
           <div id="templates" class="grid"></div>
-        </div>
-
-        <div id="editor" class="card stack hidden">
-          <div class="row">
-            <b id="editorTitle">Editor</b>
-            <span id="interactionStatus" class="pill">draft</span>
-          </div>
-          <textarea id="question" class="input" rows="3" placeholder="Question"></textarea>
-          <div id="options" class="stack"></div>
-          <button id="addOption" class="btn secondary hidden" onclick="addOption()">Add option</button>
-          <button class="btn secondary" onclick="saveInteraction()">Save draft</button>
-          <button class="btn" onclick="insertSlide()">Present in Google Slides</button>
-          <div class="row">
-            <button class="btn secondary" onclick="goLive()">Go live</button>
-            <button class="btn secondary" onclick="closeLive()">Close</button>
-            <button class="btn danger" onclick="resetResults()">Reset</button>
-          </div>
-          <button class="btn secondary" onclick="updateSnapshot()">Update slide snapshot</button>
         </div>
 
         <div class="card stack">
           <div class="row">
             <b>Interactions</b>
-            <button class="btn secondary" onclick="refresh()">Refresh</button>
+            <button class="btn secondary smallbtn" onclick="refresh()">Refresh</button>
           </div>
           <div id="interactions" class="stack"></div>
+        </div>
+
+        <div id="editor" class="card stack hidden">
+          <div class="row">
+            <b id="editorTitle">Editor</b>
+            <span id="interactionStatus" class="pill draft">Draft</span>
+          </div>
+          <textarea id="question" class="input" rows="3" placeholder="Question"></textarea>
+          <div id="options" class="stack"></div>
+          <button id="addOption" class="btn secondary hidden" onclick="addOption()">+ Add option</button>
+          <div id="settings" class="stack"></div>
+          <button class="btn secondary" onclick="saveInteraction()">Save</button>
+          <div class="row">
+            <button class="btn secondary smallbtn" onclick="goLive()">Go Live</button>
+            <button class="btn secondary smallbtn" onclick="closeLive()">Close</button>
+            <button class="btn danger smallbtn" onclick="deleteSelected()">Delete</button>
+          </div>
+        </div>
+
+        <div id="liveControls" class="card stack hidden">
+          <b>Live presentation</b>
+          <button class="btn" onclick="presentLive()">Present Live</button>
+          <button class="btn secondary" onclick="refreshResult()">Refresh Result</button>
+          <button class="btn danger" onclick="resetResults()">Reset Results</button>
+          <div class="divider"></div>
+          <button class="btn secondary" onclick="insertSlideOnly()">Insert Live Result Slide</button>
+          <button class="btn secondary" onclick="openPresenter()">Open Live Presenter View</button>
         </div>
       </section>
     </div>
 
     <script>
-      var state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[]};
+      var state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[],config:{}};
       var templates=[
-        {label:"Multiple choice",type:"poll",options:["Option 1","Option 2"],config:{poll_kind:"multiple_choice",results_visible:true,voting_open:true}},
-        {label:"Open text",type:"feedback",options:[],config:{poll_kind:"open_text",include_open_text:true,anonymous:true,voting_open:true}},
-        {label:"Word cloud",type:"word_cloud",options:[],config:{max_words_per_participant:3,allow_duplicate_words:true,voting_open:true}},
-        {label:"Rating",type:"feedback",options:[],config:{poll_kind:"rating",include_star_ratings:true,scale:5,voting_open:true}},
+        {label:"Multiple Choice",type:"poll",options:["Option 1","Option 2"],config:{poll_kind:"multiple_choice",multiple_answers:false,results_visible:true,voting_open:true}},
+        {label:"Open Text",type:"feedback",options:[],config:{poll_kind:"open_text",character_limit:280,anonymous:true,voting_open:true}},
+        {label:"Word Cloud",type:"word_cloud",options:[],config:{max_words_per_participant:3,allow_duplicate_words:true,voting_open:true}},
+        {label:"Rating",type:"feedback",options:[],config:{poll_kind:"rating",scale:5,include_star_ratings:true,voting_open:true}},
         {label:"Quiz",type:"quiz",options:["Correct answer","Distractor"],config:{time_limit_seconds:30,points:100,voting_open:true}},
-        {label:"Audience Q&A",type:"qa",options:[],config:{allow_anonymous_questions:true,moderation:false,voting_open:true}}
+        {label:"Audience Q&A",type:"qa",options:[],config:{moderation:false,character_limit:160,allow_replies:false,allow_anonymous_questions:true,voting_open:true}}
       ];
+
       function $(id){return document.getElementById(id)}
-      function show(m,e){var s=$("status");s.textContent=m||"";s.className="status"+(e?" error":"")+(m?"":" hidden")}
-      function call(name,args,ok){show("Loading...");google.script.run.withSuccessHandler(function(r){show("");ok&&ok(r)}).withFailureHandler(function(err){handleFailure(err)})[name].apply(null,args||[])}
-      function handleFailure(err){var message=(err&&err.message)||String(err);show(message,true);if(/authorize|permission|internet/i.test(message))checkAuthorization()}
-      function boot(){renderTemplates();checkAuthorization();call("getInitialState",[],function(r){state.session=r.session;state.events=r.events||[];state.selectedEvent=r.selectedEvent||null;state.interactions=r.interactions||[];render()})}
-      function checkAuthorization(){google.script.run.withSuccessHandler(function(r){var box=$("permission");if(!r||r.authorized){box.classList.add("hidden");return}box.innerHTML="Please authorize SlideEngage to connect to the internet. <a class=\"link\" target=\"_blank\" href=\""+r.authorizationUrl+"\">Open authorization</a>";box.classList.remove("hidden")}).withFailureHandler(function(){}).getAuthorizationStatus()}
-      function render(){if(state.session){$("login").classList.add("hidden");$("app").classList.remove("hidden");$("hello").textContent=state.session.lecturer.name||state.session.lecturer.email}else{$("login").classList.remove("hidden");$("app").classList.add("hidden")}renderEvents();renderInteractions();renderEditor()}
-      function renderTemplates(){var box=$("templates");box.innerHTML="";templates.forEach(function(t){var b=document.createElement("button");b.className="item";b.textContent=t.label;b.onclick=function(){openTemplate(t)};box.appendChild(b)})}
-      function renderEvents(){var sel=$("events");sel.innerHTML="";state.events.forEach(function(e){var o=document.createElement("option");o.value=e.id;o.textContent=(e.event_name||"Untitled")+" (#"+e.event_code+")";if(state.selectedEvent&&state.selectedEvent.id===e.id)o.selected=true;sel.appendChild(o)});$("eventInfo").textContent=state.selectedEvent?"Code #"+state.selectedEvent.event_code+" · "+(state.selectedEvent.status||"closed"):"Select or create an event."}
-      function renderInteractions(){var list=$("interactions");list.innerHTML="";state.interactions.forEach(function(i){var row=document.createElement("div");row.className="item"+(state.selectedInteraction&&state.selectedInteraction.id===i.id?" active":"");row.innerHTML="<b>"+(i.title||"Untitled")+"</b><div class=\"small muted\">"+label(i)+" · "+(i.status||"draft")+"</div>";row.onclick=function(){openInteraction(i)};list.appendChild(row)})}
-      function renderEditor(){var ed=$("editor");if(!state.selectedInteraction&&!state.template){ed.classList.add("hidden");return}ed.classList.remove("hidden");$("editorTitle").textContent=state.template?state.template.label:label(state.selectedInteraction);$("interactionStatus").textContent=(state.selectedInteraction&&state.selectedInteraction.status)||"draft";$("question").value=(state.selectedInteraction&&state.selectedInteraction.title)||"";var needs=needsOptions();$("addOption").classList.toggle("hidden",!needs);var box=$("options");box.innerHTML="";state.options.forEach(function(o,idx){var input=document.createElement("input");input.className="input";input.value=o.option_text||o;input.placeholder="Option "+(idx+1);input.oninput=function(){state.options[idx]={option_text:input.value,is_correct:!!o.is_correct}};box.appendChild(input)})}
-      function label(i){return i.type==="poll"?"Multiple choice":i.type==="word_cloud"?"Word cloud":i.type==="quiz"?"Quiz":i.type==="qa"?"Audience Q&A":i.config&&i.config.poll_kind==="rating"?"Rating":"Open text"}
-      function needsOptions(){var t=state.template?state.template.type:(state.selectedInteraction&&state.selectedInteraction.type);return t==="poll"||t==="quiz"}
-      function editorPayload(){return{id:state.selectedInteraction&&state.selectedInteraction.id,event_id:state.selectedEvent&&state.selectedEvent.id,type:(state.template&&state.template.type)||(state.selectedInteraction&&state.selectedInteraction.type),title:$("question").value,config:(state.template&&state.template.config)||(state.selectedInteraction&&state.selectedInteraction.config)||{},options:needsOptions()?state.options:[]}}
+      function show(message,isError){var s=$("status");s.textContent=message||"";s.className="status"+(isError?" error":"")+(message?"":" hidden")}
+      function call(name,args,ok){show("Loading...");google.script.run.withSuccessHandler(function(result){show("");ok&&ok(result)}).withFailureHandler(function(err){handleFailure(err)})[name].apply(null,args||[])}
+      function handleFailure(err){var message=(err&&err.message)||String(err);if(/invalid email|invalid slideengage/i.test(message))message="Invalid SlideEngage email or password.";show(message,true);if(/authorize|permission|internet/i.test(message))checkAuthorization()}
+      function boot(){renderTemplates();checkAuthorization();call("getInitialState",[],function(result){state.session=result.session;state.events=result.events||[];state.selectedEvent=result.selectedEvent||null;state.interactions=result.interactions||[];render()})}
+      function checkAuthorization(){google.script.run.withSuccessHandler(function(result){var box=$("permission");if(!result||result.authorized){box.classList.add("hidden");return}box.innerHTML="Please authorize SlideEngage to connect to the internet. <a class=\"link\" target=\"_blank\" href=\""+result.authorizationUrl+"\">Open authorization</a>";box.classList.remove("hidden")}).withFailureHandler(function(){}).getAuthorizationStatus()}
+
+      function render(){
+        if(state.session){$("login").classList.add("hidden");$("app").classList.remove("hidden");$("hello").textContent=state.session.lecturer.name||state.session.lecturer.email}
+        else{$("login").classList.remove("hidden");$("app").classList.add("hidden")}
+        renderEvents();renderInteractions();renderEditor();renderLiveControls()
+      }
+      function renderTemplates(){var box=$("templates");box.innerHTML="";templates.forEach(function(t){var b=document.createElement("button");b.className="template";b.textContent=t.label;b.onclick=function(){openTemplate(t)};box.appendChild(b)})}
+      function renderEvents(){var sel=$("events");sel.innerHTML="";if(!state.events.length){var empty=document.createElement("option");empty.textContent="No events yet";empty.value="";sel.appendChild(empty)}state.events.forEach(function(event){var option=document.createElement("option");option.value=event.id;option.textContent=(event.event_name||"Untitled")+" (#"+event.event_code+")";if(state.selectedEvent&&state.selectedEvent.id===event.id)option.selected=true;sel.appendChild(option)});$("eventInfo").textContent=state.selectedEvent?"Event code #"+state.selectedEvent.event_code+" · "+(state.selectedEvent.status||"closed"):"Select or create an event."}
+      function renderInteractions(){var list=$("interactions");list.innerHTML="";if(!state.interactions.length){list.innerHTML="<div class=\"small muted\">No interactions yet. Create one above.</div>";return}state.interactions.forEach(function(interaction){var row=document.createElement("div");row.className="item"+(state.selectedInteraction&&state.selectedInteraction.id===interaction.id?" active":"");var status=interaction.status||"draft";row.innerHTML="<div class=\"row\"><div><b>"+escapeHtml(interaction.title||"Untitled")+"</b><div class=\"small muted\">"+label(interaction)+"</div></div><span class=\"pill "+status+"\">"+status+"</span></div><div class=\"row wraprow\" style=\"margin-top:8px\"><button class=\"btn secondary smallbtn\" data-action=\"edit\">Edit</button><button class=\"btn secondary smallbtn\" data-action=\"live\">Go Live</button><button class=\"btn secondary smallbtn\" data-action=\"close\">Close</button></div>";row.onclick=function(){openInteraction(interaction)};row.querySelector("[data-action=edit]").onclick=function(e){e.stopPropagation();openInteraction(interaction)};row.querySelector("[data-action=live]").onclick=function(e){e.stopPropagation();openInteraction(interaction);setStatus(interaction.id,"live")};row.querySelector("[data-action=close]").onclick=function(e){e.stopPropagation();openInteraction(interaction);setStatus(interaction.id,"closed")};list.appendChild(row)})}
+      function renderEditor(){var editor=$("editor");if(!state.selectedInteraction&&!state.template){editor.classList.add("hidden");return}editor.classList.remove("hidden");$("editorTitle").textContent=state.template?state.template.label:label(state.selectedInteraction);var status=(state.selectedInteraction&&state.selectedInteraction.status)||"draft";$("interactionStatus").textContent=status;$("interactionStatus").className="pill "+status;$("question").value=(state.selectedInteraction&&state.selectedInteraction.title)||"";renderOptions();renderSettings()}
+      function renderOptions(){var needs=needsOptions();$("addOption").classList.toggle("hidden",!needs);var box=$("options");box.innerHTML="";if(!needs)return;state.options.forEach(function(option,index){var row=document.createElement("div");row.className="row";row.innerHTML="<input class=\"input\" value=\""+escapeAttr(option.option_text||"")+"\" placeholder=\"Option "+(index+1)+"\"><button class=\"btn danger smallbtn\">×</button>";row.querySelector("input").oninput=function(){state.options[index].option_text=this.value};row.querySelector("button").onclick=function(){state.options.splice(index,1);renderOptions()};box.appendChild(row)})}
+      function renderSettings(){var box=$("settings");box.innerHTML="";var type=currentType();if(type==="poll")box.innerHTML=checkboxSetting("multiple_answers","Multiple answers");if(type==="word_cloud")box.innerHTML=numberSetting("max_words_per_participant","Max words",1,10)+checkboxSetting("allow_duplicate_words","Allow duplicates");if(type==="feedback"&&state.config.poll_kind==="open_text")box.innerHTML=numberSetting("character_limit","Character limit",50,1000);if(type==="feedback"&&state.config.poll_kind==="rating")box.innerHTML=numberSetting("scale","Rating scale",2,10);if(type==="quiz")box.innerHTML=numberSetting("time_limit_seconds","Timer seconds",5,300);if(type==="qa")box.innerHTML=checkboxSetting("moderation","Moderation")+checkboxSetting("allow_replies","Replies")+numberSetting("character_limit","Character limit",50,500)}
+      function renderLiveControls(){$("liveControls").classList.toggle("hidden",!state.selectedInteraction||!state.selectedEvent)}
+
+      function checkboxSetting(key,labelText){return "<label class=\"small\"><input type=\"checkbox\" "+(state.config[key]?"checked":"")+" onchange=\"state.config['"+key+"']=this.checked\"> "+labelText+"</label>"}
+      function numberSetting(key,labelText,min,max){return "<label class=\"small\">"+labelText+"<input class=\"input\" type=\"number\" min=\""+min+"\" max=\""+max+"\" value=\""+(state.config[key]||min)+"\" onchange=\"state.config['"+key+"']=Number(this.value)\"></label>"}
+      function label(interaction){return interaction.type==="poll"?"Multiple Choice":interaction.type==="word_cloud"?"Word Cloud":interaction.type==="quiz"?"Quiz":interaction.type==="qa"?"Audience Q&A":interaction.config&&interaction.config.poll_kind==="rating"?"Rating":"Open Text"}
+      function currentType(){return(state.template&&state.template.type)||(state.selectedInteraction&&state.selectedInteraction.type)}
+      function needsOptions(){var type=currentType();return type==="poll"||type==="quiz"}
+      function escapeHtml(value){return String(value||"").replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]})}
+      function escapeAttr(value){return escapeHtml(value).replace(/"/g,"&quot;")}
+
       function authorize(){call("authorizeSlideEngage",[],function(){checkAuthorization();show("SlideEngage is authorized to connect to the internet.")})}
-      function login(){call("login",[$("email").value,$("password").value],function(r){state.session=r;refresh()})}
-      function logout(){call("logout",[],function(){state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[]};render()})}
-      function refresh(){call("getInitialState",[],function(r){state.session=r.session;state.events=r.events||[];state.selectedEvent=r.selectedEvent||null;state.interactions=r.interactions||[];render()})}
-      function selectEvent(){call("selectEvent",[$("events").value],function(r){state.selectedEvent=r.selectedEvent;state.interactions=r.interactions||[];state.selectedInteraction=null;state.template=null;render()})}
-      function createEvent(){call("createEvent",[$("newEventName").value],function(r){$("newEventName").value="";state.events=r.events;state.selectedEvent=r.selectedEvent;state.interactions=[];render()})}
-      function openTemplate(t){if(!state.selectedEvent){show("Select or create an event first.",true);return}state.template=t;state.selectedInteraction=null;state.options=(t.options||[]).map(function(x,i){return{option_text:typeof x==="string"?x:x.option_text,is_correct:i===0&&t.type==="quiz"}});renderEditor()}
-      function openInteraction(i){state.selectedInteraction=i;state.template=null;state.options=(i.interaction_options||[]).sort(function(a,b){return(a.position||0)-(b.position||0)}).map(function(o){return{option_text:o.option_text,is_correct:!!o.is_correct}});renderEditor()}
-      function addOption(){state.options.push({option_text:"Option "+(state.options.length+1),is_correct:false});renderEditor()}
-      function saveInteraction(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();show("Saved.")})}
-      function goLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"live"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}
-      function closeLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"closed"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}
+      function login(){call("login",[$("email").value,$("password").value],function(result){state.session=result;refresh()})}
+      function logout(){call("logout",[],function(){state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[],config:{}};render();show("Signed out.")})}
+      function refresh(){call("getInitialState",[],function(result){state.session=result.session;state.events=result.events||[];state.selectedEvent=result.selectedEvent||null;state.interactions=result.interactions||[];if(state.selectedInteraction){var found=findInteraction(state.selectedInteraction.id);state.selectedInteraction=found||null}render()})}
+      function selectEvent(){call("selectEvent",[$("events").value],function(result){state.selectedEvent=result.selectedEvent;state.interactions=result.interactions||[];state.selectedInteraction=null;state.template=null;state.options=[];state.config={};render()})}
+      function createEvent(){call("createEvent",[$("newEventName").value],function(result){$("newEventName").value="";state.events=result.events||[];state.selectedEvent=result.selectedEvent;state.interactions=[];state.selectedInteraction=null;render()})}
+      function openTemplate(template){if(!state.selectedEvent){show("Select or create an event first.",true);return}state.template=template;state.selectedInteraction=null;state.options=(template.options||[]).map(function(text,index){return{option_text:text,is_correct:index===0&&template.type==="quiz"}});state.config=copy(template.config||{});render()}
+      function openInteraction(interaction){state.selectedInteraction=interaction;state.template=null;state.options=(interaction.interaction_options||[]).sort(function(a,b){return(a.position||0)-(b.position||0)}).map(function(option){return{option_text:option.option_text,is_correct:!!option.is_correct}});state.config=copy(interaction.config||{});render()}
+      function addOption(){state.options.push({option_text:"Option "+(state.options.length+1),is_correct:false});renderOptions()}
+      function copy(obj){return JSON.parse(JSON.stringify(obj||{}))}
+      function findInteraction(id){for(var i=0;i<state.interactions.length;i++){if(state.interactions[i].id===id)return state.interactions[i]}return null}
+      function editorPayload(){return{id:state.selectedInteraction&&state.selectedInteraction.id,event_id:state.selectedEvent&&state.selectedEvent.id,type:currentType(),title:$("question").value.trim(),config:state.config,options:needsOptions()?state.options:[]}}
+      function validatePayload(payload){if(!payload.event_id)return"Select or create an event first.";if(!payload.title)return"Question is required.";if((payload.type==="poll"||payload.type==="quiz")&&payload.options.filter(function(o){return String(o.option_text||"").trim()}).length<2)return"At least 2 options are required.";return""}
+      function saveInteraction(done){var payload=editorPayload();var error=validatePayload(payload);if(error){show(error,true);return}call("saveInteraction",[payload],function(result){state.selectedInteraction=result.interaction;state.template=null;state.interactions=result.interactions||[];openInteraction(result.interaction);show("Saved.");done&&done(result.interaction)})}
+      function setStatus(id,status){call("setInteractionStatus",[id,status],function(result){state.selectedInteraction=result.interaction;state.interactions=result.interactions||[];openInteraction(result.interaction);show(status==="live"?"Interaction is live.":"Interaction closed.")})}
+      function goLive(){if(!state.selectedInteraction){saveInteraction(function(interaction){setStatus(interaction.id,"live")});return}setStatus(state.selectedInteraction.id,"live")}
+      function closeLive(){if(!state.selectedInteraction)return;setStatus(state.selectedInteraction.id,"closed")}
+      function deleteSelected(){if(!state.selectedInteraction||!confirm("Delete this interaction?"))return;call("deleteInteraction",[state.selectedInteraction.id,state.selectedEvent.id],function(result){state.interactions=result.interactions||[];state.selectedInteraction=null;state.template=null;state.options=[];state.config={};render();show("Interaction deleted.")})}
       function resetResults(){if(!state.selectedInteraction)return;if(!confirm("Reset all participant responses for this interaction?"))return;call("resetResults",[state.selectedInteraction.id],function(result){show((result&&result.message)||"Results cleared successfully.")})}
-      function insertSlide(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();call("insertInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Slide inserted.")})})}
-      function updateSnapshot(){if(!state.selectedInteraction)return;call("updateInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Slide snapshot updated.")})}
+      function presentLive(){saveInteraction(function(interaction){call("getInteractionSlideState",[interaction.id],function(stateResult){var insertNew=false;if(stateResult&&stateResult.exists)insertNew=!confirm("A live result slide already exists. Update existing slide? Click Cancel to insert a new one.");call("presentLiveSlide",[state.selectedEvent.id,interaction.id,insertNew],function(result){showPresenterLink(result.presenter_url,"Live result slide ready.");window.open(result.presenter_url,"_blank")})})})}
+      function insertSlideOnly(){saveInteraction(function(interaction){call("getInteractionSlideState",[interaction.id],function(stateResult){var insertNew=false;if(stateResult&&stateResult.exists)insertNew=!confirm("A live result slide already exists. Update existing slide? Click Cancel to insert a new one.");call("presentLiveSlide",[state.selectedEvent.id,interaction.id,insertNew],function(){show("Live result slide ready.")})})})}
+      function refreshResult(){if(!state.selectedInteraction)return;call("updateInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Result slide refreshed.")})}
+      function openPresenter(){if(!state.selectedEvent)return;call("getLivePresenterUrl",[state.selectedEvent.id],function(url){showPresenterLink(url,"Opening live presenter view.");window.open(url,"_blank")})}
+      function showPresenterLink(url,message){show(message+" If it did not open, use this link: "+url)}
       boot();
     </script>
   </body>
