@@ -9,6 +9,7 @@
 var SLIDEENGAGE_URL = 'https://slide-engage.vercel.app';
 var SESSION_KEY = 'SLIDEENGAGE_SESSION';
 var SELECTED_EVENT_KEY = 'SLIDEENGAGE_SELECTED_EVENT_ID';
+var QR_CACHE_PREFIX = 'SLIDEENGAGE_QR_';
 
 function onOpen() {
   SlidesApp.getUi()
@@ -243,31 +244,71 @@ function drawInteractionSlide_(eventId, interactionId, updateExisting) {
   requireSession_();
   var event = apiFetch_('/api/events?id=' + encodeURIComponent(eventId), { method: 'get' }).event;
   var interaction = findInteraction_(eventId, interactionId);
+  var snapshot = buildInteractionSnapshot_(event, interaction);
   var slide = updateExisting ? findSlideForInteraction_(interactionId) : null;
   if (!slide) slide = SlidesApp.getActivePresentation().appendSlide(SlidesApp.PredefinedLayout.BLANK);
 
   clearSlide_(slide);
-  renderSlide_(slide, event, interaction, getResults_(interaction));
+  renderSlide_(slide, event, interaction, snapshot);
 
   var props = PropertiesService.getDocumentProperties();
   props.setProperty('SLIDEENGAGE_SLIDE_' + interactionId, slide.getObjectId());
   props.setProperty('SLIDEENGAGE_LAST_EVENT_ID', eventId);
   props.setProperty('SLIDEENGAGE_LAST_INTERACTION_ID', interactionId);
-  return { success: true, slide_id: slide.getObjectId() };
+  return {
+    success: true,
+    slide_id: slide.getObjectId(),
+    snapshot: {
+      eventCode: snapshot.eventCode,
+      question: snapshot.question,
+      interactionType: snapshot.interactionType,
+      totalResponses: snapshot.totalResponses,
+      joinUrl: snapshot.joinUrl,
+      hasResults: snapshot.hasResults,
+    },
+  };
 }
 
-function renderSlide_(slide, event, interaction, resultData) {
+function buildInteractionSnapshot_(event, interaction) {
+  if (!event) throw new Error('Unable to load event for this slide.');
+  if (!interaction) throw new Error('Unable to load interaction for this slide.');
+
   var code = event.event_code || event.code;
-  var joinUrl = SLIDEENGAGE_URL + '/join?code=' + encodeURIComponent(code);
+  if (!code) throw new Error('Unable to load live results. Please refresh and try again.');
+
+  var resultData = getResults_(interaction);
+  if (!resultData) throw new Error('Unable to load live results. Please refresh and try again.');
+
+  var results = resultData.results;
+  var hasResults = Number(resultData.total_responses || 0) > 0;
+  if (interaction.type === 'feedback' && interaction.config && interaction.config.poll_kind === 'rating') {
+    hasResults = !!(results && (results.rating_count || resultData.total_responses));
+  }
+
+  return {
+    eventCode: code,
+    question: interaction.title || 'Untitled interaction',
+    interactionType: label_(interaction),
+    joinUrl: SLIDEENGAGE_URL + '/join?code=' + encodeURIComponent(code),
+    qrCode: SLIDEENGAGE_URL + '/api/qrcode?code=' + encodeURIComponent(code) + '&format=png',
+    resultData: resultData,
+    totalResponses: resultData.total_responses || 0,
+    hasResults: hasResults,
+  };
+}
+
+function renderSlide_(slide, event, interaction, snapshot) {
+  var code = snapshot.eventCode;
+  var joinUrl = snapshot.joinUrl;
   slide.getBackground().setSolidFill('#F4F7F4');
   text_(slide, 'SlideEngage', 25, 15, 180, 24, 11, true, '#168A3A');
-  text_(slide, label_(interaction).toUpperCase(), 280, 15, 300, 24, 11, true, '#6B7B8D');
+  text_(slide, snapshot.interactionType.toUpperCase(), 280, 15, 300, 24, 11, true, '#6B7B8D');
 
   rounded_(slide, 30, 60, 165, 405, '#FFFFFF', '#DDEBE3');
   text_(slide, 'Join at', 55, 85, 120, 24, 14, true, '#17172F');
   text_(slide, host_(), 55, 112, 120, 24, 13, true, '#168A3A');
   try {
-    var qr = UrlFetchApp.fetch(SLIDEENGAGE_URL + '/api/qrcode?code=' + encodeURIComponent(code) + '&format=png').getBlob().setName('slideengage-qr.png');
+    var qr = qrBlobForCode_(code);
     slide.insertImage(qr, 52, 155, 120, 120);
   } catch (e) {
     text_(slide, 'QR unavailable', 52, 190, 120, 24, 12, true, '#B42318', SlidesApp.ParagraphAlignment.CENTER);
@@ -278,8 +319,9 @@ function renderSlide_(slide, event, interaction, resultData) {
   text_(slide, joinUrl, 42, 392, 145, 34, 7, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
 
   rounded_(slide, 220, 60, 470, 405, '#FFFFFF', '#DDEBE3');
-  text_(slide, interaction.title || 'Untitled interaction', 250, 92, 410, 55, 24, true, '#17172F');
-  renderResults_(slide, interaction, resultData);
+  text_(slide, snapshot.question, 250, 92, 410, 55, 24, true, '#17172F');
+  text_(slide, snapshot.hasResults ? 'Live result snapshot' : 'Waiting for responses…', 250, 142, 360, 20, 10, true, snapshot.hasResults ? '#168A3A' : '#A3AEA8');
+  renderResults_(slide, interaction, snapshot.resultData);
 }
 
 function presenterUrl_(event) {
@@ -292,6 +334,7 @@ function renderResults_(slide, interaction, data) {
   if (interaction.type === 'poll' || interaction.type === 'quiz') return renderPoll_(slide, interaction, results);
   if (interaction.type === 'word_cloud') return renderWordCloud_(slide, results);
   if (interaction.type === 'qa') return renderQa_(slide, results);
+  if (interaction.type === 'feedback' && interaction.config && interaction.config.poll_kind === 'rating') return renderRating_(slide, results);
   return renderOpenText_(slide, Array.isArray(results) ? results : (results.text_responses || []));
 }
 
@@ -299,6 +342,10 @@ function renderPoll_(slide, interaction, results) {
   var rows = results.length ? results : (interaction.interaction_options || []).map(function (option) {
     return { option_text: option.option_text, percentage: 0, count: 0 };
   });
+  if (!rows.length) {
+    waiting_(slide);
+    return;
+  }
   for (var i = 0; i < Math.min(rows.length, 6); i++) {
     var row = rows[i];
     text_(slide, row.option_text || row.label || 'Option', 260, 170 + i * 48, 300, 24, 14, true, '#17172F');
@@ -309,7 +356,7 @@ function renderPoll_(slide, interaction, results) {
 
 function renderWordCloud_(slide, results) {
   if (!results.length) {
-    text_(slide, 'Live responses will appear here', 270, 250, 360, 32, 20, true, '#A3AEA8', SlidesApp.ParagraphAlignment.CENTER);
+    waiting_(slide);
     return;
   }
   var colors = ['#168A3A', '#1A6BB5', '#D46B08', '#8B1A4A', '#7C3AED', '#0F766E'];
@@ -323,8 +370,7 @@ function renderWordCloud_(slide, results) {
 
 function renderQa_(slide, questions) {
   if (!questions.length) {
-    text_(slide, 'Ask your question', 270, 225, 360, 34, 24, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
-    text_(slide, 'Live questions will appear here', 270, 268, 360, 28, 15, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
+    waiting_(slide);
     return;
   }
   for (var i = 0; i < Math.min(questions.length, 5); i++) {
@@ -336,13 +382,32 @@ function renderQa_(slide, questions) {
 
 function renderOpenText_(slide, items) {
   if (!items.length) {
-    text_(slide, 'Live responses will appear here', 270, 250, 360, 32, 20, true, '#A3AEA8', SlidesApp.ParagraphAlignment.CENTER);
+    waiting_(slide);
     return;
   }
   for (var i = 0; i < Math.min(items.length, 5); i++) {
     rounded_(slide, 255, 165 + i * 52, 385, 40, '#F4F7F4', '#DDEBE3');
     text_(slide, items[i].text || items[i].text_value || JSON.stringify(items[i]), 270, 176 + i * 52, 340, 20, 12, true, '#17172F');
   }
+}
+
+function renderRating_(slide, results) {
+  var average = Number(results && results.average_rating ? results.average_rating : 0);
+  var count = Number(results && results.rating_count ? results.rating_count : 0);
+  if (!count) {
+    waiting_(slide);
+    return;
+  }
+
+  text_(slide, String(average.toFixed ? average.toFixed(1) : average), 300, 185, 170, 80, 54, true, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, 'average rating', 320, 262, 130, 22, 13, true, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, count + ' response' + (count === 1 ? '' : 's'), 475, 222, 150, 30, 20, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
+  bar_(slide, 310, 315, 270, 14, Math.min(100, average / 5 * 100), '#168A3A');
+}
+
+function waiting_(slide) {
+  text_(slide, 'Waiting for responses…', 270, 240, 360, 34, 22, true, '#A3AEA8', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, 'Results will show here once your audience responds.', 275, 282, 350, 28, 13, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
 }
 
 function findInteraction_(eventId, interactionId) {
@@ -359,6 +424,25 @@ function getResults_(interaction) {
     return { results: qa.questions || [], total_responses: (qa.questions || []).length };
   }
   return apiFetch_('/api/results?interaction_id=' + encodeURIComponent(interaction.id), { method: 'get' });
+}
+
+function qrBlobForCode_(code) {
+  var cache = CacheService.getScriptCache();
+  var cacheKey = QR_CACHE_PREFIX + code;
+  var cached = cache.get(cacheKey);
+  if (cached) {
+    return Utilities.newBlob(Utilities.base64Decode(cached), 'image/png', 'slideengage-qr.png');
+  }
+
+  var response = UrlFetchApp.fetch(SLIDEENGAGE_URL + '/api/qrcode?code=' + encodeURIComponent(code) + '&format=png', {
+    method: 'get',
+    muteHttpExceptions: true,
+  });
+  if (response.getResponseCode() >= 400) throw new Error('QR code unavailable.');
+
+  var blob = response.getBlob().setName('slideengage-qr.png');
+  cache.put(cacheKey, Utilities.base64Encode(blob.getBytes()), 21600);
+  return blob;
 }
 
 function listEvents_() {
