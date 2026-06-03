@@ -243,13 +243,14 @@ export default function LecturerEventsPage() {
 
   function openActionPopup(event: EventRow, anchor: HTMLButtonElement) {
     const rect = anchor.getBoundingClientRect();
-    const width = 360;
+    const width = 340;
     const viewportPadding = 18;
+    const popupHeight = Math.min(420, window.innerHeight - 120);
     const left = Math.max(
       viewportPadding,
       Math.min(rect.right - width, window.innerWidth - width - viewportPadding)
     );
-    const top = Math.min(rect.bottom + 10, Math.max(viewportPadding, window.innerHeight - 470));
+    const top = Math.min(rect.bottom + 8, Math.max(viewportPadding, window.innerHeight - popupHeight - viewportPadding));
     setSelectedEvent(event);
     setPopupPosition({ top, left });
     setDialog(null);
@@ -909,32 +910,27 @@ function EventActionPopup({
   return (
     <aside
       data-event-action-popup
-      className="fixed z-50 w-[min(360px,calc(100vw-32px))] overflow-hidden rounded-[16px] border border-[#E4EAE6] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.16)]"
+      className="fixed z-50 max-h-[calc(100vh-120px)] w-[min(340px,calc(100vw-32px))] overflow-y-auto rounded-[15px] border border-[#E4EAE6] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.16)]"
       style={{ top: position.top, left: position.left }}
     >
-      <div className="space-y-4 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-2.5 text-sm font-semibold text-[#4B5563]">
-            <h2 className="truncate text-lg font-black text-[#1A1A2E]">{event.event_name}</h2>
-            <div className="flex items-center gap-2">
-              <span className="text-base" aria-hidden="true">📅</span>
-              <span>{formatDateRange(event)}</span>
+      <div className="space-y-3 p-3">
+        <div className="flex items-start justify-between gap-3 rounded-[12px] bg-[#FAFCFA] px-3 py-2.5">
+          <div className="min-w-0 flex-1 text-xs font-semibold text-[#5F6B7A]">
+            <div className="mb-2 flex items-center gap-2">
+              <h2 className="min-w-0 flex-1 truncate text-base font-black text-[#1A1A2E]">{event.event_name}</h2>
+              <span className="shrink-0 rounded-full bg-[#EAF7EF] px-2 py-0.5 text-[11px] font-black text-[#168A3A]">
+                {statusLabel(event)}
+              </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-base" aria-hidden="true">♙</span>
-              <span className="truncate">{owner}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-base font-black" aria-hidden="true">#</span>
-              <span>{event.event_code}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#168A3A]" aria-hidden="true" />
-              <span>{statusLabel(event)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-base" aria-hidden="true">↻</span>
-              <span>{relativeTime(event.updated_at || event.created_at)}</span>
+            <div className="grid gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate">📅 {formatDateRange(event)}</span>
+                <span className="shrink-0">↻ {relativeTime(event.updated_at || event.created_at)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate">♙ {owner}</span>
+                <span className="shrink-0 font-black text-[#1A1A2E]">#{event.event_code}</span>
+              </div>
             </div>
           </div>
           <SETooltip text="Close actions">
@@ -942,7 +938,7 @@ function EventActionPopup({
           </SETooltip>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           <ActionCard
             title="View results"
             description="See poll results, engagement and analysis of your event."
@@ -960,19 +956,19 @@ function EventActionPopup({
             onClick={onDuplicate}
           />
         </div>
+      </div>
 
-        <div className="grid grid-cols-2 overflow-hidden rounded-[12px] bg-[#F4F4F4]">
-          <SETooltip text="Transfer ownership to another member" className="flex-1">
-            <button onClick={onTransfer} aria-label="Transfer ownership to another member" className="w-full px-3 py-2.5 text-sm font-extrabold text-[#5B6470] hover:bg-[#EAF7EF] hover:text-[#168A3A]">
-              ↔ Transfer
-            </button>
-          </SETooltip>
-          <SETooltip text="Permanently delete this event" className="flex-1">
-            <button onClick={onDelete} aria-label="Permanently delete this event" className="w-full border-l border-white px-3 py-2.5 text-sm font-extrabold text-red-600 hover:bg-red-50">
-              🗑 Delete
-            </button>
-          </SETooltip>
-        </div>
+      <div className="sticky bottom-0 grid grid-cols-2 overflow-hidden border-t border-[#E4EAE6] bg-white/95 p-3 pt-2 backdrop-blur">
+        <SETooltip text="Transfer ownership to another member" className="flex-1">
+          <button onClick={onTransfer} aria-label="Transfer ownership to another member" className="w-full rounded-l-[11px] bg-[#F4F4F4] px-3 py-2 text-xs font-extrabold text-[#5B6470] hover:bg-[#EAF7EF] hover:text-[#168A3A]">
+            ↔ Transfer
+          </button>
+        </SETooltip>
+        <SETooltip text="Permanently delete this event" className="flex-1">
+          <button onClick={onDelete} aria-label="Permanently delete this event" className="w-full rounded-r-[11px] border-l border-white bg-[#F4F4F4] px-3 py-2 text-xs font-extrabold text-red-600 hover:bg-red-50">
+            🗑 Delete
+          </button>
+        </SETooltip>
       </div>
     </aside>
   );
@@ -1004,11 +1000,11 @@ function ActionCard({
 }) {
   return (
     <SETooltip text={tooltip} className="w-full">
-      <button aria-label={tooltip} onClick={onClick} className="flex w-full overflow-hidden rounded-[14px] border border-[#DDE8E1] bg-white text-left transition hover:border-[#168A3A] hover:shadow-sm">
-        <span className={`grid w-[76px] shrink-0 place-items-center text-2xl ${iconClassName}`}>{icon}</span>
-        <span className="px-3.5 py-3.5">
-          <span className="block text-sm font-extrabold text-[#1A1A2E]">{title}</span>
-          <span className="mt-1 block text-sm font-semibold text-[#6B7B8D]">{description}</span>
+      <button aria-label={tooltip} onClick={onClick} className="flex w-full overflow-hidden rounded-[12px] border border-[#DDE8E1] bg-white text-left transition hover:border-[#168A3A] hover:shadow-sm">
+        <span className={`grid w-[56px] shrink-0 place-items-center text-xl ${iconClassName}`}>{icon}</span>
+        <span className="px-3 py-2.5">
+          <span className="block text-base font-extrabold leading-tight text-[#1A1A2E]">{title}</span>
+          <span className="mt-0.5 block text-[13px] font-semibold leading-snug text-[#6B7B8D]">{description}</span>
         </span>
       </button>
     </SETooltip>
