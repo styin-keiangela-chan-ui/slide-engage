@@ -13,6 +13,14 @@ type TabKey = 'all' | 'active' | 'past';
 type OwnerFilter = 'all' | 'mine' | 'organization';
 type DialogMode = 'create' | 'transfer' | 'duplicate' | 'delete' | 'bulk-delete' | null;
 type PopupPosition = { top: number; left: number } | null;
+type StatusMenuState = { event: EventRow; top: number; left: number } | null;
+type ConfirmAction = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  destructive?: boolean;
+  run: () => Promise<void>;
+} | null;
 
 type EventRow = Event & {
   lecturers?: {
@@ -97,14 +105,44 @@ function isActiveOrUpcoming(event: EventRow) {
 }
 
 function isPastEvent(event: EventRow) {
-  return event.status !== 'archived' && !isActiveOrUpcoming(event);
+  return event.status !== 'archived' && event.status !== 'live' && hasEnded(event);
 }
 
 function statusLabel(event: EventRow) {
+  if (isPastEvent(event)) return 'Past';
+  if (event.status === 'draft') return 'Draft';
   if (event.status === 'live') return 'Active';
   if (event.status === 'archived') return 'Archived';
-  if (isActiveOrUpcoming(event)) return 'Upcoming';
-  return 'Past';
+  return 'Closed';
+}
+
+function hasEnded(event: EventRow) {
+  const end = event.end_date || event.start_date;
+  return Boolean(end && end < todayIso());
+}
+
+function statusTooltip(event: EventRow) {
+  const label = statusLabel(event);
+  if (label === 'Draft') return 'Event has not started yet';
+  if (label === 'Active') return 'Currently accepting responses';
+  if (label === 'Closed') return 'Responses are disabled';
+  return 'Event has ended';
+}
+
+function statusPillClass(event: EventRow) {
+  const label = statusLabel(event);
+  if (label === 'Draft') return 'bg-[#F3F4F6] text-[#5B6470]';
+  if (label === 'Active') return 'bg-[#EAF7EF] text-[#168A3A]';
+  if (label === 'Closed') return 'bg-[#FFF3E2] text-[#B85B00]';
+  return 'bg-[#F6F7F8] text-[#8A96A3]';
+}
+
+function statusDotClass(event: EventRow) {
+  const label = statusLabel(event);
+  if (label === 'Draft') return 'bg-[#9AA6B2]';
+  if (label === 'Active') return 'bg-[#168A3A]';
+  if (label === 'Closed') return 'bg-[#E18B24]';
+  return 'bg-[#C7CDD4]';
 }
 
 export default function LecturerEventsPage() {
@@ -118,6 +156,8 @@ export default function LecturerEventsPage() {
   const [selectedEvent, setSelectedEvent] = useState<EventRow | null>(null);
   const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
   const [popupPosition, setPopupPosition] = useState<PopupPosition>(null);
+  const [statusMenu, setStatusMenu] = useState<StatusMenuState>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [eventName, setEventName] = useState('');
   const [startDate, setStartDate] = useState(todayIso());
   const [endDate, setEndDate] = useState(addDaysIso(2));
@@ -143,19 +183,22 @@ export default function LecturerEventsPage() {
   }, [events]);
 
   useEffect(() => {
-    if (!selectedEvent || dialog || !popupPosition) return;
+    if (dialog || (!popupPosition && !statusMenu)) return;
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target as HTMLElement | null;
       if (target?.closest('[data-event-action-popup]')) return;
+      if (target?.closest('[data-event-status-menu]')) return;
       setSelectedEvent(null);
       setPopupPosition(null);
+      setStatusMenu(null);
     }
 
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         setSelectedEvent(null);
         setPopupPosition(null);
+        setStatusMenu(null);
       }
     }
 
@@ -165,7 +208,7 @@ export default function LecturerEventsPage() {
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('keydown', handleEscape);
     };
-  }, [dialog, popupPosition, selectedEvent]);
+  }, [dialog, popupPosition, statusMenu]);
 
   useEffect(() => {
     if (dialog !== 'transfer') return;
@@ -266,6 +309,23 @@ export default function LecturerEventsPage() {
     const top = Math.min(rect.bottom + 8, Math.max(viewportPadding, window.innerHeight - popupHeight - viewportPadding));
     setSelectedEvent(event);
     setPopupPosition({ top, left });
+    setDialog(null);
+    setError('');
+  }
+
+  function openStatusMenu(event: EventRow, anchor: HTMLButtonElement) {
+    if (statusLabel(event) === 'Past') return;
+    const rect = anchor.getBoundingClientRect();
+    const width = 180;
+    const viewportPadding = 18;
+    const left = Math.max(
+      viewportPadding,
+      Math.min(rect.left, window.innerWidth - width - viewportPadding)
+    );
+    const top = Math.min(rect.bottom + 8, window.innerHeight - 220);
+    setStatusMenu({ event, top: Math.max(viewportPadding, top), left });
+    setSelectedEvent(null);
+    setPopupPosition(null);
     setDialog(null);
     setError('');
   }
@@ -419,6 +479,88 @@ export default function LecturerEventsPage() {
     setMessage(`${results.length} ${results.length === 1 ? 'event' : 'events'} deleted.`);
   }
 
+  async function patchEventStatus(id: string, status: Event['status']) {
+    const res = await fetch('/api/events', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Unable to update event status.');
+    setEvents(prev => prev.map(event => event.id === id ? data.event : event));
+    if (currentEvent?.id === id) selectEvent(data.event);
+    return data.event as EventRow;
+  }
+
+  async function patchSelectedEventStatuses(status: Event['status']) {
+    const editableIds = selectedEventIds.filter(id => {
+      const event = events.find(item => item.id === id);
+      return event && !isPastEvent(event);
+    });
+
+    for (const id of editableIds) {
+      await patchEventStatus(id, status);
+    }
+    setSelectedEventIds([]);
+    return editableIds.length;
+  }
+
+  async function resetEventResults(eventId: string) {
+    const interactionsRes = await fetch(`/api/interactions?event_id=${eventId}`, { cache: 'no-store' });
+    const interactionsData = await interactionsRes.json();
+    if (!interactionsRes.ok) throw new Error(interactionsData.error || 'Unable to load event interactions.');
+
+    const interactions = interactionsData.interactions || [];
+    for (const interaction of interactions) {
+      const res = await fetch(`/api/responses?interaction_id=${interaction.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unable to reset event results.');
+    }
+  }
+
+  function confirmStatusChange(event: EventRow, status: Event['status'], title: string, description: string, confirmLabel: string) {
+    setStatusMenu(null);
+    setConfirmAction({
+      title,
+      description,
+      confirmLabel,
+      run: async () => {
+        const updated = await patchEventStatus(event.id, status);
+        setMessage(`${updated.event_name} is now ${statusLabel(updated).toLowerCase()}.`);
+      },
+    });
+  }
+
+  function confirmBulkStatus(status: Event['status'], title: string, description: string, confirmLabel: string) {
+    if (selectedEventIds.length === 0) return;
+    setConfirmAction({
+      title,
+      description,
+      confirmLabel,
+      run: async () => {
+        const updatedCount = await patchSelectedEventStatuses(status);
+        setMessage(updatedCount === 0
+          ? 'Past events are read-only. No events were updated.'
+          : `${updatedCount} ${updatedCount === 1 ? 'event' : 'events'} updated.`
+        );
+      },
+    });
+  }
+
+  async function runConfirmedAction() {
+    if (!confirmAction) return;
+    setSaving(true);
+    setError('');
+    try {
+      await confirmAction.run();
+      setConfirmAction(null);
+    } catch (eventError: any) {
+      setError(eventError.message || 'Unable to complete this action.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const counts = useMemo(() => {
     const rows = events.filter(event => event.status !== 'archived');
     return {
@@ -558,6 +700,36 @@ export default function LecturerEventsPage() {
                   )}
                 </div>
                 <div className="flex items-center justify-end gap-2">
+                  <SETooltip text="Make selected events live">
+                    <button
+                      type="button"
+                      onClick={() => confirmBulkStatus(
+                        'live',
+                        'Make selected events live?',
+                        'Are you sure you want to make the selected events live?',
+                        'Go Live'
+                      )}
+                      aria-label="Make selected events live"
+                      className="rounded-[10px] border border-[#CFE4D5] bg-white px-4 py-2 text-sm font-extrabold text-[#168A3A] transition hover:bg-[#ECF8F0]"
+                    >
+                      Go Live
+                    </button>
+                  </SETooltip>
+                  <SETooltip text="Close selected events">
+                    <button
+                      type="button"
+                      onClick={() => confirmBulkStatus(
+                        'closed',
+                        'Close selected events?',
+                        'Close the selected events and stop accepting responses?',
+                        'Close'
+                      )}
+                      aria-label="Close selected events"
+                      className="rounded-[10px] border border-[#F3D5B0] bg-white px-4 py-2 text-sm font-extrabold text-[#B85B00] transition hover:bg-[#FFF3E2]"
+                    >
+                      Close
+                    </button>
+                  </SETooltip>
                   <SETooltip text="Delete selected events">
                     <button
                       type="button"
@@ -643,10 +815,21 @@ export default function LecturerEventsPage() {
                         <div className="mt-1 text-sm font-semibold text-[#6B7B8D]">{formatDateRange(event)}</div>
                       </button>
                       <div className="text-sm font-bold text-[#6B7B8D]">
-                        <div className="flex items-center gap-2">
-                          <span className={`h-2.5 w-2.5 rounded-full ${event.status === 'live' ? 'bg-[#168A3A]' : 'bg-[#A8B1BA]'}`} />
-                          <span>{statusLabel(event)}</span>
-                        </div>
+                        <SETooltip text={statusTooltip(event)}>
+                          <button
+                            type="button"
+                            onClick={clickEvent => openStatusMenu(event, clickEvent.currentTarget)}
+                            disabled={statusLabel(event) === 'Past'}
+                            aria-label={statusTooltip(event)}
+                            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold transition ${statusPillClass(event)} ${
+                              statusLabel(event) === 'Past' ? 'cursor-default opacity-80' : 'hover:shadow-sm'
+                            }`}
+                          >
+                            <span className={`h-2 w-2 rounded-full ${statusDotClass(event)}`} />
+                            {statusLabel(event)}
+                            {statusLabel(event) !== 'Past' && <span className="text-[10px]">⌄</span>}
+                          </button>
+                        </SETooltip>
                         <div className="mt-1 text-xs font-semibold text-[#9AA6B2]">{relativeTime(event.updated_at || event.created_at)}</div>
                       </div>
                       <div className="flex items-center justify-end gap-3">
@@ -704,6 +887,59 @@ export default function LecturerEventsPage() {
           onDuplicate={() => openDuplicateDialog(selectedEvent)}
           onTransfer={() => openTransferDialog(selectedEvent)}
           onDelete={() => openDeleteDialog(selectedEvent)}
+        />
+      )}
+
+      {statusMenu && !dialog && (
+        <StatusDropdown
+          event={statusMenu.event}
+          position={{ top: statusMenu.top, left: statusMenu.left }}
+          onGoLive={() => confirmStatusChange(
+            statusMenu.event,
+            'live',
+            'Make event live?',
+            'Are you sure you want to make this event live?',
+            'Go Live'
+          )}
+          onCloseEvent={() => confirmStatusChange(
+            statusMenu.event,
+            'closed',
+            'Close event?',
+            'Close this event and stop accepting responses?',
+            'Close Event'
+          )}
+          onReopen={() => confirmStatusChange(
+            statusMenu.event,
+            'live',
+            'Reopen event?',
+            'Reopen this event and allow responses again?',
+            'Reopen Event'
+          )}
+          onDeleteDraft={() => {
+            setStatusMenu(null);
+            openDeleteDialog(statusMenu.event);
+          }}
+          onArchive={() => confirmStatusChange(
+            statusMenu.event,
+            'archived',
+            'Archive event?',
+            'Archive this event and move it out of active and past lists?',
+            'Archive Event'
+          )}
+          onResetResults={() => {
+            const target = statusMenu.event;
+            setStatusMenu(null);
+            setConfirmAction({
+              title: 'Reset event results?',
+              description: 'Reset all submitted responses and questions for this event? Interactions and settings will remain.',
+              confirmLabel: 'Reset Results',
+              destructive: true,
+              run: async () => {
+                await resetEventResults(target.id);
+                setMessage('Results cleared successfully.');
+              },
+            });
+          }}
         />
       )}
 
@@ -778,6 +1014,19 @@ export default function LecturerEventsPage() {
           description="This will permanently delete the selected events and their interactions. This action cannot be undone."
           onCancel={() => setDialog(null)}
           onSubmit={permanentlyDeleteSelectedEvents}
+          error={error}
+        />
+      )}
+
+      {confirmAction && (
+        <ConfirmModal
+          saving={saving}
+          title={confirmAction.title}
+          description={confirmAction.description}
+          confirmLabel={confirmAction.confirmLabel}
+          destructive={confirmAction.destructive}
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={runConfirmedAction}
           error={error}
         />
       )}
@@ -998,6 +1247,109 @@ function TransferModal({
         </button>
       </div>
     </ModalShell>
+  );
+}
+
+function ConfirmModal({
+  saving,
+  title,
+  description,
+  confirmLabel,
+  destructive,
+  onCancel,
+  onConfirm,
+  error,
+}: {
+  saving: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  destructive?: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  error?: string;
+}) {
+  return (
+    <ModalShell>
+      <h2 className="mb-3 text-xl font-extrabold text-[#1A1A2E]">{title}</h2>
+      <p className="mb-6 text-sm font-semibold text-[#6B7B8D]">{description}</p>
+      {error && (
+        <div className="mb-5 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+          {error}
+        </div>
+      )}
+      <div className="flex justify-end gap-3">
+        <button onClick={onCancel} className="rounded-[10px] px-5 py-2.5 text-sm font-bold text-[#6B7B8D] hover:bg-[#F3F4F6]">Cancel</button>
+        <button
+          onClick={onConfirm}
+          disabled={saving}
+          className={`rounded-[10px] px-5 py-2.5 text-sm font-extrabold text-white disabled:opacity-60 ${
+            destructive ? 'bg-red-600 hover:bg-red-700' : 'bg-[#168A3A] hover:bg-[#0F6F2D]'
+          }`}
+        >
+          {saving ? 'Saving...' : confirmLabel}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function StatusDropdown({
+  event,
+  position,
+  onGoLive,
+  onCloseEvent,
+  onReopen,
+  onDeleteDraft,
+  onArchive,
+  onResetResults,
+}: {
+  event: EventRow;
+  position: { top: number; left: number };
+  onGoLive: () => void;
+  onCloseEvent: () => void;
+  onReopen: () => void;
+  onDeleteDraft: () => void;
+  onArchive: () => void;
+  onResetResults: () => void;
+}) {
+  const label = statusLabel(event);
+  const actions = label === 'Draft'
+    ? [
+      { label: 'Go Live', onClick: onGoLive, className: 'text-[#168A3A]' },
+      { label: 'Delete Draft', onClick: onDeleteDraft, className: 'text-red-600' },
+    ]
+    : label === 'Active'
+      ? [
+        { label: 'Close Event', onClick: onCloseEvent, className: 'text-[#B85B00]' },
+        { label: 'Reset Results', onClick: onResetResults, className: 'text-red-600' },
+      ]
+      : label === 'Closed'
+        ? [
+          { label: 'Reopen Event', onClick: onReopen, className: 'text-[#168A3A]' },
+          { label: 'Archive Event', onClick: onArchive, className: 'text-[#5B6470]' },
+        ]
+        : [];
+
+  if (actions.length === 0) return null;
+
+  return (
+    <div
+      data-event-status-menu
+      className="fixed z-50 w-[180px] overflow-hidden rounded-[12px] border border-[#E4EAE6] bg-white py-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.16)]"
+      style={{ top: position.top, left: position.left }}
+    >
+      {actions.map(action => (
+        <button
+          key={action.label}
+          type="button"
+          onClick={action.onClick}
+          className={`block w-full px-3.5 py-2.5 text-left text-sm font-extrabold transition hover:bg-[#F7FAF8] ${action.className}`}
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
   );
 }
 

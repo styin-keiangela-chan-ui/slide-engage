@@ -285,10 +285,6 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Event id required' }, { status: 400 });
     }
 
-    if (updates.status === 'draft') {
-      updates.status = 'closed';
-    }
-
     if (transfer_email) {
       const normalizedEmail = String(transfer_email).trim().toLowerCase();
       const { data: newOwner, error: ownerError } = await supabase
@@ -302,41 +298,6 @@ export async function PATCH(req: NextRequest) {
       }
 
       updates.lecturer_id = newOwner.id;
-    }
-
-    if (updates.status === 'live') {
-      const { data: targetEvent, error: targetError } = await supabase
-        .from('events')
-        .select('lecturer_id, status')
-        .eq('id', id)
-        .single();
-
-      if (targetError || !targetEvent) {
-        return NextResponse.json({ error: 'Event not found' }, { status: 404 });
-      }
-
-      if (targetEvent.status === 'archived') {
-        return NextResponse.json({ error: 'Restore this event before making it active.' }, { status: 409 });
-      }
-
-      const { data: activeEvent, error: activeError } = await supabase
-        .from('events')
-        .select('id')
-        .eq('lecturer_id', targetEvent.lecturer_id)
-        .eq('status', 'live')
-        .neq('id', id)
-        .maybeSingle();
-
-      if (activeError) {
-        return NextResponse.json({ error: activeError.message }, { status: 500 });
-      }
-
-      if (activeEvent) {
-        return NextResponse.json(
-          { error: 'You already have an active event. Please close or archive it first.' },
-          { status: 409 }
-        );
-      }
     }
 
     const { data, error } = await supabase
