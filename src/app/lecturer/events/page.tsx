@@ -516,9 +516,10 @@ export default function LecturerEventsPage() {
   async function permanentlyDeleteEvent() {
     if (!selectedEvent) return;
 
+    const deletedEventId = selectedEvent.id;
     setSaving(true);
     setError('');
-    const res = await fetch(`/api/events?id=${selectedEvent.id}&permanent=true`, { method: 'DELETE' });
+    const res = await fetch(`/api/events?id=${deletedEventId}&permanent=true`, { method: 'DELETE' });
     const data = await res.json();
     setSaving(false);
 
@@ -527,11 +528,12 @@ export default function LecturerEventsPage() {
       return;
     }
 
-    setEvents(prev => prev.filter(item => item.id !== selectedEvent.id));
-    if (currentEvent?.id === selectedEvent.id) clearSelectedEvent();
+    setEvents(prev => prev.filter(item => item.id !== deletedEventId));
+    if (currentEvent?.id === deletedEventId) clearSelectedEvent();
     setDialog(null);
     setSelectedEvent(null);
     setPopupPosition(null);
+    await fetchEvents();
     setMessage('Event permanently deleted.');
   }
 
@@ -559,6 +561,7 @@ export default function LecturerEventsPage() {
     if (currentEvent && selectedEventIds.includes(currentEvent.id)) clearSelectedEvent();
     setSelectedEventIds([]);
     setDialog(null);
+    await fetchEvents();
     setMessage(`${results.length} ${results.length === 1 ? 'event' : 'events'} permanently deleted.`);
   }
 
@@ -1220,7 +1223,7 @@ export default function LecturerEventsPage() {
           saving={saving}
           eventName={selectedEvent.event_name}
           title="Delete permanently?"
-          description="This will permanently delete the event and cannot be undone."
+          description="This will permanently delete the event forever. This action cannot be undone."
           confirmLabel="Delete permanently"
           onCancel={() => setDialog(null)}
           onSubmit={permanentlyDeleteEvent}
@@ -1233,7 +1236,7 @@ export default function LecturerEventsPage() {
           saving={saving}
           eventName={`${selectedVisibleCount} ${selectedVisibleCount === 1 ? 'event' : 'events'}`}
           title="Delete selected events permanently?"
-          description="This will permanently delete the selected archived events and cannot be undone."
+          description="This will permanently delete the selected events forever. This action cannot be undone."
           confirmLabel="Delete permanently"
           onCancel={() => setDialog(null)}
           onSubmit={permanentlyDeleteSelectedEvents}

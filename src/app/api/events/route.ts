@@ -1,9 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  supabaseUrl,
+  supabaseAnonKey
+);
+
+const supabaseAdmin = createClient(
+  supabaseUrl,
+  supabaseServiceRoleKey || supabaseAnonKey,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
 );
 
 function safeLecturer(lecturer: any) {
@@ -49,6 +64,105 @@ async function uniqueEventCode(preferredCode?: string) {
   }
 
   return `${Date.now()}`.slice(-6).toUpperCase();
+}
+
+async function permanentlyDeleteEventById(id: string) {
+  if (!supabaseServiceRoleKey) {
+    throw new Error('Permanent delete requires SUPABASE_SERVICE_ROLE_KEY on the server.');
+  }
+
+  const { data: event, error: eventLookupError } = await supabaseAdmin
+    .from('events')
+    .select('id')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (eventLookupError) throw new Error(eventLookupError.message);
+  if (!event) {
+    return {
+      success: true,
+      deleted: true,
+      already_deleted: true,
+      event_id: id,
+      related_deleted: {
+        interactions: 0,
+        interaction_options: 0,
+        responses: 0,
+        qa_questions: 0,
+        qa_upvotes: 0,
+        participants: 0,
+        event_collaborators: 0,
+      },
+    };
+  }
+
+  const { data: interactions, error: interactionLookupError } = await supabaseAdmin
+    .from('interactions')
+    .select('id')
+    .eq('event_id', id);
+
+  if (interactionLookupError) throw new Error(interactionLookupError.message);
+  const interactionIds = (interactions || []).map(interaction => interaction.id);
+  const relatedDeleted = {
+    interactions: interactionIds.length,
+    interaction_options: 0,
+    responses: 0,
+    qa_questions: 0,
+    qa_upvotes: 0,
+    participants: 0,
+    event_collaborators: 0,
+  };
+
+  async function deleteRows(table: string, column: string, value: string | string[]) {
+    const query = supabaseAdmin.from(table).delete().select('id');
+    const { data, error } = Array.isArray(value)
+      ? await query.in(column, value)
+      : await query.eq(column, value);
+
+    if (error) throw new Error(error.message);
+    return data?.length || 0;
+  }
+
+  if (interactionIds.length > 0) {
+    const { data: questions, error: questionLookupError } = await supabaseAdmin
+      .from('qa_questions')
+      .select('id')
+      .in('interaction_id', interactionIds);
+
+    if (questionLookupError) throw new Error(questionLookupError.message);
+    const questionIds = (questions || []).map(question => question.id);
+
+    if (questionIds.length > 0) {
+      relatedDeleted.qa_upvotes = await deleteRows('qa_upvotes', 'question_id', questionIds);
+    }
+
+    relatedDeleted.qa_questions = await deleteRows('qa_questions', 'interaction_id', interactionIds);
+    relatedDeleted.responses = await deleteRows('responses', 'interaction_id', interactionIds);
+    relatedDeleted.interaction_options = await deleteRows('interaction_options', 'interaction_id', interactionIds);
+  }
+
+  relatedDeleted.event_collaborators = await deleteRows('event_collaborators', 'event_id', id);
+  relatedDeleted.participants = await deleteRows('participants', 'event_id', id);
+  await deleteRows('interactions', 'event_id', id);
+
+  const { data: deletedRows, error: eventDeleteError } = await supabaseAdmin
+    .from('events')
+    .delete()
+    .eq('id', id)
+    .select('id');
+
+  if (eventDeleteError) throw new Error(eventDeleteError.message);
+
+  if (!deletedRows || deletedRows.length === 0) {
+    throw new Error('Permanent delete did not remove the event. Check SUPABASE_SERVICE_ROLE_KEY and event delete permissions.');
+  }
+
+  return {
+    success: true,
+    deleted: true,
+    event_id: id,
+    related_deleted: relatedDeleted,
+  };
 }
 
 // GET /api/events — list events for a lecturer
@@ -338,13 +452,12 @@ export async function DELETE(req: NextRequest) {
   }
 
   if (permanent) {
-    const { error } = await supabase
-      .from('events')
-      .delete()
-      .eq('id', id);
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ success: true, deleted: true });
+    try {
+      const result = await permanentlyDeleteEventById(id);
+      return NextResponse.json(result);
+    } catch (error: any) {
+      return NextResponse.json({ error: error.message || 'Unable to permanently delete event.' }, { status: 500 });
+    }
   }
 
   const { error } = await supabase
