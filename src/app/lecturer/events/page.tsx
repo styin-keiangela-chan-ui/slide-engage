@@ -11,7 +11,7 @@ import type { Event } from '@/lib/types';
 
 type TabKey = 'all' | 'active' | 'past';
 type OwnerFilter = 'all' | 'mine' | 'organization';
-type DialogMode = 'create' | 'transfer' | 'duplicate' | 'delete' | null;
+type DialogMode = 'create' | 'transfer' | 'duplicate' | 'delete' | 'bulk-delete' | null;
 type PopupPosition = { top: number; left: number } | null;
 
 type EventRow = Event & {
@@ -116,6 +116,7 @@ export default function LecturerEventsPage() {
   const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all');
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [selectedEvent, setSelectedEvent] = useState<EventRow | null>(null);
+  const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
   const [popupPosition, setPopupPosition] = useState<PopupPosition>(null);
   const [eventName, setEventName] = useState('');
   const [startDate, setStartDate] = useState(todayIso());
@@ -136,6 +137,10 @@ export default function LecturerEventsPage() {
     if (!lecturer) return;
     fetchEvents();
   }, [lecturer]);
+
+  useEffect(() => {
+    setSelectedEventIds(prev => prev.filter(id => events.some(event => event.id === id && event.status !== 'archived')));
+  }, [events]);
 
   useEffect(() => {
     if (!selectedEvent || dialog || !popupPosition) return;
@@ -239,6 +244,14 @@ export default function LecturerEventsPage() {
     setPopupPosition(null);
     setError('');
     setDialog('delete');
+  }
+
+  function openBulkDeleteDialog() {
+    if (selectedEventIds.length === 0) return;
+    setSelectedEvent(null);
+    setPopupPosition(null);
+    setError('');
+    setDialog('bulk-delete');
   }
 
   function openActionPopup(event: EventRow, anchor: HTMLButtonElement) {
@@ -379,6 +392,33 @@ export default function LecturerEventsPage() {
     setMessage('Event deleted.');
   }
 
+  async function permanentlyDeleteSelectedEvents() {
+    if (selectedEventIds.length === 0) return;
+
+    setSaving(true);
+    setError('');
+    const results = await Promise.all(
+      selectedEventIds.map(async id => {
+        const res = await fetch(`/api/events?id=${id}&permanent=true`, { method: 'DELETE' });
+        const data = await res.json();
+        return { id, ok: res.ok, error: data.error as string | undefined };
+      })
+    );
+    setSaving(false);
+
+    const failed = results.find(result => !result.ok);
+    if (failed) {
+      setError(failed.error || 'Unable to delete selected events.');
+      return;
+    }
+
+    setEvents(prev => prev.filter(item => !selectedEventIds.includes(item.id)));
+    if (currentEvent && selectedEventIds.includes(currentEvent.id)) clearSelectedEvent();
+    setSelectedEventIds([]);
+    setDialog(null);
+    setMessage(`${results.length} ${results.length === 1 ? 'event' : 'events'} deleted.`);
+  }
+
   const counts = useMemo(() => {
     const rows = events.filter(event => event.status !== 'archived');
     return {
@@ -400,6 +440,28 @@ export default function LecturerEventsPage() {
       return matchesTab && matchesSearch && matchesOwner;
     });
   }, [activeTab, events, lecturer?.email, lecturer?.id, lecturer?.name, ownerFilter, query]);
+
+  const visibleEventIds = useMemo(() => visibleEvents.map(event => event.id), [visibleEvents]);
+  const selectedVisibleCount = selectedEventIds.filter(id => visibleEventIds.includes(id)).length;
+  const allVisibleSelected = visibleEvents.length > 0 && selectedVisibleCount === visibleEvents.length;
+  const hasPartialSelection = selectedVisibleCount > 0 && !allVisibleSelected;
+
+  function toggleEventSelection(id: string) {
+    setSelectedEventIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  }
+
+  function toggleAllVisibleEvents() {
+    if (allVisibleSelected) {
+      setSelectedEventIds(prev => prev.filter(id => !visibleEventIds.includes(id)));
+      return;
+    }
+
+    setSelectedEventIds(prev => Array.from(new Set([...prev, ...visibleEventIds])));
+  }
+
+  function selectAllVisibleEvents() {
+    setSelectedEventIds(prev => Array.from(new Set([...prev, ...visibleEventIds])));
+  }
 
   if (authLoading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
   if (!lecturer) return null;
@@ -479,10 +541,60 @@ export default function LecturerEventsPage() {
               </SETooltip>
             </div>
 
+            {selectedVisibleCount > 0 && (
+              <div className="mb-3 flex flex-col gap-3 rounded-[14px] border border-[#DDE8E1] bg-white px-4 py-3 shadow-[0_12px_32px_rgba(15,23,42,0.08)] md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-full bg-[#ECF8F0] px-3 py-1 text-sm font-extrabold text-[#168A3A]">
+                    {selectedVisibleCount} {selectedVisibleCount === 1 ? 'event' : 'events'} selected
+                  </span>
+                  {selectedVisibleCount < visibleEvents.length && (
+                    <button
+                      type="button"
+                      onClick={selectAllVisibleEvents}
+                      className="text-sm font-extrabold text-[#168A3A] hover:underline"
+                    >
+                      Select all {visibleEvents.length} events
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <SETooltip text="Delete selected events">
+                    <button
+                      type="button"
+                      onClick={openBulkDeleteDialog}
+                      aria-label="Delete selected events"
+                      className="rounded-[10px] border border-red-200 bg-white px-4 py-2 text-sm font-extrabold text-red-600 transition hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </SETooltip>
+                  <SETooltip text="Clear selected events">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEventIds([])}
+                      aria-label="Clear selected events"
+                      className="grid h-9 w-9 place-items-center rounded-full text-xl font-bold text-[#6B7B8D] hover:bg-[#F3F4F6]"
+                    >
+                      ×
+                    </button>
+                  </SETooltip>
+                </div>
+              </div>
+            )}
+
             <section className="overflow-hidden rounded-[18px] border border-[#DDE8E1] bg-white shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
               <div className="grid grid-cols-[40px_minmax(220px,1fr)_150px_132px] items-center border-b border-[#E2EBE6] px-5 py-3.5 text-sm font-extrabold text-[#1A1A2E]">
                 <SETooltip text="Select event">
-                  <input type="checkbox" aria-label="Select event" className="h-4 w-4 rounded border-[#DADADA]" readOnly />
+                  <input
+                    type="checkbox"
+                    aria-label="Select event"
+                    checked={allVisibleSelected}
+                    ref={node => {
+                      if (node) node.indeterminate = hasPartialSelection;
+                    }}
+                    onChange={toggleAllVisibleEvents}
+                    className="h-4 w-4 rounded border-[#DADADA] accent-[#168A3A]"
+                  />
                 </SETooltip>
                 <div>Event details</div>
                 <div>Status</div>
@@ -499,58 +611,69 @@ export default function LecturerEventsPage() {
                   </button>
                 </div>
               ) : (
-                visibleEvents.map(event => (
-                  <div
-                    key={event.id}
-                    className="grid grid-cols-[40px_minmax(220px,1fr)_150px_132px] items-center border-b border-[#E2EBE6] px-5 py-4 last:border-b-0 hover:bg-[#FAFCFA]"
-                  >
-                    <SETooltip text="Select event">
-                      <input type="checkbox" aria-label="Select event" className="h-4 w-4 rounded border-[#DADADA]" readOnly />
-                    </SETooltip>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        selectEvent(event);
-                        router.push(`/lecturer/events/${event.id}`);
-                      }}
-                      className="min-w-0 text-left"
+                visibleEvents.map(event => {
+                  const isSelected = selectedEventIds.includes(event.id);
+                  return (
+                    <div
+                      key={event.id}
+                      className={`grid grid-cols-[40px_minmax(220px,1fr)_150px_132px] items-center border-b border-[#E2EBE6] px-5 py-4 transition last:border-b-0 ${
+                        isSelected ? 'bg-[#ECF8F0] hover:bg-[#E4F5EA]' : 'hover:bg-[#FAFCFA]'
+                      }`}
                     >
-                      <div className="truncate text-base font-extrabold text-[#1A1A2E]">
-                        {event.event_name} <span className="ml-2 font-semibold text-[#777]">(#{event.event_code})</span>
-                      </div>
-                      <div className="mt-1 text-sm font-semibold text-[#6B7B8D]">{formatDateRange(event)}</div>
-                    </button>
-                    <div className="text-sm font-bold text-[#6B7B8D]">
-                      <div className="flex items-center gap-2">
-                        <span className={`h-2.5 w-2.5 rounded-full ${event.status === 'live' ? 'bg-[#168A3A]' : 'bg-[#A8B1BA]'}`} />
-                        <span>{statusLabel(event)}</span>
-                      </div>
-                      <div className="mt-1 text-xs font-semibold text-[#9AA6B2]">{relativeTime(event.updated_at || event.created_at)}</div>
-                    </div>
-                    <div className="flex items-center justify-end gap-3">
-                      <SETooltip text="Duplicate event">
-                        <button
-                          type="button"
-                          onClick={() => openDuplicateDialog(event)}
-                          aria-label="Duplicate event"
-                          className="grid h-8 w-8 place-items-center rounded-[9px] border border-[#DDE8E1] text-base text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]"
-                        >
-                          ⧉
-                        </button>
+                      <SETooltip text="Select event">
+                        <input
+                          type="checkbox"
+                          aria-label="Select event"
+                          checked={isSelected}
+                          onChange={() => toggleEventSelection(event.id)}
+                          className="h-4 w-4 rounded border-[#DADADA] accent-[#168A3A]"
+                        />
                       </SETooltip>
-                      <SETooltip text="More actions">
-                        <button
-                          type="button"
-                          onClick={clickEvent => openActionPopup(event, clickEvent.currentTarget)}
-                          aria-label="More actions"
-                          className="grid h-8 w-8 place-items-center rounded-[9px] text-lg font-bold text-[#1A1A2E] hover:bg-[#EAF7EF]"
-                        >
-                          ...
-                        </button>
-                      </SETooltip>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          selectEvent(event);
+                          router.push(`/lecturer/events/${event.id}`);
+                        }}
+                        className="min-w-0 text-left"
+                      >
+                        <div className="truncate text-base font-extrabold text-[#1A1A2E]">
+                          {event.event_name} <span className="ml-2 font-semibold text-[#777]">(#{event.event_code})</span>
+                        </div>
+                        <div className="mt-1 text-sm font-semibold text-[#6B7B8D]">{formatDateRange(event)}</div>
+                      </button>
+                      <div className="text-sm font-bold text-[#6B7B8D]">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2.5 w-2.5 rounded-full ${event.status === 'live' ? 'bg-[#168A3A]' : 'bg-[#A8B1BA]'}`} />
+                          <span>{statusLabel(event)}</span>
+                        </div>
+                        <div className="mt-1 text-xs font-semibold text-[#9AA6B2]">{relativeTime(event.updated_at || event.created_at)}</div>
+                      </div>
+                      <div className="flex items-center justify-end gap-3">
+                        <SETooltip text="Duplicate event">
+                          <button
+                            type="button"
+                            onClick={() => openDuplicateDialog(event)}
+                            aria-label="Duplicate event"
+                            className="grid h-8 w-8 place-items-center rounded-[9px] border border-[#DDE8E1] text-base text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]"
+                          >
+                            ⧉
+                          </button>
+                        </SETooltip>
+                        <SETooltip text="More actions">
+                          <button
+                            type="button"
+                            onClick={clickEvent => openActionPopup(event, clickEvent.currentTarget)}
+                            aria-label="More actions"
+                            className="grid h-8 w-8 place-items-center rounded-[9px] text-lg font-bold text-[#1A1A2E] hover:bg-[#EAF7EF]"
+                          >
+                            ...
+                          </button>
+                        </SETooltip>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </section>
 
@@ -643,6 +766,18 @@ export default function LecturerEventsPage() {
           eventName={selectedEvent.event_name}
           onCancel={() => setDialog(null)}
           onSubmit={permanentlyDeleteEvent}
+          error={error}
+        />
+      )}
+
+      {dialog === 'bulk-delete' && (
+        <DeleteModal
+          saving={saving}
+          eventName={`${selectedVisibleCount} ${selectedVisibleCount === 1 ? 'event' : 'events'}`}
+          title="Delete selected events?"
+          description="This will permanently delete the selected events and their interactions. This action cannot be undone."
+          onCancel={() => setDialog(null)}
+          onSubmit={permanentlyDeleteSelectedEvents}
           error={error}
         />
       )}
@@ -866,12 +1001,32 @@ function TransferModal({
   );
 }
 
-function DeleteModal({ saving, eventName, onCancel, onSubmit, error }: { saving: boolean; eventName: string; onCancel: () => void; onSubmit: () => void; error?: string }) {
+function DeleteModal({
+  saving,
+  eventName,
+  title = 'Delete event?',
+  description,
+  onCancel,
+  onSubmit,
+  error,
+}: {
+  saving: boolean;
+  eventName: string;
+  title?: string;
+  description?: string;
+  onCancel: () => void;
+  onSubmit: () => void;
+  error?: string;
+}) {
   return (
     <ModalShell>
-      <h2 className="mb-3 text-xl font-extrabold text-[#1A1A2E]">Delete event?</h2>
+      <h2 className="mb-3 text-xl font-extrabold text-[#1A1A2E]">{title}</h2>
       <p className="mb-6 text-sm font-semibold text-[#6B7B8D]">
-        This will permanently delete <span className="font-extrabold text-[#1A1A2E]">{eventName}</span> and its interactions. This action cannot be undone.
+        {description || (
+          <>
+            This will permanently delete <span className="font-extrabold text-[#1A1A2E]">{eventName}</span> and its interactions. This action cannot be undone.
+          </>
+        )}
       </p>
       {error && (
         <div className="mb-5 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
