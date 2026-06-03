@@ -53,6 +53,7 @@ function include(filename) {
 }
 
 function getInitialState() {
+  assertAuthorized_();
   var session = getSession_();
   if (!session) return { session: null, events: [], selectedEvent: null, interactions: [] };
   var events = listEvents_();
@@ -65,7 +66,17 @@ function getInitialState() {
   };
 }
 
+function getAuthorizationStatus() {
+  var info = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
+  var status = info.getAuthorizationStatus();
+  return {
+    authorized: status === ScriptApp.AuthorizationStatus.NOT_REQUIRED,
+    authorizationUrl: status === ScriptApp.AuthorizationStatus.REQUIRED ? info.getAuthorizationUrl() : '',
+  };
+}
+
 function login(email, password) {
+  assertAuthorized_();
   if (!email || !password) throw new Error('Email and password required.');
   var data = apiFetch_('/api/auth/login', {
     method: 'post',
@@ -77,10 +88,18 @@ function login(email, password) {
 
 function authorizeSlideEngage() {
   try {
+    assertAuthorized_();
     UrlFetchApp.fetch(SLIDEENGAGE_URL, { muteHttpExceptions: true });
     return { success: true };
   } catch (error) {
     throw normalizeFetchPermissionError_(error);
+  }
+}
+
+function assertAuthorized_() {
+  var info = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
+  if (info.getAuthorizationStatus() === ScriptApp.AuthorizationStatus.REQUIRED) {
+    throw new Error('Please authorize SlideEngage to connect to the internet.');
   }
 }
 

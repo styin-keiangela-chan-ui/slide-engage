@@ -1,79 +1,171 @@
-# SlideEngage Google Workspace Marketplace Preparation
+# SlideEngage Google Workspace Marketplace Listing
 
-## Listing Description
+## App Name
 
-SlideEngage brings live audience engagement directly into Google Slides. Lecturers can sign in with the same SlideEngage account used on the website and PowerPoint add-in, select an event, create polls, quizzes, word clouds, open text prompts, ratings, and Audience Q&A, then insert polished interactive slides with QR codes and event codes. Students join from any device using one event link, while lecturers can update result snapshots inside Google Slides.
+SlideEngage
 
 ## Short Description
 
-Create live polls, quizzes, word clouds, ratings, open text prompts, and Q&A in Google Slides using your SlideEngage account.
+Create live polls, quizzes, word clouds, ratings, open text prompts, and audience Q&A directly from Google Slides.
+
+## Full Description
+
+SlideEngage brings live audience engagement into Google Slides. Lecturers and presenters can sign in with the same SlideEngage account used on the website and PowerPoint add-in, select an event, create interactions, and insert polished presentation slides with QR codes and event codes.
+
+SlideEngage supports:
+
+- Multiple choice polls
+- Open text responses
+- Word clouds
+- Ratings
+- Quizzes
+- Audience Q&A
+- Event-based QR codes and join links
+- Slide snapshots with live result previews
+
+Students join from any device using the event QR code or event code. Presenters can update result snapshots from Google Slides while all event data stays connected to the same SlideEngage backend.
+
+SlideEngage is designed for education, workshops, training sessions, meetings, and interactive presentations where presenters need simple audience participation without leaving their slide workflow.
+
+## Support URL
+
+https://slide-engage.vercel.app/support
+
+## Privacy Policy URL
+
+https://slide-engage.vercel.app/privacy
+
+## Terms of Use URL
+
+https://slide-engage.vercel.app/terms
+
+## Homepage URL
+
+https://slide-engage.vercel.app
+
+## Category
+
+Recommended:
+
+- Education
+- Productivity
 
 ## OAuth Scopes
+
+Use the exact scopes in `appsscript.json`:
 
 - `https://www.googleapis.com/auth/presentations.currentonly`
 - `https://www.googleapis.com/auth/script.container.ui`
 - `https://www.googleapis.com/auth/script.external_request`
 - `https://www.googleapis.com/auth/userinfo.email`
 
-Why:
-- `presentations.currentonly`: insert and update SlideEngage slides in the current presentation only.
-- `script.container.ui`: show the SlideEngage sidebar in Google Slides.
-- `script.external_request`: call the public SlideEngage backend APIs.
-- `userinfo.email`: identify the Google account during add-on authorization and review.
+Scope explanations for Google review:
 
-## Required Public URLs
+- `presentations.currentonly`: SlideEngage inserts and updates interaction slides only in the current Google Slides presentation.
+- `script.container.ui`: SlideEngage opens a sidebar panel inside Google Slides.
+- `script.external_request`: SlideEngage calls the public SlideEngage backend for login, events, interactions, QR generation, and result snapshots.
+- `userinfo.email`: Used for Google add-on authorization/account review context.
 
-- Privacy policy: `https://slide-engage.vercel.app/privacy`
-- Terms of use: `https://slide-engage.vercel.app/terms`
-- Support: `https://slide-engage.vercel.app/support`
-- Application homepage: `https://slide-engage.vercel.app`
+## Screenshot Checklist
 
-## Asset Checklist
+Prepare screenshots before submission:
 
-- App icon 32x32 PNG
-- App icon 48x48 PNG
-- App icon 96x96 PNG
-- App icon 128x128 PNG
-- App icon 256x256 PNG
-- Marketplace banner/screenshot showing the Google Slides sidebar
-- Screenshot showing event selection
-- Screenshot showing interaction editor
-- Screenshot showing an inserted SlideEngage slide
-- Screenshot showing student join page/QR flow
+1. Google Slides menu showing `Extensions > Add-ons > SlideEngage`.
+2. SlideEngage sidebar login screen.
+3. Event selector with selected event and event code.
+4. Interaction creation screen.
+5. Multiple choice editor.
+6. Word cloud editor.
+7. Inserted SlideEngage slide with QR code and event code.
+8. Student join page after scanning QR code.
+9. Live results / snapshot update view if available.
 
-Use the SlideEngage green circle target logo assets from `public/assets/icons` or `public/office-addin`.
+Recommended screenshot dimensions:
 
-## Publishing Checklist
+- 1280x800 or larger for desktop screenshots.
+- Clear, readable UI.
+- No private email, tokens, or student data.
 
-1. Create or open a Google Cloud project.
+## Icon / Asset Checklist
+
+Use the SlideEngage target logo assets from:
+
+- `public/assets/icons/icon-16.png`
+- `public/assets/icons/icon-32.png`
+- `public/assets/icons/icon-64.png`
+- `public/assets/icons/icon-80.png`
+- `public/assets/icons/icon-128.png`
+- `public/assets/icons/icon-256.png`
+- `public/assets/icons/icon-512.png`
+
+Marketplace commonly needs:
+
+- 32x32 PNG
+- 48x48 PNG
+- 96x96 PNG
+- 128x128 PNG
+- 256x256 PNG
+
+If Google requires 48x48 or 96x96 and those files are not present, export them from the 512x512 icon.
+
+## Marketplace Configuration Checklist
+
+1. Create or choose a Google Cloud project.
 2. Enable Google Workspace Marketplace SDK.
 3. Configure OAuth consent screen.
-4. Add the OAuth scopes from `appsscript.json`.
-5. Create an Apps Script project.
-6. Upload:
+4. Add authorized domain:
+   - `slide-engage.vercel.app`
+5. Add support, privacy, and terms URLs.
+6. Add the OAuth scopes above.
+7. Create the Apps Script project.
+8. Link Apps Script to the Google Cloud project.
+9. Add:
    - `appsscript.json`
    - `Code.gs`
    - `Sidebar.html`
-7. Set `SLIDEENGAGE_URL` in `Code.gs` to the production HTTPS domain.
-8. Deploy the Apps Script as a Google Workspace Add-on.
-9. Fill Marketplace listing details:
-   - Name: `SlideEngage`
-   - Short description from this file
-   - Long description from this file
-   - Category: Productivity or Education
-   - Support URL, privacy URL, terms URL
-10. Upload icons and screenshots.
-11. Add test users for private testing.
-12. Test install from Marketplace private listing.
-13. Verify:
-   - Sidebar opens
-   - Login works with the same SlideEngage account
-   - Events load
-   - Interactions create/edit
-   - Slide insertion works
-   - Snapshot update works
-14. Submit for Google review.
+10. Deploy as Google Workspace Add-on.
+11. Add the deployment ID to Marketplace SDK.
+12. Configure listing text using this file.
+13. Upload screenshots and icons.
+14. Add private test users.
+15. Test install from Marketplace private/test listing.
+16. Submit for Google review.
 
-## Current Technical Limitation
+## Functional Review Checklist
 
-Google Slides does not support true continuously embedded web views inside a slide canvas. SlideEngage therefore inserts a native Google Slides snapshot and provides an update action for result refresh. The live participant flow and backend data are shared with the website and PowerPoint add-in.
+Before submission, test:
+
+- Add-on installs without manual Apps Script paste.
+- SlideEngage appears in Google Slides Add-ons/Extensions.
+- Sidebar opens.
+- Authorization prompt appears when required.
+- Login works with the same SlideEngage website email/Gmail and password.
+- Events load from SlideEngage.
+- Archived events are hidden from normal event selectors.
+- Interactions load for selected event.
+- Multiple choice interaction can be created.
+- Word cloud interaction can be created.
+- Q&A interaction can be created.
+- Slide snapshot inserts into the active presentation.
+- Snapshot update works.
+- Reset results works.
+- Errors are readable, especially permission/network errors.
+
+## User-Facing Installation Flow
+
+After Marketplace publishing, the user flow should be:
+
+1. User opens Google Workspace Marketplace.
+2. User installs SlideEngage.
+3. User opens Google Slides.
+4. User opens `Extensions > Add-ons > SlideEngage`.
+5. User logs in using their SlideEngage website account.
+6. User selects an event.
+7. User creates or edits interactions.
+8. User inserts SlideEngage slides with QR code and event code.
+
+Users should not manually paste Apps Script after Marketplace publishing.
+
+## Technical Limitation Note
+
+Google Slides does not provide the same live embedded web-rendering behavior as a browser presentation view. SlideEngage therefore inserts native slide snapshots and supports updating those snapshots from the add-on. Event data, participant join flow, and result APIs are still shared with the SlideEngage website and PowerPoint add-in.

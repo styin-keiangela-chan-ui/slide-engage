@@ -24,6 +24,8 @@
       .pill{border-radius:999px;background:#eaf7ef;color:#168a3a;padding:4px 8px;font-size:12px;font-weight:800}
       .status{padding:10px;border-radius:10px;background:#eaf7ef;color:#168a3a;font-weight:700}
       .error{background:#fff0f0;color:#b42318}
+      .permission{background:#fff8e6;color:#7a4b00;border:1px solid #f3d184}
+      .link{color:#168a3a;font-weight:800;text-decoration:none}
       .hidden{display:none}
     </style>
   </head>
@@ -41,6 +43,7 @@
       <section id="login" class="card stack">
         <b>Lecturer login</b>
         <div class="small muted">Use the same SlideEngage website email/Gmail and password.</div>
+        <div id="permission" class="status permission hidden"></div>
         <button class="btn secondary" onclick="authorize()">Authorize connection</button>
         <input id="email" class="input" placeholder="Email">
         <input id="password" class="input" type="password" placeholder="Password">
@@ -108,8 +111,10 @@
       ];
       function $(id){return document.getElementById(id)}
       function show(m,e){var s=$("status");s.textContent=m||"";s.className="status"+(e?" error":"")+(m?"":" hidden")}
-      function call(name,args,ok){show("Loading...");google.script.run.withSuccessHandler(function(r){show("");ok&&ok(r)}).withFailureHandler(function(err){show(err.message||String(err),true)})[name].apply(null,args||[])}
-      function boot(){renderTemplates();call("getInitialState",[],function(r){state.session=r.session;state.events=r.events||[];state.selectedEvent=r.selectedEvent||null;state.interactions=r.interactions||[];render()})}
+      function call(name,args,ok){show("Loading...");google.script.run.withSuccessHandler(function(r){show("");ok&&ok(r)}).withFailureHandler(function(err){handleFailure(err)})[name].apply(null,args||[])}
+      function handleFailure(err){var message=(err&&err.message)||String(err);show(message,true);if(/authorize|permission|internet/i.test(message))checkAuthorization()}
+      function boot(){renderTemplates();checkAuthorization();call("getInitialState",[],function(r){state.session=r.session;state.events=r.events||[];state.selectedEvent=r.selectedEvent||null;state.interactions=r.interactions||[];render()})}
+      function checkAuthorization(){google.script.run.withSuccessHandler(function(r){var box=$("permission");if(!r||r.authorized){box.classList.add("hidden");return}box.innerHTML="Please authorize SlideEngage to connect to the internet. <a class=\"link\" target=\"_blank\" href=\""+r.authorizationUrl+"\">Open authorization</a>";box.classList.remove("hidden")}).withFailureHandler(function(){}).getAuthorizationStatus()}
       function render(){if(state.session){$("login").classList.add("hidden");$("app").classList.remove("hidden");$("hello").textContent=state.session.lecturer.name||state.session.lecturer.email}else{$("login").classList.remove("hidden");$("app").classList.add("hidden")}renderEvents();renderInteractions();renderEditor()}
       function renderTemplates(){var box=$("templates");box.innerHTML="";templates.forEach(function(t){var b=document.createElement("button");b.className="item";b.textContent=t.label;b.onclick=function(){openTemplate(t)};box.appendChild(b)})}
       function renderEvents(){var sel=$("events");sel.innerHTML="";state.events.forEach(function(e){var o=document.createElement("option");o.value=e.id;o.textContent=(e.event_name||"Untitled")+" (#"+e.event_code+")";if(state.selectedEvent&&state.selectedEvent.id===e.id)o.selected=true;sel.appendChild(o)});$("eventInfo").textContent=state.selectedEvent?"Code #"+state.selectedEvent.event_code+" · "+(state.selectedEvent.status||"closed"):"Select or create an event."}
@@ -118,7 +123,7 @@
       function label(i){return i.type==="poll"?"Multiple choice":i.type==="word_cloud"?"Word cloud":i.type==="quiz"?"Quiz":i.type==="qa"?"Audience Q&A":i.config&&i.config.poll_kind==="rating"?"Rating":"Open text"}
       function needsOptions(){var t=state.template?state.template.type:(state.selectedInteraction&&state.selectedInteraction.type);return t==="poll"||t==="quiz"}
       function editorPayload(){return{id:state.selectedInteraction&&state.selectedInteraction.id,event_id:state.selectedEvent&&state.selectedEvent.id,type:(state.template&&state.template.type)||(state.selectedInteraction&&state.selectedInteraction.type),title:$("question").value,config:(state.template&&state.template.config)||(state.selectedInteraction&&state.selectedInteraction.config)||{},options:needsOptions()?state.options:[]}}
-      function authorize(){call("authorizeSlideEngage",[],function(){show("SlideEngage is authorized to connect to the internet.")})}
+      function authorize(){call("authorizeSlideEngage",[],function(){checkAuthorization();show("SlideEngage is authorized to connect to the internet.")})}
       function login(){call("login",[$("email").value,$("password").value],function(r){state.session=r;refresh()})}
       function logout(){call("logout",[],function(){state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[]};render()})}
       function refresh(){call("getInitialState",[],function(r){state.session=r.session;state.events=r.events||[];state.selectedEvent=r.selectedEvent||null;state.interactions=r.interactions||[];render()})}
