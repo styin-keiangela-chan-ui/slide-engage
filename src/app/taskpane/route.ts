@@ -42,27 +42,27 @@ export function GET() {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
+        gap: 8px;
         border-bottom: 1px solid var(--line);
         background: white;
-        padding: 12px 14px;
+        padding: 9px 10px;
       }
       .brand {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         min-width: 0;
       }
       .brand img {
-        width: 34px;
-        height: 34px;
-        border-radius: 10px;
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
       }
       h1, h2, h3, p {
         margin: 0;
       }
       .brand-title {
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 900;
       }
       .brand-subtitle {
@@ -71,14 +71,14 @@ export function GET() {
         font-weight: 700;
       }
       .shell {
-        padding: 14px;
+        padding: 10px 10px 60px;
       }
       .card {
-        margin-bottom: 14px;
+        margin-bottom: 8px;
         border: 1px solid var(--line);
-        border-radius: 14px;
+        border-radius: 12px;
         background: white;
-        padding: 14px;
+        padding: 10px;
         box-shadow: 0 1px 2px rgba(25, 26, 46, 0.04);
       }
       .debug {
@@ -104,11 +104,11 @@ export function GET() {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 10px;
+        gap: 7px;
       }
       .stack {
         display: grid;
-        gap: 10px;
+        gap: 7px;
       }
       .muted {
         color: var(--muted);
@@ -117,17 +117,17 @@ export function GET() {
         font-size: 12px;
       }
       .title {
-        margin-bottom: 12px;
-        font-size: 15px;
+        margin-bottom: 8px;
+        font-size: 14px;
         font-weight: 900;
       }
       .input {
         width: 100%;
         min-width: 0;
         border: 1px solid var(--line);
-        border-radius: 10px;
+        border-radius: 9px;
         background: white;
-        padding: 10px 11px;
+        padding: 8px 9px;
         color: var(--ink);
         outline: none;
       }
@@ -137,9 +137,10 @@ export function GET() {
       }
       .button {
         border: 1px solid transparent;
-        border-radius: 10px;
+        border-radius: 9px;
         background: var(--green);
-        padding: 10px 12px;
+        padding: 8px 10px;
+        font-size: 13px;
         color: white;
         font-weight: 900;
       }
@@ -185,14 +186,14 @@ export function GET() {
       }
       .event-list {
         display: grid;
-        gap: 8px;
+        gap: 6px;
       }
       .event-item, .interaction-item {
         width: 100%;
         border: 1px solid var(--line);
-        border-radius: 12px;
+        border-radius: 10px;
         background: white;
-        padding: 11px;
+        padding: 8px;
         text-align: left;
       }
       .event-item.active {
@@ -201,52 +202,55 @@ export function GET() {
       }
       .event-name {
         font-weight: 900;
+        font-size: 13px;
       }
       .code {
         display: inline-flex;
         align-items: center;
         border-radius: 999px;
         background: var(--green-soft);
-        padding: 5px 9px;
+        padding: 4px 8px;
         color: var(--green);
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         font-weight: 900;
       }
       .qr {
         display: block;
-        width: 152px;
-        height: 152px;
+        width: 118px;
+        height: 118px;
         margin: 10px auto;
         border: 1px solid var(--line);
-        border-radius: 16px;
+        border-radius: 14px;
         background: white;
-        padding: 10px;
+        padding: 8px;
       }
       .template {
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        display: grid;
+        place-items: center;
+        gap: 3px;
         width: 100%;
         border: 1px solid var(--line);
-        border-radius: 12px;
+        border-radius: 10px;
         background: white;
-        padding: 12px;
-        text-align: left;
+        min-height: 58px;
+        padding: 7px;
+        text-align: center;
         font-weight: 900;
+        font-size: 11px;
       }
       .template:hover {
         border-color: var(--green);
       }
       .template-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
       }
       .template-icon {
         display: grid;
         place-items: center;
-        width: 32px;
-        height: 32px;
+        width: 24px;
+        height: 24px;
         border-radius: 999px;
         background: var(--green-soft);
         color: var(--green);
@@ -281,7 +285,7 @@ export function GET() {
       .toolbar {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 8px;
+        gap: 6px;
       }
       .option-row {
         display: grid;
@@ -296,6 +300,36 @@ export function GET() {
         border: 1px solid var(--line);
         border-radius: 12px;
         padding: 10px;
+      }
+      .user-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        background: var(--green-soft);
+        color: var(--green);
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        font-weight: 900;
+      }
+      .bottom-toolbar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 5;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 6px;
+        border-top: 1px solid var(--line);
+        background: rgba(244, 247, 244, 0.96);
+        padding: 8px 10px;
       }
       .preview {
         border: 1px dashed #b8dec5;
@@ -378,7 +412,7 @@ export function GET() {
           <div id="office-summary" class="brand-subtitle">Taskpane loading</div>
         </div>
       </div>
-      <button id="logout-button" class="button secondary small hidden" type="button">Logout</button>
+      <button id="logout-button" class="button secondary small hidden" type="button" title="Logout" aria-label="Logout">Logout</button>
     </header>
 
     <main class="shell">
@@ -400,16 +434,28 @@ export function GET() {
       </section>
 
       <section id="app-view" class="hidden">
+        <section class="card user-row">
+          <div class="row" style="justify-content:flex-start;min-width:0">
+            <div id="user-avatar" class="avatar">A</div>
+            <div style="min-width:0">
+              <div id="user-name" class="event-name"></div>
+              <div id="user-email" class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+            </div>
+          </div>
+        </section>
+
         <section class="card">
           <div class="row">
-            <h2 class="title" style="margin:0">Events</h2>
+            <h2 class="title" style="margin:0">Event</h2>
             <span id="event-count" class="small muted">0 total</span>
           </div>
-          <div class="row" style="margin-top:12px">
+          <select id="event-select" class="input" style="margin-top:8px" aria-label="Select an event" data-tooltip="Select an event"></select>
+          <div id="event-summary" class="small muted" style="margin-top:6px">Please select an event.</div>
+          <button id="show-create-event-button" class="button secondary full" style="margin-top:8px" type="button" aria-label="Create a new event" data-tooltip="Create a new event">+ New Event</button>
+          <div id="create-event-row" class="row hidden" style="margin-top:8px">
             <input id="event-name" class="input" placeholder="New event name" />
-          <button id="create-event-button" class="button" type="button" aria-label="Create a new event" data-tooltip="Create a new event">Create</button>
+            <button id="create-event-button" class="button" type="button" aria-label="Create a new event" data-tooltip="Create a new event">Create</button>
           </div>
-          <div id="event-list" class="event-list" style="margin-top:12px"></div>
         </section>
 
         <section id="selected-event-card" class="card hidden">
@@ -420,7 +466,6 @@ export function GET() {
             </div>
             <span id="selected-event-status" class="small muted"></span>
           </div>
-          <img id="event-qr" class="qr" alt="Event QR code" />
           <button id="insert-join-button" class="button secondary full" type="button" aria-label="Insert QR code and event joining information into PowerPoint" data-tooltip="Insert QR code and event joining information into PowerPoint">Insert joining instructions</button>
         </section>
 
@@ -465,6 +510,11 @@ export function GET() {
         </section>
 
         <div id="app-status" class="status hidden"></div>
+        <div class="bottom-toolbar">
+          <button id="bottom-refresh-button" class="button secondary small" type="button" aria-label="Reload latest data" data-tooltip="Reload latest data">Refresh</button>
+          <button id="bottom-present-button" class="button small" type="button" aria-label="Show live results" data-tooltip="Show live results">Present</button>
+          <button id="bottom-results-button" class="button secondary small" type="button" aria-label="Reload latest results" data-tooltip="Reload latest results">Results</button>
+        </div>
       </section>
     </main>
 
@@ -498,12 +548,12 @@ export function GET() {
         };
 
         var templates = [
-          { label: "Multiple choice", icon: "=", type: "poll", config: { poll_kind: "multiple_choice", results_visible: true, voting_open: true }, options: ["Option 1", "Option 2"] },
-          { label: "Open text", icon: "T", type: "feedback", config: { poll_kind: "open_text", include_open_text: true, anonymous: true, voting_open: true } },
-          { label: "Word cloud", icon: "W", type: "word_cloud", config: { max_words_per_participant: 3, allow_duplicate_words: true, voting_open: true } },
-          { label: "Rating", icon: "*", type: "feedback", config: { poll_kind: "rating", include_star_ratings: true, scale: 5, voting_open: true } },
-          { label: "Quiz", icon: "Q", type: "quiz", config: { time_limit_seconds: 30, points: 100, voting_open: true }, options: [{ option_text: "Correct answer", is_correct: true }, { option_text: "Distractor", is_correct: false }] },
-          { label: "Audience Q&A", icon: "?", type: "qa", config: { allow_anonymous_questions: true, moderation: false, voting_open: true } }
+          { label: "Poll", icon: "📊", type: "poll", config: { poll_kind: "multiple_choice", results_visible: true, voting_open: true }, options: ["Option 1", "Option 2"] },
+          { label: "Text", icon: "📝", type: "feedback", config: { poll_kind: "open_text", include_open_text: true, anonymous: true, voting_open: true } },
+          { label: "Word", icon: "☁️", type: "word_cloud", config: { max_words_per_participant: 3, allow_duplicate_words: true, voting_open: true } },
+          { label: "Rating", icon: "⭐", type: "feedback", config: { poll_kind: "rating", include_star_ratings: true, scale: 5, voting_open: true } },
+          { label: "Quiz", icon: "🎯", type: "quiz", config: { time_limit_seconds: 30, points: 100, voting_open: true }, options: [{ option_text: "Correct answer", is_correct: true }, { option_text: "Distractor", is_correct: false }] },
+          { label: "Q&A", icon: "💬", type: "qa", config: { allow_anonymous_questions: true, moderation: false, voting_open: true } }
         ];
 
         function el(id) {
@@ -544,6 +594,10 @@ export function GET() {
           el("login-view").classList.add("hidden");
           el("app-view").classList.remove("hidden");
           el("logout-button").classList.remove("hidden");
+          el("user-name").textContent = lecturer && (lecturer.name || lecturer.email) ? (lecturer.name || lecturer.email) : "Lecturer";
+          el("user-email").textContent = lecturer && lecturer.email ? lecturer.email : "";
+          el("user-avatar").textContent = (lecturer && (lecturer.name || lecturer.email) ? (lecturer.name || lecturer.email).charAt(0) : "A").toUpperCase();
+          el("user-name").title = lecturer && lecturer.email ? lecturer.email : "";
           addDebug("Dashboard rendered");
         }
 
@@ -683,9 +737,18 @@ export function GET() {
           addDebug("Loading events");
           request("/api/events?lecturer_id=" + encodeURIComponent(lecturer.id), { cache: "no-store" })
             .then(function (data) {
-              events = data.events || [];
+              var hadSelection = !!selectedEvent;
+              events = (data.events || []).filter(function (event) {
+                return event && event.status !== "archived";
+              });
               el("event-count").textContent = events.length + " total";
-              if (!selectedEvent && events.length) selectedEvent = events[0];
+              if (selectedEvent && !events.some(function (event) { return event.id === selectedEvent.id; })) {
+                selectedEvent = null;
+                selectedInteraction = null;
+                interactions = [];
+                setStatus("app-status", "Please select an event.", false);
+              }
+              if (!selectedEvent && !hadSelection && events.length) selectedEvent = events[0];
               renderEvents();
               renderSelectedEvent();
               if (selectedEvent) loadInteractions();
@@ -697,30 +760,26 @@ export function GET() {
         }
 
         function renderEvents() {
-          var list = el("event-list");
-          list.innerHTML = "";
+          var select = el("event-select");
+          select.innerHTML = "";
+          var placeholder = document.createElement("option");
+          placeholder.value = "";
+          placeholder.textContent = events.length ? "Select event" : "No events yet";
+          select.appendChild(placeholder);
           if (!events.length) {
-            list.innerHTML = '<div class="muted small">Create an event to start using SlideEngage.</div>';
+            el("event-summary").textContent = "Create an event to start using SlideEngage.";
             return;
           }
           events.forEach(function (event) {
-            var button = document.createElement("button");
-            button.type = "button";
-            button.className = "event-item" + (selectedEvent && selectedEvent.id === event.id ? " active" : "");
-            button.innerHTML =
-              '<div class="row"><div><div class="event-name"></div><div class="small muted"></div></div><span class="small muted"></span></div>';
-            button.querySelector(".event-name").textContent = event.event_name || "Untitled event";
-            button.querySelector(".small.muted").textContent = "#" + event.event_code;
-            button.querySelector("span").textContent = event.status || "closed";
-            button.onclick = function () {
-              stopLiveSlideRefresh();
-              selectedEvent = event;
-              renderEvents();
-              renderSelectedEvent();
-              loadInteractions();
-            };
-            list.appendChild(button);
+            var option = document.createElement("option");
+            option.value = event.id;
+            option.textContent = (event.event_name || "Untitled event") + " (#" + event.event_code + ")";
+            if (selectedEvent && selectedEvent.id === event.id) option.selected = true;
+            select.appendChild(option);
           });
+          el("event-summary").textContent = selectedEvent
+            ? "Code: #" + selectedEvent.event_code + " | " + (selectedEvent.status || "closed")
+            : "Please select an event.";
         }
 
         function renderSelectedEvent() {
@@ -739,7 +798,6 @@ export function GET() {
           el("selected-event-name").textContent = selectedEvent.event_name || "Untitled event";
           el("selected-event-code").textContent = "#" + selectedEvent.event_code;
           el("selected-event-status").textContent = selectedEvent.status || "closed";
-          el("event-qr").src = "/api/qrcode?code=" + encodeURIComponent(selectedEvent.event_code) + "&format=svg";
           renderTemplates();
         }
 
@@ -759,6 +817,7 @@ export function GET() {
           }).then(function (data) {
             selectedEvent = data.event;
             el("event-name").value = "";
+            el("create-event-row").classList.add("hidden");
             setStatus("app-status", "Event created.", false);
             loadEvents();
           }).catch(function (error) {
@@ -802,11 +861,15 @@ export function GET() {
 
         function tooltipForTemplate(label) {
           if (label === "Multiple choice") return "Create a poll with answer options";
+          if (label === "Poll") return "Create a poll with answer options";
           if (label === "Open text") return "Collect text responses from participants";
+          if (label === "Text") return "Collect text responses from participants";
           if (label === "Word cloud") return "Create a live word cloud";
+          if (label === "Word") return "Create a live word cloud";
           if (label === "Rating") return "Collect rating feedback";
           if (label === "Quiz") return "Create a scored quiz";
           if (label === "Audience Q&A") return "Allow audience questions";
+          if (label === "Q&A") return "Allow audience questions";
           return "Create interaction";
         }
 
@@ -1944,6 +2007,18 @@ export function GET() {
             showLogin();
           };
           el("create-event-button").onclick = createEvent;
+          el("show-create-event-button").onclick = function () {
+            el("create-event-row").classList.toggle("hidden");
+          };
+          el("event-select").onchange = function () {
+            stopLiveSlideRefresh();
+            selectedEvent = events.find(function (event) { return event.id === el("event-select").value; }) || null;
+            selectedInteraction = null;
+            interactions = [];
+            renderEvents();
+            renderSelectedEvent();
+            if (selectedEvent) loadInteractions();
+          };
           el("insert-join-button").onclick = insertJoiningSlide;
           el("close-editor").onclick = function () {
             el("interaction-editor").classList.add("hidden");
@@ -1959,6 +2034,12 @@ export function GET() {
           el("present-live-button").onclick = presentLive;
           el("live-toggle-button").onclick = toggleLiveStatus;
           el("reset-results-button").onclick = resetResults;
+          el("bottom-refresh-button").onclick = loadEvents;
+          el("bottom-present-button").onclick = presentLive;
+          el("bottom-results-button").onclick = function () {
+            if (selectedEvent) loadInteractions();
+            if (selectedInteraction) loadResults(selectedInteraction.id);
+          };
         }
 
         window.addEventListener("error", function (event) {

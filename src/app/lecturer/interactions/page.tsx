@@ -96,7 +96,7 @@ export default function LecturerInteractionsPage() {
           return;
         }
 
-        if (currentEvent?.status === 'archived') {
+        if (currentEvent) {
           clearSelectedEvent();
           setSelectedEventId('');
         }

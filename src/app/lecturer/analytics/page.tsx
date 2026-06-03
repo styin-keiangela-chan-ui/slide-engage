@@ -94,7 +94,7 @@ function downloadCsv(rows: AccountActivity[], metrics: Metrics) {
 
 export default function LecturerAnalyticsPage() {
   const router = useRouter();
-  const { lecturer, currentEvent, loading: authLoading, selectEvent } = useAuth();
+  const { lecturer, currentEvent, loading: authLoading, selectEvent, clearSelectedEvent } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState(currentEvent?.id || '');
   const [rangePreset, setRangePreset] = useState<RangePreset>('30');
@@ -118,12 +118,17 @@ export default function LecturerAnalyticsPage() {
       .then(data => {
         const rows = (data.events || []).filter((event: Event) => event.status !== 'archived');
         setEvents(rows);
+        if (currentEvent && !rows.some((event: Event) => event.id === currentEvent.id)) {
+          clearSelectedEvent();
+          setSelectedEventId('');
+          return;
+        }
         if (!selectedEventId && rows[0]) {
           setSelectedEventId(rows[0].id);
           selectEvent(rows[0]);
         }
       });
-  }, [lecturer, selectedEventId, selectEvent]);
+  }, [clearSelectedEvent, currentEvent, lecturer, selectedEventId, selectEvent]);
 
   const selectedEvent = useMemo(() => events.find(event => event.id === selectedEventId) || null, [events, selectedEventId]);
   const selectedRange = useMemo(

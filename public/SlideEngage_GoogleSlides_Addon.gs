@@ -134,6 +134,10 @@ function logout() {
 }
 
 function selectEvent(eventId) {
+  if (!eventId) {
+    PropertiesService.getUserProperties().deleteProperty(SELECTED_EVENT_KEY);
+    return { selectedEvent: null, interactions: [] };
+  }
   PropertiesService.getUserProperties().setProperty(SELECTED_EVENT_KEY, eventId);
   var events = listEvents_();
   var selectedEvent = getSelectedEvent_(events);
@@ -316,7 +320,8 @@ function getResults_(interaction) {
 
 function listEvents_() {
   var session = requireSession_();
-  return apiFetch_('/api/events?lecturer_id=' + encodeURIComponent(session.lecturer.id), { method: 'get' }).events || [];
+  var events = apiFetch_('/api/events?lecturer_id=' + encodeURIComponent(session.lecturer.id), { method: 'get' }).events || [];
+  return events.filter(isUsableEvent_);
 }
 
 function listInteractions_(eventId) {
@@ -324,13 +329,24 @@ function listInteractions_(eventId) {
 }
 
 function getSelectedEvent_(events) {
-  if (!events.length) return null;
+  if (!events.length) {
+    PropertiesService.getUserProperties().deleteProperty(SELECTED_EVENT_KEY);
+    return null;
+  }
   var selectedId = PropertiesService.getUserProperties().getProperty(SELECTED_EVENT_KEY);
   for (var i = 0; i < events.length; i++) {
     if (events[i].id === selectedId) return events[i];
   }
+  if (selectedId) {
+    PropertiesService.getUserProperties().deleteProperty(SELECTED_EVENT_KEY);
+    return null;
+  }
   PropertiesService.getUserProperties().setProperty(SELECTED_EVENT_KEY, events[0].id);
   return events[0];
+}
+
+function isUsableEvent_(event) {
+  return event && event.status !== 'archived';
 }
 
 function getSession_() {

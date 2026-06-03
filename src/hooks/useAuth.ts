@@ -33,6 +33,36 @@ export function useAuth() {
     setLoading(false);
   }, []);
 
+  useEffect(() => {
+    if (!lecturer || !currentEvent?.id) return;
+
+    let cancelled = false;
+    fetch(`/api/events?id=${encodeURIComponent(currentEvent.id)}`, { cache: 'no-store' })
+      .then(res => res.ok ? res.json() : Promise.reject(new Error('Selected event unavailable')))
+      .then(data => {
+        if (cancelled) return;
+        const event = data.event as Event | null;
+        if (!event || event.status === 'archived') {
+          setCurrentEvent(null);
+          localStorage.removeItem(EVENT_KEY);
+          return;
+        }
+        if (JSON.stringify(event) !== JSON.stringify(currentEvent)) {
+          setCurrentEvent(event);
+          localStorage.setItem(EVENT_KEY, JSON.stringify(event));
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCurrentEvent(null);
+        localStorage.removeItem(EVENT_KEY);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lecturer, currentEvent?.id]);
+
   const login = useCallback(async (email: string, password: string) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
@@ -67,6 +97,11 @@ export function useAuth() {
   }, []);
 
   const selectEvent = useCallback((event: Event) => {
+    if (event.status === 'archived') {
+      setCurrentEvent(null);
+      localStorage.removeItem(EVENT_KEY);
+      return;
+    }
     setCurrentEvent(event);
     localStorage.setItem(EVENT_KEY, JSON.stringify(event));
   }, []);

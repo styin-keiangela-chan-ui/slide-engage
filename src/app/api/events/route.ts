@@ -55,6 +55,11 @@ async function uniqueEventCode(preferredCode?: string) {
 export async function GET(req: NextRequest) {
   const lecturerId = req.nextUrl.searchParams.get('lecturer_id');
   const eventId = req.nextUrl.searchParams.get('id');
+  const view = req.nextUrl.searchParams.get('view');
+  const includeArchived =
+    req.nextUrl.searchParams.get('include_archived') === 'true'
+    || req.nextUrl.searchParams.get('includeArchived') === 'true'
+    || view === 'archive';
 
   if (eventId) {
     const { data, error } = await supabase
@@ -71,11 +76,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'lecturer_id required' }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('events')
     .select('*, lecturers(id, email, name)')
     .eq('lecturer_id', lecturerId)
     .order('created_at', { ascending: false });
+
+  if (!includeArchived) {
+    query = query.neq('status', 'archived');
+  } else if (view === 'archive') {
+    query = query.eq('status', 'archived');
+  }
+
+  const { data, error } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ events: data });
@@ -316,7 +329,7 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-// DELETE /api/events?id=xxx — delete an event and its related records
+// DELETE /api/events?id=xxx — archive by default; permanently delete only when explicitly requested
 export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get('id');
   const permanent = req.nextUrl.searchParams.get('permanent') === 'true';
@@ -334,12 +347,12 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true, deleted: true });
   }
 
-    const { error } = await supabase
-      .from('events')
-      .update({ status: 'archived', updated_at: new Date().toISOString() })
-      .eq('id', id);
+  const { error } = await supabase
+    .from('events')
+    .update({ status: 'archived', updated_at: new Date().toISOString() })
+    .eq('id', id);
 
-    if (error && /events_status_check|check constraint|violates check/i.test(error.message)) return eventStatusConstraintError();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error && /events_status_check|check constraint|violates check/i.test(error.message)) return eventStatusConstraintError();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true, archived: true });
 }

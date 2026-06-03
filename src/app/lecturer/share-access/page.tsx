@@ -51,7 +51,7 @@ export default function ShareAccessPage() {
           return;
         }
 
-        if (currentEvent?.status === 'archived') {
+        if (currentEvent) {
           clearSelectedEvent();
           setSelectedEventId('');
         }
