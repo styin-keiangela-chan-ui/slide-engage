@@ -22,7 +22,12 @@ export function useAuth() {
     const storedEvent = localStorage.getItem(EVENT_KEY);
     if (storedEvent) {
       try {
-        setCurrentEvent(JSON.parse(storedEvent));
+        const parsedEvent = JSON.parse(storedEvent) as Event;
+        if (parsedEvent.status === 'archived') {
+          localStorage.removeItem(EVENT_KEY);
+        } else {
+          setCurrentEvent(parsedEvent);
+        }
       } catch {}
     }
     setLoading(false);

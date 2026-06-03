@@ -9,9 +9,9 @@ import DashboardShell from '@/components/ui/DashboardShell';
 import { useAuth } from '@/hooks/useAuth';
 import type { Event } from '@/lib/types';
 
-type TabKey = 'all' | 'active' | 'past';
+type TabKey = 'all' | 'active' | 'past' | 'archive';
 type OwnerFilter = 'all' | 'mine' | 'organization';
-type DialogMode = 'create' | 'transfer' | 'duplicate' | 'delete' | 'bulk-delete' | 'go-live-again' | null;
+type DialogMode = 'create' | 'transfer' | 'duplicate' | 'delete' | 'bulk-delete' | 'delete-permanent' | 'bulk-delete-permanent' | 'go-live-again' | null;
 type PopupPosition = { top: number; left: number } | null;
 type StatusMenuState = { event: EventRow; top: number; left: number } | null;
 type ConfirmAction = {
@@ -34,6 +34,7 @@ const tabs: { key: TabKey; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'active', label: 'Active & upcoming' },
   { key: 'past', label: 'Past' },
+  { key: 'archive', label: 'Archive/Bin' },
 ];
 
 function todayIso() {
@@ -126,6 +127,7 @@ function statusTooltip(event: EventRow) {
   if (label === 'Draft') return 'Event has not started yet';
   if (label === 'Active') return 'Currently accepting responses';
   if (label === 'Closed') return 'Responses are disabled';
+  if (label === 'Archived') return 'Event is in Archive/Bin';
   return 'Event has ended';
 }
 
@@ -179,7 +181,7 @@ export default function LecturerEventsPage() {
   }, [lecturer]);
 
   useEffect(() => {
-    setSelectedEventIds(prev => prev.filter(id => events.some(event => event.id === id && event.status !== 'archived')));
+    setSelectedEventIds(prev => prev.filter(id => events.some(event => event.id === id)));
   }, [events]);
 
   useEffect(() => {
@@ -245,7 +247,7 @@ export default function LecturerEventsPage() {
 
   async function fetchEvents() {
     if (!lecturer) return;
-    const res = await fetch(`/api/events?lecturer_id=${lecturer.id}`, { cache: 'no-store' });
+    const res = await fetch(`/api/events?lecturer_id=${lecturer.id}&include_archived=true`, { cache: 'no-store' });
     const data = await res.json();
     setEvents(data.events || []);
   }
@@ -289,12 +291,27 @@ export default function LecturerEventsPage() {
     setDialog('delete');
   }
 
+  function openPermanentDeleteDialog(event: EventRow) {
+    setSelectedEvent(event);
+    setPopupPosition(null);
+    setError('');
+    setDialog('delete-permanent');
+  }
+
   function openBulkDeleteDialog() {
     if (selectedEventIds.length === 0) return;
     setSelectedEvent(null);
     setPopupPosition(null);
     setError('');
     setDialog('bulk-delete');
+  }
+
+  function openBulkPermanentDeleteDialog() {
+    if (selectedEventIds.length === 0) return;
+    setSelectedEvent(null);
+    setPopupPosition(null);
+    setError('');
+    setDialog('bulk-delete-permanent');
   }
 
   function openActionPopup(event: EventRow, anchor: HTMLButtonElement) {
@@ -439,6 +456,63 @@ export default function LecturerEventsPage() {
     setMessage('Event transferred.');
   }
 
+  async function archiveEvent() {
+    if (!selectedEvent) return;
+
+    setSaving(true);
+    setError('');
+    const res = await fetch(`/api/events?id=${selectedEvent.id}`, { method: 'DELETE' });
+    const data = await res.json();
+    setSaving(false);
+
+    if (!res.ok) {
+      setError(data.error || 'Unable to archive event.');
+      return;
+    }
+
+    const archivedAt = new Date().toISOString();
+    setEvents(prev => prev.map(item => item.id === selectedEvent.id
+      ? { ...item, status: 'archived', updated_at: archivedAt }
+      : item
+    ));
+    if (currentEvent?.id === selectedEvent.id) clearSelectedEvent();
+    setDialog(null);
+    setSelectedEvent(null);
+    setPopupPosition(null);
+    setMessage('Event moved to Archive/Bin.');
+  }
+
+  async function archiveSelectedEvents() {
+    if (selectedEventIds.length === 0) return;
+
+    setSaving(true);
+    setError('');
+    const results = await Promise.all(
+      selectedEventIds.map(async id => {
+        const res = await fetch(`/api/events?id=${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        return { id, ok: res.ok, error: data.error as string | undefined };
+      })
+    );
+    setSaving(false);
+
+    const failed = results.find(result => !result.ok);
+    if (failed) {
+      setError(failed.error || 'Unable to archive selected events.');
+      return;
+    }
+
+    const archivedAt = new Date().toISOString();
+    setEvents(prev => prev.map(item => selectedEventIds.includes(item.id)
+      ? { ...item, status: 'archived', updated_at: archivedAt }
+      : item
+    ));
+    if (currentEvent && selectedEventIds.includes(currentEvent.id)) clearSelectedEvent();
+    setSelectedEventIds([]);
+    setDialog(null);
+    setMessage(`${results.length} ${results.length === 1 ? 'event' : 'events'} moved to Archive/Bin.`);
+  }
+
   async function permanentlyDeleteEvent() {
     if (!selectedEvent) return;
 
@@ -449,7 +523,7 @@ export default function LecturerEventsPage() {
     setSaving(false);
 
     if (!res.ok) {
-      setError(data.error || 'Unable to delete event.');
+      setError(data.error || 'Unable to permanently delete event.');
       return;
     }
 
@@ -458,7 +532,7 @@ export default function LecturerEventsPage() {
     setDialog(null);
     setSelectedEvent(null);
     setPopupPosition(null);
-    setMessage('Event deleted.');
+    setMessage('Event permanently deleted.');
   }
 
   async function permanentlyDeleteSelectedEvents() {
@@ -477,7 +551,7 @@ export default function LecturerEventsPage() {
 
     const failed = results.find(result => !result.ok);
     if (failed) {
-      setError(failed.error || 'Unable to delete selected events.');
+      setError(failed.error || 'Unable to permanently delete selected events.');
       return;
     }
 
@@ -485,7 +559,21 @@ export default function LecturerEventsPage() {
     if (currentEvent && selectedEventIds.includes(currentEvent.id)) clearSelectedEvent();
     setSelectedEventIds([]);
     setDialog(null);
-    setMessage(`${results.length} ${results.length === 1 ? 'event' : 'events'} deleted.`);
+    setMessage(`${results.length} ${results.length === 1 ? 'event' : 'events'} permanently deleted.`);
+  }
+
+  async function restoreEvent(event: EventRow) {
+    setSaving(true);
+    setError('');
+    try {
+      await patchEventStatus(event.id, 'closed');
+      setMessage('Event restored.');
+      setSelectedEventIds(prev => prev.filter(id => id !== event.id));
+    } catch (eventError: any) {
+      setError(eventError.message || 'Unable to restore event.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function patchEventStatus(id: string, status: Event['status'], extraUpdates: Partial<Event> = {}) {
@@ -504,7 +592,7 @@ export default function LecturerEventsPage() {
   async function patchSelectedEventStatuses(status: Event['status']) {
     const targetIds = selectedEventIds.filter(id => {
       const event = events.find(item => item.id === id);
-      return event && event.status !== 'archived';
+      return event && (status === 'archived' || event.status !== 'archived' || activeTab === 'archive');
     });
 
     for (const id of targetIds) {
@@ -604,14 +692,19 @@ export default function LecturerEventsPage() {
       all: rows.length,
       active: rows.filter(isActiveOrUpcoming).length,
       past: rows.filter(isPastEvent).length,
+      archive: events.filter(event => event.status === 'archived').length,
     };
   }, [events]);
 
   const visibleEvents = useMemo(() => {
     return events.filter(event => {
-      if (event.status === 'archived') return false;
-      const matchesTab = activeTab === 'all'
-        || (activeTab === 'active' ? isActiveOrUpcoming(event) : isPastEvent(event));
+      const isArchived = event.status === 'archived';
+      const matchesTab = activeTab === 'archive'
+        ? isArchived
+        : !isArchived && (
+          activeTab === 'all'
+            || (activeTab === 'active' ? isActiveOrUpcoming(event) : isPastEvent(event))
+        );
       const search = `${event.event_name} ${event.event_code} ${ownerName(event, lecturer?.name || '')} ${ownerEmail(event, lecturer?.email || '')}`.toLowerCase();
       const matchesSearch = search.includes(query.toLowerCase());
       const matchesOwner = ownerFilter === 'all'
@@ -737,46 +830,78 @@ export default function LecturerEventsPage() {
                   )}
                 </div>
                 <div className="flex items-center justify-end gap-2">
-                  <SETooltip text="Make selected events live">
-                    <button
-                      type="button"
-                      onClick={() => confirmBulkStatus(
-                        'live',
-                        'Make selected events live?',
-                        'Are you sure you want to make the selected events live?',
-                        'Go Live'
-                      )}
-                      aria-label="Make selected events live"
-                      className="rounded-[10px] border border-[#CFE4D5] bg-white px-4 py-2 text-sm font-extrabold text-[#168A3A] transition hover:bg-[#ECF8F0]"
-                    >
-                      Go Live
-                    </button>
-                  </SETooltip>
-                  <SETooltip text="Close selected events">
-                    <button
-                      type="button"
-                      onClick={() => confirmBulkStatus(
-                        'closed',
-                        'Close selected events?',
-                        'Close the selected events and stop accepting responses?',
-                        'Close'
-                      )}
-                      aria-label="Close selected events"
-                      className="rounded-[10px] border border-[#F3D5B0] bg-white px-4 py-2 text-sm font-extrabold text-[#B85B00] transition hover:bg-[#FFF3E2]"
-                    >
-                      Close
-                    </button>
-                  </SETooltip>
-                  <SETooltip text="Delete selected events">
-                    <button
-                      type="button"
-                      onClick={openBulkDeleteDialog}
-                      aria-label="Delete selected events"
-                      className="rounded-[10px] border border-red-200 bg-white px-4 py-2 text-sm font-extrabold text-red-600 transition hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                  </SETooltip>
+                  {activeTab === 'archive' ? (
+                    <>
+                      <SETooltip text="Restore selected events">
+                        <button
+                          type="button"
+                          onClick={() => confirmBulkStatus(
+                            'closed',
+                            'Restore selected events?',
+                            'Restore the selected events from Archive/Bin?',
+                            'Restore'
+                          )}
+                          aria-label="Restore selected events"
+                          className="rounded-[10px] border border-[#CFE4D5] bg-white px-4 py-2 text-sm font-extrabold text-[#168A3A] transition hover:bg-[#ECF8F0]"
+                        >
+                          Restore
+                        </button>
+                      </SETooltip>
+                      <SETooltip text="Permanently delete selected events">
+                        <button
+                          type="button"
+                          onClick={openBulkPermanentDeleteDialog}
+                          aria-label="Permanently delete selected events"
+                          className="rounded-[10px] border border-red-200 bg-white px-4 py-2 text-sm font-extrabold text-red-600 transition hover:bg-red-50"
+                        >
+                          Delete permanently
+                        </button>
+                      </SETooltip>
+                    </>
+                  ) : (
+                    <>
+                      <SETooltip text="Make selected events live">
+                        <button
+                          type="button"
+                          onClick={() => confirmBulkStatus(
+                            'live',
+                            'Make selected events live?',
+                            'Are you sure you want to make the selected events live?',
+                            'Go Live'
+                          )}
+                          aria-label="Make selected events live"
+                          className="rounded-[10px] border border-[#CFE4D5] bg-white px-4 py-2 text-sm font-extrabold text-[#168A3A] transition hover:bg-[#ECF8F0]"
+                        >
+                          Go Live
+                        </button>
+                      </SETooltip>
+                      <SETooltip text="Close selected events">
+                        <button
+                          type="button"
+                          onClick={() => confirmBulkStatus(
+                            'closed',
+                            'Close selected events?',
+                            'Close the selected events and stop accepting responses?',
+                            'Close'
+                          )}
+                          aria-label="Close selected events"
+                          className="rounded-[10px] border border-[#F3D5B0] bg-white px-4 py-2 text-sm font-extrabold text-[#B85B00] transition hover:bg-[#FFF3E2]"
+                        >
+                          Close
+                        </button>
+                      </SETooltip>
+                      <SETooltip text="Move selected events to Archive/Bin">
+                        <button
+                          type="button"
+                          onClick={openBulkDeleteDialog}
+                          aria-label="Move selected events to Archive/Bin"
+                          className="rounded-[10px] border border-red-200 bg-white px-4 py-2 text-sm font-extrabold text-red-600 transition hover:bg-red-50"
+                        >
+                          Delete
+                        </button>
+                      </SETooltip>
+                    </>
+                  )}
                   <SETooltip text="Clear selected events">
                     <button
                       type="button"
@@ -857,36 +982,64 @@ export default function LecturerEventsPage() {
                             type="button"
                             onClick={clickEvent => openStatusMenu(event, clickEvent.currentTarget)}
                             aria-label={statusTooltip(event)}
+                            disabled={event.status === 'archived'}
                             className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold transition hover:shadow-sm ${statusPillClass(event)}`}
                           >
                             <span className={`h-2 w-2 rounded-full ${statusDotClass(event)}`} />
                             {statusLabel(event)}
-                            <span className="text-[10px]">⌄</span>
+                            {event.status !== 'archived' && <span className="text-[10px]">⌄</span>}
                           </button>
                         </SETooltip>
                         <div className="mt-1 text-xs font-semibold text-[#9AA6B2]">{relativeTime(event.updated_at || event.created_at)}</div>
                       </div>
                       <div className="flex items-center justify-end gap-3">
-                        <SETooltip text="Duplicate event">
-                          <button
-                            type="button"
-                            onClick={() => openDuplicateDialog(event)}
-                            aria-label="Duplicate event"
-                            className="grid h-8 w-8 place-items-center rounded-[9px] border border-[#DDE8E1] text-base text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]"
-                          >
-                            ⧉
-                          </button>
-                        </SETooltip>
-                        <SETooltip text="More actions">
-                          <button
-                            type="button"
-                            onClick={clickEvent => openActionPopup(event, clickEvent.currentTarget)}
-                            aria-label="More actions"
-                            className="grid h-8 w-8 place-items-center rounded-[9px] text-lg font-bold text-[#1A1A2E] hover:bg-[#EAF7EF]"
-                          >
-                            ...
-                          </button>
-                        </SETooltip>
+                        {activeTab === 'archive' ? (
+                          <>
+                            <SETooltip text="Restore event">
+                              <button
+                                type="button"
+                                onClick={() => restoreEvent(event)}
+                                aria-label="Restore event"
+                                className="rounded-[9px] border border-[#CFE4D5] px-3 py-1.5 text-xs font-extrabold text-[#168A3A] hover:bg-[#ECF8F0]"
+                              >
+                                Restore
+                              </button>
+                            </SETooltip>
+                            <SETooltip text="Permanently delete event">
+                              <button
+                                type="button"
+                                onClick={() => openPermanentDeleteDialog(event)}
+                                aria-label="Permanently delete event"
+                                className="rounded-[9px] border border-red-200 px-3 py-1.5 text-xs font-extrabold text-red-600 hover:bg-red-50"
+                              >
+                                Delete permanently
+                              </button>
+                            </SETooltip>
+                          </>
+                        ) : (
+                          <>
+                            <SETooltip text="Duplicate event">
+                              <button
+                                type="button"
+                                onClick={() => openDuplicateDialog(event)}
+                                aria-label="Duplicate event"
+                                className="grid h-8 w-8 place-items-center rounded-[9px] border border-[#DDE8E1] text-base text-[#1A1A2E] hover:border-[#168A3A] hover:text-[#168A3A]"
+                              >
+                                ⧉
+                              </button>
+                            </SETooltip>
+                            <SETooltip text="More actions">
+                              <button
+                                type="button"
+                                onClick={clickEvent => openActionPopup(event, clickEvent.currentTarget)}
+                                aria-label="More actions"
+                                className="grid h-8 w-8 place-items-center rounded-[9px] text-lg font-bold text-[#1A1A2E] hover:bg-[#EAF7EF]"
+                              >
+                                ...
+                              </button>
+                            </SETooltip>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -1040,8 +1193,11 @@ export default function LecturerEventsPage() {
         <DeleteModal
           saving={saving}
           eventName={selectedEvent.event_name}
+          title="Move event to Archive/Bin?"
+          description="This event will be hidden from normal event lists and selectors. You can restore it from Archive/Bin."
+          confirmLabel="Move to Archive/Bin"
           onCancel={() => setDialog(null)}
-          onSubmit={permanentlyDeleteEvent}
+          onSubmit={archiveEvent}
           error={error}
         />
       )}
@@ -1050,8 +1206,35 @@ export default function LecturerEventsPage() {
         <DeleteModal
           saving={saving}
           eventName={`${selectedVisibleCount} ${selectedVisibleCount === 1 ? 'event' : 'events'}`}
-          title="Delete selected events?"
-          description="This will permanently delete the selected events and their interactions. This action cannot be undone."
+          title="Move selected events to Archive/Bin?"
+          description="Selected events will be hidden from normal event lists and selectors. You can restore them from Archive/Bin."
+          confirmLabel="Move to Archive/Bin"
+          onCancel={() => setDialog(null)}
+          onSubmit={archiveSelectedEvents}
+          error={error}
+        />
+      )}
+
+      {dialog === 'delete-permanent' && selectedEvent && (
+        <DeleteModal
+          saving={saving}
+          eventName={selectedEvent.event_name}
+          title="Delete permanently?"
+          description="This will permanently delete the event and cannot be undone."
+          confirmLabel="Delete permanently"
+          onCancel={() => setDialog(null)}
+          onSubmit={permanentlyDeleteEvent}
+          error={error}
+        />
+      )}
+
+      {dialog === 'bulk-delete-permanent' && (
+        <DeleteModal
+          saving={saving}
+          eventName={`${selectedVisibleCount} ${selectedVisibleCount === 1 ? 'event' : 'events'}`}
+          title="Delete selected events permanently?"
+          description="This will permanently delete the selected archived events and cannot be undone."
+          confirmLabel="Delete permanently"
           onCancel={() => setDialog(null)}
           onSubmit={permanentlyDeleteSelectedEvents}
           error={error}
@@ -1473,6 +1656,7 @@ function DeleteModal({
   eventName,
   title = 'Delete event?',
   description,
+  confirmLabel = 'Delete',
   onCancel,
   onSubmit,
   error,
@@ -1481,6 +1665,7 @@ function DeleteModal({
   eventName: string;
   title?: string;
   description?: string;
+  confirmLabel?: string;
   onCancel: () => void;
   onSubmit: () => void;
   error?: string;
@@ -1503,7 +1688,7 @@ function DeleteModal({
       <div className="flex justify-end gap-3">
         <button onClick={onCancel} className="rounded-[10px] px-5 py-2.5 text-sm font-bold text-[#6B7B8D] hover:bg-[#F3F4F6]">Cancel</button>
         <button onClick={onSubmit} disabled={saving} className="rounded-[10px] bg-red-600 px-5 py-2.5 text-sm font-extrabold text-white hover:bg-red-700 disabled:opacity-60">
-          {saving ? 'Deleting...' : 'Delete'}
+          {saving ? 'Saving...' : confirmLabel}
         </button>
       </div>
     </ModalShell>
@@ -1586,8 +1771,8 @@ function EventActionPopup({
             ↔ Transfer
           </button>
         </SETooltip>
-        <SETooltip text="Permanently delete this event" className="flex-1">
-          <button onClick={onDelete} aria-label="Permanently delete this event" className="w-full rounded-r-[11px] border-l border-white bg-[#F4F4F4] px-3 py-2 text-xs font-extrabold text-red-600 hover:bg-red-50">
+        <SETooltip text="Move this event to Archive/Bin" className="flex-1">
+          <button onClick={onDelete} aria-label="Move this event to Archive/Bin" className="w-full rounded-r-[11px] border-l border-white bg-[#F4F4F4] px-3 py-2 text-xs font-extrabold text-red-600 hover:bg-red-50">
             🗑 Delete
           </button>
         </SETooltip>
