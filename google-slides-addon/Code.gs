@@ -7,6 +7,8 @@
  */
 
 var SLIDEENGAGE_URL = 'https://slide-engage.vercel.app';
+var SUPABASE_URL = 'https://iqfnqfqokiupsnhjpnfb.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxZm5xZnFva2l1cHNuaGpwbmZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4Mjg0OTQsImV4cCI6MjA5NDQwNDQ5NH0.Maj-aBswCBZvKLgWAWvdvvXndNvPGdJCelt8nyt7ry8';
 var SESSION_KEY = 'SLIDEENGAGE_SESSION';
 var SELECTED_EVENT_KEY = 'SLIDEENGAGE_SELECTED_EVENT_ID';
 var QR_CACHE_PREFIX = 'SLIDEENGAGE_QR_';
@@ -51,6 +53,14 @@ function showSlideEngageSidebar() {
 
 function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+function getSupabaseUrl_() {
+  return SUPABASE_URL;
+}
+
+function getSupabaseAnonKey_() {
+  return SUPABASE_ANON_KEY;
 }
 
 function getInitialState() {
@@ -212,6 +222,28 @@ function updateInteractionSlide(eventId, interactionId) {
   return drawInteractionSlide_(eventId, interactionId, true);
 }
 
+function getLiveResultSnapshot(eventId, interactionId) {
+  requireSession_();
+  var event = apiFetch_('/api/events?id=' + encodeURIComponent(eventId), { method: 'get' }).event;
+  if (!isUsableEvent_(event)) {
+    PropertiesService.getUserProperties().deleteProperty(SELECTED_EVENT_KEY);
+    throw new Error('This event is archived or no longer available. Please select another event.');
+  }
+  var interaction = findInteraction_(eventId, interactionId);
+  var snapshot = buildInteractionSnapshot_(event, interaction);
+  return {
+    event: event,
+    interaction: interaction,
+    results: snapshot.resultData.results || [],
+    total_responses: snapshot.totalResponses,
+    eventCode: snapshot.eventCode,
+    question: snapshot.question,
+    interactionType: snapshot.interactionType,
+    joinUrl: snapshot.joinUrl,
+    hasResults: snapshot.hasResults,
+  };
+}
+
 function getInteractionSlideState(interactionId) {
   return { exists: !!findSlideForInteraction_(interactionId) };
 }
@@ -222,6 +254,7 @@ function getLivePresenterUrl(eventId) {
 }
 
 function presentLiveSlide(eventId, interactionId, insertNew) {
+  setInteractionStatus(interactionId, 'live');
   var result = drawInteractionSlide_(eventId, interactionId, !insertNew);
   var event = apiFetch_('/api/events?id=' + encodeURIComponent(eventId), { method: 'get' }).event;
   result.presenter_url = presenterUrl_(event);
@@ -473,7 +506,7 @@ function getSelectedEvent_(events) {
 }
 
 function isUsableEvent_(event) {
-  return event && event.status !== 'archived';
+  return event && event.status !== 'archived' && !event.archived_at && !event.deleted_at && event.is_archived !== true;
 }
 
 function getSession_() {

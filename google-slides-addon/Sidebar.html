@@ -35,7 +35,16 @@
       .divider{height:1px;background:#e6eee9;margin:3px 0}
       .section-toggle{width:100%;border:0;background:transparent;padding:0;display:flex;justify-content:space-between;font-weight:900;color:#17172f}
       .bottom-bar{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:8px 10px;background:rgba(246,250,247,.96);border-top:1px solid #dfe9e3;z-index:5}
+      .live-panel{border:1px solid #cbead4;background:linear-gradient(180deg,#ffffff,#f3fbf6)}
+      .live-dot{width:8px;height:8px;border-radius:999px;background:#168a3a;box-shadow:0 0 0 4px rgba(22,138,58,.12)}
+      .bar-row{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;margin:6px 0}
+      .bar-track{height:8px;border-radius:999px;background:#e3e7e5;overflow:hidden;margin-top:3px}
+      .bar-fill{height:100%;border-radius:999px;background:#168a3a}
+      .wordbox{min-height:120px;border:1px dashed #cbead4;border-radius:12px;padding:8px;background:#fbfffc;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;gap:8px;overflow:hidden}
+      .word{font-weight:900;line-height:1;color:#168a3a}
+      .response-card{border:1px solid #e4eee8;border-radius:10px;padding:7px;background:#fff;font-size:12px}
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
   </head>
   <body>
     <div class="wrap">
@@ -113,23 +122,34 @@
         <div id="liveControls" class="card stack hidden">
           <b>Live presentation</b>
           <button class="btn" onclick="presentLive()">Present Live</button>
-          <button class="btn secondary" onclick="refreshResult()">Refresh Result</button>
+          <button class="btn secondary" onclick="refreshResult()">Update Slide Snapshot</button>
           <button class="btn danger" onclick="resetResults()">Reset Results</button>
           <div class="divider"></div>
-          <button class="btn secondary" onclick="insertSlideOnly()">Insert Live Result Slide</button>
           <button class="btn secondary" onclick="openPresenter()">Open Live Presenter View</button>
+        </div>
+
+        <div id="liveResults" class="card stack live-panel hidden">
+          <div class="row">
+            <b>Live Results</b>
+            <span class="row small muted" style="gap:5px"><span class="live-dot"></span><span id="liveIndicator">Live updating…</span></span>
+          </div>
+          <div id="liveResultsBody" class="stack small muted">Go live to see responses here.</div>
         </div>
 
         <div class="bottom-bar">
           <button class="btn secondary smallbtn" onclick="refresh()" title="Reload latest data" aria-label="Reload latest data">Refresh</button>
           <button class="btn smallbtn" onclick="presentLive()" title="Show live results" aria-label="Show live results">Present Live</button>
-          <button class="btn secondary smallbtn" onclick="refreshResult()" title="Refresh result slide" aria-label="Refresh result slide">Results</button>
+          <button class="btn secondary smallbtn" onclick="refreshResult()" title="Update slide snapshot" aria-label="Update slide snapshot">Snapshot</button>
         </div>
       </section>
     </div>
 
     <script>
-      var state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[],config:{}};
+      var REALTIME_CONFIG={url:'<?= getSupabaseUrl_() ?>',anonKey:'<?= getSupabaseAnonKey_() ?>'};
+      var state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[],config:{},liveResults:null};
+      var realtimeClient=null;
+      var realtimeChannel=null;
+      var liveFetchTimer=null;
       var templates=[
         {label:"Multiple Choice",type:"poll",options:["Option 1","Option 2"],config:{poll_kind:"multiple_choice",multiple_answers:false,results_visible:true,voting_open:true}},
         {label:"Open Text",type:"feedback",options:[],config:{poll_kind:"open_text",character_limit:280,anonymous:true,voting_open:true}},
@@ -149,7 +169,7 @@
       function render(){
         if(state.session){$("login").classList.add("hidden");$("app").classList.remove("hidden");$("hello").textContent=state.session.lecturer.name||state.session.lecturer.email;$("hello").title=state.session.lecturer.email||"";$("avatar").textContent=((state.session.lecturer.name||state.session.lecturer.email||"A").charAt(0)||"A").toUpperCase()}
         else{$("login").classList.remove("hidden");$("app").classList.add("hidden")}
-        renderEvents();renderInteractions();renderEditor();renderLiveControls()
+        renderEvents();renderInteractions();renderEditor();renderLiveControls();renderLiveResults()
       }
       function renderTemplates(){var box=$("templates");box.innerHTML="";templates.forEach(function(t){var b=document.createElement("button");b.className="template";b.innerHTML="<span>"+iconFor(t)+"</span><span>"+shortLabel(t.label)+"</span>";b.title=tooltipFor(t.label);b.setAttribute("aria-label",tooltipFor(t.label));b.onclick=function(){openTemplate(t)};box.appendChild(b)})}
       function renderEvents(){var sel=$("events");sel.innerHTML="";var placeholder=document.createElement("option");placeholder.textContent=state.events.length?"Select event":"No events yet";placeholder.value="";sel.appendChild(placeholder);state.events.forEach(function(event){var option=document.createElement("option");option.value=event.id;option.textContent=(event.event_name||"Untitled")+" (#"+event.event_code+")";if(state.selectedEvent&&state.selectedEvent.id===event.id)option.selected=true;sel.appendChild(option)});$("eventInfo").textContent=state.selectedEvent?"Code: #"+state.selectedEvent.event_code+" | "+(state.selectedEvent.status||"closed"):"Please select an event."}
@@ -163,6 +183,11 @@
       function renderOptions(){var needs=needsOptions();$("addOption").classList.toggle("hidden",!needs);var box=$("options");box.innerHTML="";if(!needs)return;state.options.forEach(function(option,index){var row=document.createElement("div");row.className="row";row.innerHTML="<input class=\"input\" value=\""+escapeAttr(option.option_text||"")+"\" placeholder=\"Option "+(index+1)+"\"><button class=\"btn danger smallbtn\">×</button>";row.querySelector("input").oninput=function(){state.options[index].option_text=this.value};row.querySelector("button").onclick=function(){state.options.splice(index,1);renderOptions()};box.appendChild(row)})}
       function renderSettings(){var box=$("settings");box.innerHTML="";var type=currentType();if(type==="poll")box.innerHTML=checkboxSetting("multiple_answers","Multiple answers");if(type==="word_cloud")box.innerHTML=numberSetting("max_words_per_participant","Max words",1,10)+checkboxSetting("allow_duplicate_words","Allow duplicates");if(type==="feedback"&&state.config.poll_kind==="open_text")box.innerHTML=numberSetting("character_limit","Character limit",50,1000);if(type==="feedback"&&state.config.poll_kind==="rating")box.innerHTML=numberSetting("scale","Rating scale",2,10);if(type==="quiz")box.innerHTML=numberSetting("time_limit_seconds","Timer seconds",5,300);if(type==="qa")box.innerHTML=checkboxSetting("moderation","Moderation")+checkboxSetting("allow_replies","Replies")+numberSetting("character_limit","Character limit",50,500)}
       function renderLiveControls(){$("liveControls").classList.toggle("hidden",!state.selectedInteraction||!state.selectedEvent)}
+      function renderLiveResults(){var panel=$("liveResults");if(!state.selectedInteraction||!state.selectedEvent){panel.classList.add("hidden");return}panel.classList.remove("hidden");var body=$("liveResultsBody");var data=state.liveResults;if(!data){body.innerHTML="<div class=\"muted\">Go live to see responses here.</div>";return}var interaction=data.interaction||state.selectedInteraction;var html="<div><b>"+escapeHtml(data.question||interaction.title||"Untitled")+"</b><div class=\"small muted\">#"+escapeHtml(data.eventCode||state.selectedEvent.event_code||"")+" · "+(data.total_responses||0)+" responses</div></div>";var results=data.results||[];if(interaction.type==="poll"||interaction.type==="quiz"){html+=renderPollResultsHtml(results)}else if(interaction.type==="word_cloud"){html+=renderWordCloudHtml(results)}else if(interaction.type==="qa"){html+=renderCardsHtml(results,"question_text","No questions yet.")}else if(interaction.type==="feedback"&&interaction.config&&interaction.config.poll_kind==="rating"){html+=renderRatingHtml(results)}else{var items=Array.isArray(results)?results:(results.text_responses||[]);html+=renderCardsHtml(items,"text","No responses yet.")}body.innerHTML=html;$("liveIndicator").textContent="Live updating…"}
+      function renderPollResultsHtml(results){if(!results.length)return"<div class=\"muted\">Waiting for responses…</div>";var html="";results.forEach(function(row){var percent=Number(row.percentage||0);html+="<div class=\"bar-row\"><div><b>"+escapeHtml(row.option_text||row.label||"Option")+"</b><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:"+Math.max(2,percent)+"%\"></div></div></div><b>"+percent+"% · "+(row.count||0)+"</b></div>"});return html}
+      function renderWordCloudHtml(results){if(!results.length)return"<div class=\"wordbox muted\">Waiting for responses…</div>";var html="<div class=\"wordbox\">";var max=Math.max.apply(null,results.map(function(item){return Number(item.count||1)}));results.slice(0,36).forEach(function(item,index){var count=Number(item.count||1);var size=Math.max(12,Math.min(30,12+(count/max)*16+(index<3?4:0)));var colors=["#168A3A","#1A6BB5","#D46B08","#7C3AED","#0F766E","#BE185D"];html+="<span class=\"word\" style=\"font-size:"+size+"px;color:"+colors[index%colors.length]+"\">"+escapeHtml(item.word||item.text||"")+"</span>"});html+="</div>";return html}
+      function renderRatingHtml(results){var avg=Number(results&&results.average_rating?results.average_rating:0);var count=Number(results&&results.rating_count?results.rating_count:0);if(!count)return"<div class=\"muted\">Waiting for responses…</div>";return"<div class=\"row\"><div><div style=\"font-size:34px;font-weight:900;color:#168a3a\">"+avg.toFixed(1)+"</div><div class=\"small muted\">average rating</div></div><b>"+count+" responses</b></div><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:"+Math.min(100,avg/5*100)+"%\"></div></div>"}
+      function renderCardsHtml(items,key,emptyText){if(!items.length)return"<div class=\"muted\">"+emptyText+"</div>";var html="";items.slice(0,5).forEach(function(item){html+="<div class=\"response-card\">"+escapeHtml(item[key]||item.text_value||item.text||JSON.stringify(item))+"</div>"});return html}
 
       function checkboxSetting(key,labelText){return "<label class=\"small\"><input type=\"checkbox\" "+(state.config[key]?"checked":"")+" onchange=\"state.config['"+key+"']=this.checked\"> "+labelText+"</label>"}
       function numberSetting(key,labelText,min,max){return "<label class=\"small\">"+labelText+"<input class=\"input\" type=\"number\" min=\""+min+"\" max=\""+max+"\" value=\""+(state.config[key]||min)+"\" onchange=\"state.config['"+key+"']=Number(this.value)\"></label>"}
@@ -174,12 +199,12 @@
 
       function authorize(){call("authorizeSlideEngage",[],function(){checkAuthorization();if($("email").value&&$("password").value){login();return}show("Google permission confirmed. Please sign in again.")})}
       function login(){call("loginSlideEngage",[$("email").value,$("password").value],function(result){state.session=result;refresh()})}
-      function logout(){call("logout",[],function(){state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[],config:{}};render();show("Signed out.")})}
-      function refresh(){call("getInitialState",[],function(result){state.session=result.session;state.events=result.events||[];state.selectedEvent=result.selectedEvent||null;state.interactions=result.interactions||[];if(state.selectedInteraction){var found=findInteraction(state.selectedInteraction.id);state.selectedInteraction=found||null}render()})}
-      function selectEvent(){call("selectEvent",[$("events").value],function(result){state.selectedEvent=result.selectedEvent;state.interactions=result.interactions||[];state.selectedInteraction=null;state.template=null;state.options=[];state.config={};render()})}
+      function logout(){unsubscribeRealtime();call("logout",[],function(){state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[],config:{},liveResults:null};render();show("Signed out.")})}
+      function refresh(){call("getInitialState",[],function(result){state.session=result.session;state.events=result.events||[];state.selectedEvent=result.selectedEvent||null;state.interactions=result.interactions||[];if(state.selectedInteraction){var found=findInteraction(state.selectedInteraction.id);state.selectedInteraction=found||null;if(!found)unsubscribeRealtime()}render()})}
+      function selectEvent(){unsubscribeRealtime();call("selectEvent",[$("events").value],function(result){state.selectedEvent=result.selectedEvent;state.interactions=result.interactions||[];state.selectedInteraction=null;state.template=null;state.options=[];state.config={};state.liveResults=null;render()})}
       function createEvent(){call("createEvent",[$("newEventName").value],function(result){$("newEventName").value="";$("new-event-row").classList.add("hidden");state.events=result.events||[];state.selectedEvent=result.selectedEvent;state.interactions=[];state.selectedInteraction=null;render()})}
-      function openTemplate(template){if(!state.selectedEvent){show("Select or create an event first.",true);return}state.template=template;state.selectedInteraction=null;state.options=(template.options||[]).map(function(text,index){return{option_text:text,is_correct:index===0&&template.type==="quiz"}});state.config=copy(template.config||{});render()}
-      function openInteraction(interaction){state.selectedInteraction=interaction;state.template=null;state.options=(interaction.interaction_options||[]).sort(function(a,b){return(a.position||0)-(b.position||0)}).map(function(option){return{option_text:option.option_text,is_correct:!!option.is_correct}});state.config=copy(interaction.config||{});render()}
+      function openTemplate(template){unsubscribeRealtime();if(!state.selectedEvent){show("Select or create an event first.",true);return}state.template=template;state.selectedInteraction=null;state.liveResults=null;state.options=(template.options||[]).map(function(text,index){return{option_text:text,is_correct:index===0&&template.type==="quiz"}});state.config=copy(template.config||{});render()}
+      function openInteraction(interaction){state.selectedInteraction=interaction;state.template=null;state.options=(interaction.interaction_options||[]).sort(function(a,b){return(a.position||0)-(b.position||0)}).map(function(option){return{option_text:option.option_text,is_correct:!!option.is_correct}});state.config=copy(interaction.config||{});if(interaction.status==="live"){startLiveResults(interaction)}else{unsubscribeRealtime();state.liveResults=null}render()}
       function addOption(){state.options.push({option_text:"Option "+(state.options.length+1),is_correct:false});renderOptions()}
       function copy(obj){return JSON.parse(JSON.stringify(obj||{}))}
       function findInteraction(id){for(var i=0;i<state.interactions.length;i++){if(state.interactions[i].id===id)return state.interactions[i]}return null}
@@ -191,11 +216,15 @@
       function closeLive(){if(!state.selectedInteraction)return;setStatus(state.selectedInteraction.id,"closed")}
       function deleteSelected(){if(!state.selectedInteraction||!confirm("Delete this interaction?"))return;call("deleteInteraction",[state.selectedInteraction.id,state.selectedEvent.id],function(result){state.interactions=result.interactions||[];state.selectedInteraction=null;state.template=null;state.options=[];state.config={};render();show("Interaction deleted.")})}
       function resetResults(){if(!state.selectedInteraction)return;if(!confirm("Reset all participant responses for this interaction?"))return;call("resetResults",[state.selectedInteraction.id],function(result){show((result&&result.message)||"Results cleared successfully.")})}
-      function presentLive(){saveInteraction(function(interaction){show("Fetching live results...");call("getInteractionSlideState",[interaction.id],function(stateResult){var insertNew=false;if(stateResult&&stateResult.exists)insertNew=!confirm("A live result slide already exists. Update existing slide? Click Cancel to insert a new one.");call("presentLiveSlide",[state.selectedEvent.id,interaction.id,insertNew],function(result){var total=result&&result.snapshot?result.snapshot.totalResponses:0;showPresenterLink(result.presenter_url,"Inserted successfully. Snapshot responses: "+total+".");window.open(result.presenter_url,"_blank")},"Creating slide...")},"Fetching live results...")})}
-      function insertSlideOnly(){saveInteraction(function(interaction){show("Fetching live results...");call("getInteractionSlideState",[interaction.id],function(stateResult){var insertNew=false;if(stateResult&&stateResult.exists)insertNew=!confirm("A live result slide already exists. Update existing slide? Click Cancel to insert a new one.");call("presentLiveSlide",[state.selectedEvent.id,interaction.id,insertNew],function(result){var total=result&&result.snapshot?result.snapshot.totalResponses:0;show("Inserted successfully. Snapshot responses: "+total+".")},"Creating slide...")},"Fetching live results...")})}
-      function refreshResult(){if(!state.selectedInteraction)return;call("updateInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(result){var total=result&&result.snapshot?result.snapshot.totalResponses:0;show("Inserted successfully. Snapshot responses: "+total+".")},"Fetching live results...")}
+      function presentLive(){saveInteraction(function(interaction){show("Fetching live results...");call("getInteractionSlideState",[interaction.id],function(stateResult){var insertNew=false;if(stateResult&&stateResult.exists)insertNew=!confirm("A live result slide already exists. Update existing slide? Click Cancel to insert a new one.");call("presentLiveSlide",[state.selectedEvent.id,interaction.id,insertNew],function(result){var total=result&&result.snapshot?result.snapshot.totalResponses:0;state.selectedInteraction.status="live";show("Inserted successfully. Snapshot responses: "+total+".");startLiveResults(state.selectedInteraction)},"Creating slide...")},"Fetching live results...")})}
+      function refreshResult(){if(!state.selectedInteraction)return;call("updateInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(result){var total=result&&result.snapshot?result.snapshot.totalResponses:0;show("Slide snapshot updated. Snapshot responses: "+total+".")},"Fetching live results...")}
       function openPresenter(){if(!state.selectedEvent)return;call("getLivePresenterUrl",[state.selectedEvent.id],function(url){showPresenterLink(url,"Opening live presenter view.");window.open(url,"_blank")})}
       function showPresenterLink(url,message){show(message+" If it did not open, use this link: "+url)}
+      function startLiveResults(interaction){if(!interaction||!state.selectedEvent)return;fetchLiveResults(interaction.id);subscribeRealtime(interaction.id)}
+      function fetchLiveResults(interactionId){if(!state.selectedEvent||!interactionId)return;$("liveIndicator").textContent="Updating…";google.script.run.withSuccessHandler(function(result){state.liveResults=result;renderLiveResults();$("liveIndicator").textContent="Live updating…"}).withFailureHandler(function(err){$("liveIndicator").textContent="Update failed";handleFailure(err)}).getLiveResultSnapshot(state.selectedEvent.id,interactionId)}
+      function subscribeRealtime(interactionId){unsubscribeRealtime();if(!window.supabase||!REALTIME_CONFIG.url||!REALTIME_CONFIG.anonKey){$("liveIndicator").textContent="Realtime unavailable";return}realtimeClient=window.supabase.createClient(REALTIME_CONFIG.url,REALTIME_CONFIG.anonKey);realtimeChannel=realtimeClient.channel("interaction-results-"+interactionId).on("postgres_changes",{event:"*",schema:"public",table:"responses",filter:"interaction_id=eq."+interactionId},function(){queueLiveFetch(interactionId)}).on("postgres_changes",{event:"*",schema:"public",table:"qa_questions",filter:"interaction_id=eq."+interactionId},function(){queueLiveFetch(interactionId)}).on("postgres_changes",{event:"*",schema:"public",table:"interactions",filter:"id=eq."+interactionId},function(){queueLiveFetch(interactionId)}).on("postgres_changes",{event:"*",schema:"public",table:"qa_upvotes"},function(){if(state.selectedInteraction&&state.selectedInteraction.type==="qa")queueLiveFetch(interactionId)}).subscribe(function(status){$("liveIndicator").textContent=status==="SUBSCRIBED"?"Live updating…":"Connecting…"})}
+      function queueLiveFetch(interactionId){window.clearTimeout(liveFetchTimer);liveFetchTimer=window.setTimeout(function(){fetchLiveResults(interactionId)},120)}
+      function unsubscribeRealtime(){window.clearTimeout(liveFetchTimer);if(realtimeClient&&realtimeChannel){realtimeClient.removeChannel(realtimeChannel)}realtimeChannel=null;realtimeClient=null}
       boot();
     </script>
   </body>
