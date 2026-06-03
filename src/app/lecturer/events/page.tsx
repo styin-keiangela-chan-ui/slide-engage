@@ -11,7 +11,7 @@ import type { Event } from '@/lib/types';
 
 type TabKey = 'all' | 'active' | 'past';
 type OwnerFilter = 'all' | 'mine' | 'organization';
-type DialogMode = 'create' | 'transfer' | 'duplicate' | 'delete' | 'bulk-delete' | null;
+type DialogMode = 'create' | 'transfer' | 'duplicate' | 'delete' | 'bulk-delete' | 'go-live-again' | null;
 type PopupPosition = { top: number; left: number } | null;
 type StatusMenuState = { event: EventRow; top: number; left: number } | null;
 type ConfirmAction = {
@@ -314,7 +314,6 @@ export default function LecturerEventsPage() {
   }
 
   function openStatusMenu(event: EventRow, anchor: HTMLButtonElement) {
-    if (statusLabel(event) === 'Past') return;
     const rect = anchor.getBoundingClientRect();
     const width = 180;
     const viewportPadding = 18;
@@ -328,6 +327,16 @@ export default function LecturerEventsPage() {
     setPopupPosition(null);
     setDialog(null);
     setError('');
+  }
+
+  function openGoLiveAgainDialog(event: EventRow) {
+    setStatusMenu(null);
+    setSelectedEvent(event);
+    setPopupPosition(null);
+    setStartDate(todayIso());
+    setEndDate(addDaysIso(1));
+    setError('');
+    setDialog('go-live-again');
   }
 
   async function createEvent() {
@@ -479,11 +488,11 @@ export default function LecturerEventsPage() {
     setMessage(`${results.length} ${results.length === 1 ? 'event' : 'events'} deleted.`);
   }
 
-  async function patchEventStatus(id: string, status: Event['status']) {
+  async function patchEventStatus(id: string, status: Event['status'], extraUpdates: Partial<Event> = {}) {
     const res = await fetch('/api/events', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({ id, status, ...extraUpdates }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Unable to update event status.');
@@ -493,16 +502,20 @@ export default function LecturerEventsPage() {
   }
 
   async function patchSelectedEventStatuses(status: Event['status']) {
-    const editableIds = selectedEventIds.filter(id => {
+    const targetIds = selectedEventIds.filter(id => {
       const event = events.find(item => item.id === id);
-      return event && !isPastEvent(event);
+      return event && event.status !== 'archived';
     });
 
-    for (const id of editableIds) {
-      await patchEventStatus(id, status);
+    for (const id of targetIds) {
+      const event = events.find(item => item.id === id);
+      const dateUpdates = status === 'live' && event && isPastEvent(event)
+        ? { start_date: todayIso(), end_date: addDaysIso(1) }
+        : {};
+      await patchEventStatus(id, status, dateUpdates);
     }
     setSelectedEventIds([]);
-    return editableIds.length;
+    return targetIds.length;
   }
 
   async function resetEventResults(eventId: string) {
@@ -540,11 +553,35 @@ export default function LecturerEventsPage() {
       run: async () => {
         const updatedCount = await patchSelectedEventStatuses(status);
         setMessage(updatedCount === 0
-          ? 'Past events are read-only. No events were updated.'
+          ? 'No events were updated.'
           : `${updatedCount} ${updatedCount === 1 ? 'event' : 'events'} updated.`
         );
       },
     });
+  }
+
+  async function goLiveAgain() {
+    if (!selectedEvent) return;
+    if (endDate < startDate) {
+      setError('End date must be after the start date.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    try {
+      const updated = await patchEventStatus(selectedEvent.id, 'live', {
+        start_date: startDate,
+        end_date: endDate,
+      });
+      setDialog(null);
+      setSelectedEvent(null);
+      setMessage(`${updated.event_name} is live again.`);
+    } catch (eventError: any) {
+      setError(eventError.message || 'Unable to make this event live.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function runConfirmedAction() {
@@ -819,15 +856,12 @@ export default function LecturerEventsPage() {
                           <button
                             type="button"
                             onClick={clickEvent => openStatusMenu(event, clickEvent.currentTarget)}
-                            disabled={statusLabel(event) === 'Past'}
                             aria-label={statusTooltip(event)}
-                            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold transition ${statusPillClass(event)} ${
-                              statusLabel(event) === 'Past' ? 'cursor-default opacity-80' : 'hover:shadow-sm'
-                            }`}
+                            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold transition hover:shadow-sm ${statusPillClass(event)}`}
                           >
                             <span className={`h-2 w-2 rounded-full ${statusDotClass(event)}`} />
                             {statusLabel(event)}
-                            {statusLabel(event) !== 'Past' && <span className="text-[10px]">⌄</span>}
+                            <span className="text-[10px]">⌄</span>
                           </button>
                         </SETooltip>
                         <div className="mt-1 text-xs font-semibold text-[#9AA6B2]">{relativeTime(event.updated_at || event.created_at)}</div>
@@ -915,7 +949,13 @@ export default function LecturerEventsPage() {
             'Reopen this event and allow responses again?',
             'Reopen Event'
           )}
+          onGoLiveAgain={() => openGoLiveAgainDialog(statusMenu.event)}
           onDeleteDraft={() => {
+            setStatusMenu(null);
+            openDeleteDialog(statusMenu.event);
+          }}
+          onDuplicate={() => openDuplicateDialog(statusMenu.event)}
+          onDelete={() => {
             setStatusMenu(null);
             openDeleteDialog(statusMenu.event);
           }}
@@ -1014,6 +1054,23 @@ export default function LecturerEventsPage() {
           description="This will permanently delete the selected events and their interactions. This action cannot be undone."
           onCancel={() => setDialog(null)}
           onSubmit={permanentlyDeleteSelectedEvents}
+          error={error}
+        />
+      )}
+
+      {dialog === 'go-live-again' && selectedEvent && (
+        <GoLiveAgainModal
+          saving={saving}
+          eventName={selectedEvent.event_name}
+          startDate={startDate}
+          endDate={endDate}
+          onStartChange={value => {
+            setStartDate(value);
+            if (endDate < value) setEndDate(value);
+          }}
+          onEndChange={setEndDate}
+          onCancel={() => setDialog(null)}
+          onSubmit={goLiveAgain}
           error={error}
         />
       )}
@@ -1294,13 +1351,62 @@ function ConfirmModal({
   );
 }
 
+function GoLiveAgainModal({
+  saving,
+  eventName,
+  startDate,
+  endDate,
+  onStartChange,
+  onEndChange,
+  onCancel,
+  onSubmit,
+  error,
+}: {
+  saving: boolean;
+  eventName: string;
+  startDate: string;
+  endDate: string;
+  onStartChange: (value: string) => void;
+  onEndChange: (value: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+  error?: string;
+}) {
+  return (
+    <ModalShell>
+      <h2 className="mb-3 text-xl font-extrabold text-[#1A1A2E]">Go live again?</h2>
+      <p className="mb-5 text-sm font-semibold text-[#6B7B8D]">
+        This event has ended. Update the dates to make <span className="font-extrabold text-[#1A1A2E]">{eventName}</span> live again.
+      </p>
+      {error && (
+        <div className="mb-5 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+          {error}
+        </div>
+      )}
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <DateField label="Start date" value={startDate} onChange={onStartChange} />
+        <DateField label="End date" value={endDate} min={startDate} onChange={onEndChange} />
+      </div>
+      <div className="flex justify-end gap-3">
+        <button onClick={onCancel} className="rounded-[10px] px-5 py-2.5 text-sm font-bold text-[#6B7B8D] hover:bg-[#F3F4F6]">Cancel</button>
+        <button onClick={onSubmit} disabled={saving} className="rounded-[10px] bg-[#168A3A] px-5 py-2.5 text-sm font-extrabold text-white hover:bg-[#0F6F2D] disabled:opacity-60">
+          {saving ? 'Saving...' : 'Go Live'}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
 function StatusDropdown({
   event,
   position,
   onGoLive,
   onCloseEvent,
   onReopen,
+  onGoLiveAgain,
   onDeleteDraft,
+  onDuplicate,
+  onDelete,
   onArchive,
   onResetResults,
 }: {
@@ -1309,7 +1415,10 @@ function StatusDropdown({
   onGoLive: () => void;
   onCloseEvent: () => void;
   onReopen: () => void;
+  onGoLiveAgain: () => void;
   onDeleteDraft: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
   onArchive: () => void;
   onResetResults: () => void;
 }) {
@@ -1329,7 +1438,13 @@ function StatusDropdown({
           { label: 'Reopen Event', onClick: onReopen, className: 'text-[#168A3A]' },
           { label: 'Archive Event', onClick: onArchive, className: 'text-[#5B6470]' },
         ]
-        : [];
+        : label === 'Past'
+          ? [
+            { label: 'Go Live', onClick: onGoLiveAgain, className: 'text-[#168A3A]' },
+            { label: 'Duplicate', onClick: onDuplicate, className: 'text-[#1A1A2E]' },
+            { label: 'Delete', onClick: onDelete, className: 'text-red-600' },
+          ]
+          : [];
 
   if (actions.length === 0) return null;
 
