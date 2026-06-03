@@ -333,28 +333,59 @@ function buildInteractionSnapshot_(event, interaction) {
 function renderSlide_(slide, event, interaction, snapshot) {
   var code = snapshot.eventCode;
   var joinUrl = snapshot.joinUrl;
-  slide.getBackground().setSolidFill('#F4F7F4');
-  text_(slide, 'SlideEngage', 25, 15, 180, 24, 11, true, '#168A3A');
-  text_(slide, snapshot.interactionType.toUpperCase(), 280, 15, 300, 24, 11, true, '#6B7B8D');
+  var page = pageLayout_();
+  var join = page.join;
+  var result = page.result;
+  var content = page.content;
 
-  rounded_(slide, 30, 60, 165, 405, '#FFFFFF', '#DDEBE3');
-  text_(slide, 'Join at', 55, 85, 120, 24, 14, true, '#17172F');
-  text_(slide, host_(), 55, 112, 120, 24, 13, true, '#168A3A');
+  slide.getBackground().setSolidFill('#F4F7F4');
+  text_(slide, 'SlideEngage', page.margin, 15, 180, 24, 11, true, '#168A3A');
+  text_(slide, snapshot.interactionType.toUpperCase(), result.x + 30, 15, Math.min(300, result.w - 60), 24, 11, true, '#6B7B8D');
+
+  rounded_(slide, join.x, join.y, join.w, join.h, '#FFFFFF', '#DDEBE3');
+  text_(slide, 'Join at', join.x + 20, join.y + 22, join.w - 40, 22, 13, true, '#17172F');
+  text_(slide, truncate_(host_(), 24), join.x + 20, join.y + 48, join.w - 40, 22, 12, true, '#168A3A');
+  var qrSize = Math.min(join.w - 42, join.h * 0.31, 126);
+  var qrTop = join.y + 92;
   try {
     var qr = qrBlobForCode_(code);
-    slide.insertImage(qr, 52, 155, 120, 120);
+    slide.insertImage(qr, join.x + (join.w - qrSize) / 2, qrTop, qrSize, qrSize);
   } catch (e) {
-    text_(slide, 'QR unavailable', 52, 190, 120, 24, 12, true, '#B42318', SlidesApp.ParagraphAlignment.CENTER);
+    text_(slide, 'QR unavailable', join.x + 18, join.y + 135, join.w - 36, 24, 12, true, '#B42318', SlidesApp.ParagraphAlignment.CENTER);
   }
-  text_(slide, 'Scan QR code to join', 42, 292, 145, 24, 10, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
-  rounded_(slide, 52, 330, 120, 42, '#EAF7EF', '#CBEAD4');
-  text_(slide, '#' + code, 52, 340, 120, 28, 20, true, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
-  text_(slide, joinUrl, 42, 392, 145, 34, 7, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
+  var belowQr = qrTop + qrSize + 16;
+  text_(slide, 'Scan QR code to join', join.x + 14, belowQr, join.w - 28, 22, 9, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
+  var codeTop = Math.min(belowQr + 34, join.y + join.h - 98);
+  rounded_(slide, join.x + 20, codeTop, join.w - 40, 38, '#EAF7EF', '#CBEAD4');
+  text_(slide, '#' + code, join.x + 20, codeTop + 8, join.w - 40, 24, 17, true, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, truncate_(joinUrl, Math.max(26, Math.floor(join.w / 4))), join.x + 15, codeTop + 48, join.w - 30, 30, 7, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
 
-  rounded_(slide, 220, 60, 470, 405, '#FFFFFF', '#DDEBE3');
-  text_(slide, snapshot.question, 250, 92, 410, 55, 24, true, '#17172F');
-  text_(slide, snapshot.hasResults ? 'Live result snapshot' : 'Waiting for responses…', 250, 142, 360, 20, 10, true, snapshot.hasResults ? '#168A3A' : '#A3AEA8');
-  renderResults_(slide, interaction, snapshot.resultData);
+  rounded_(slide, result.x, result.y, result.w, result.h, '#FFFFFF', '#DDEBE3');
+  text_(slide, truncate_(snapshot.question, 110), result.x + 30, result.y + 30, result.w - 60, 58, 22, true, '#17172F');
+  text_(slide, snapshot.hasResults ? 'Live result snapshot' : 'Waiting for responses…', result.x + 30, result.y + 88, result.w - 60, 20, 10, true, snapshot.hasResults ? '#168A3A' : '#A3AEA8');
+  renderResults_(slide, interaction, snapshot.resultData, content);
+}
+
+function pageLayout_() {
+  var presentation = SlidesApp.getActivePresentation();
+  var width = presentation.getPageWidth();
+  var height = presentation.getPageHeight();
+  var margin = 30;
+  var top = 58;
+  var panelHeight = Math.max(260, height - top - margin);
+  var joinWidth = Math.min(Math.max(width * 0.25, 140), width * 0.28);
+  var gap = 24;
+  var resultX = margin + joinWidth + gap;
+  var resultWidth = width - resultX - margin;
+  var result = { x: resultX, y: top, w: Math.max(260, resultWidth), h: panelHeight };
+  return {
+    width: width,
+    height: height,
+    margin: margin,
+    join: { x: margin, y: top, w: joinWidth, h: panelHeight },
+    result: result,
+    content: { x: result.x + 30, y: result.y + 122, w: result.w - 60, h: Math.max(120, result.h - 150) },
+  };
 }
 
 function presenterUrl_(event) {
@@ -362,85 +393,112 @@ function presenterUrl_(event) {
   return SLIDEENGAGE_URL + '/present/' + encodeURIComponent(code);
 }
 
-function renderResults_(slide, interaction, data) {
+function renderResults_(slide, interaction, data, box) {
   var results = data.results || [];
-  if (interaction.type === 'poll' || interaction.type === 'quiz') return renderPoll_(slide, interaction, results);
-  if (interaction.type === 'word_cloud') return renderWordCloud_(slide, results);
-  if (interaction.type === 'qa') return renderQa_(slide, results);
-  if (interaction.type === 'feedback' && interaction.config && interaction.config.poll_kind === 'rating') return renderRating_(slide, results);
-  return renderOpenText_(slide, Array.isArray(results) ? results : (results.text_responses || []));
+  if (interaction.type === 'poll' || interaction.type === 'quiz') return renderPoll_(slide, interaction, results, box);
+  if (interaction.type === 'word_cloud') return renderWordCloud_(slide, results, box);
+  if (interaction.type === 'qa') return renderQa_(slide, results, box);
+  if (interaction.type === 'feedback' && interaction.config && interaction.config.poll_kind === 'rating') return renderRating_(slide, results, box);
+  return renderOpenText_(slide, Array.isArray(results) ? results : (results.text_responses || []), box);
 }
 
-function renderPoll_(slide, interaction, results) {
+function renderPoll_(slide, interaction, results, box) {
   var rows = results.length ? results : (interaction.interaction_options || []).map(function (option) {
     return { option_text: option.option_text, percentage: 0, count: 0 };
   });
   if (!rows.length) {
-    waiting_(slide);
+    waiting_(slide, box);
     return;
   }
-  for (var i = 0; i < Math.min(rows.length, 6); i++) {
+  var visibleRows = Math.min(rows.length, Math.max(2, Math.floor((box.h - 18) / 46)));
+  var rowHeight = Math.max(34, Math.min(46, (box.h - 24) / visibleRows));
+  for (var i = 0; i < visibleRows; i++) {
     var row = rows[i];
-    text_(slide, row.option_text || row.label || 'Option', 260, 170 + i * 48, 300, 24, 14, true, '#17172F');
-    bar_(slide, 260, 198 + i * 48, 285, 10, Number(row.percentage || 0), '#168A3A');
-    text_(slide, (row.percentage || 0) + '% · ' + (row.count || 0), 560, 190 + i * 48, 90, 18, 12, true, '#168A3A');
+    var y = box.y + i * rowHeight;
+    text_(slide, truncate_(row.option_text || row.label || 'Option', Math.floor((box.w - 95) / 6)), box.x, y, box.w - 95, 20, 12, true, '#17172F');
+    bar_(slide, box.x, y + 25, box.w - 115, 9, Number(row.percentage || 0), '#168A3A');
+    text_(slide, (row.percentage || 0) + '% · ' + (row.count || 0), box.x + box.w - 100, y + 18, 95, 18, 10, true, '#168A3A');
   }
+  if (rows.length > visibleRows) text_(slide, '+' + (rows.length - visibleRows) + ' more options', box.x, box.y + box.h - 16, box.w, 16, 9, false, '#6B7B8D');
 }
 
-function renderWordCloud_(slide, results) {
+function renderWordCloud_(slide, results, box) {
   if (!results.length) {
-    waiting_(slide);
+    waiting_(slide, box);
     return;
   }
   var colors = ['#168A3A', '#1A6BB5', '#D46B08', '#8B1A4A', '#7C3AED', '#0F766E'];
-  for (var i = 0; i < Math.min(results.length, 24); i++) {
-    var col = i % 4;
-    var row = Math.floor(i / 4);
-    var size = Math.max(12, Math.min(34, 14 + Number(results[i].count || 1) * 6 - row));
-    text_(slide, results[i].word || results[i].text || '', 255 + col * 100, 170 + row * 42, 95, 28, size, true, colors[i % colors.length]);
+  var maxWords = Math.min(results.length, 30);
+  var cols = maxWords <= 5 ? 2 : maxWords <= 12 ? 3 : maxWords <= 22 ? 4 : 5;
+  var rows = Math.ceil(maxWords / cols);
+  var cellW = Math.max(58, box.w / cols);
+  var cellH = Math.max(24, box.h / rows);
+  var maxCount = 1;
+  for (var c = 0; c < maxWords; c++) maxCount = Math.max(maxCount, Number(results[c].count || 1));
+
+  for (var i = 0; i < maxWords; i++) {
+    var col = i % cols;
+    var row = Math.floor(i / cols);
+    var wordLimit = Math.max(7, Math.floor((cellW - 10) / 5.2));
+    var word = truncate_(results[i].word || results[i].text || '', wordLimit);
+    var weightedSize = 10 + (Number(results[i].count || 1) / maxCount) * (maxWords > 18 ? 10 : 16) + (i < 3 ? 4 : 0);
+    var fitSize = (cellW - 10) / Math.max(3, word.length) * 1.55;
+    var size = Math.max(8, Math.min(Math.min(maxWords > 18 ? 22 : 32, cellH * 0.58, fitSize), weightedSize));
+    var wordX = box.x + col * cellW + 5;
+    var wordY = box.y + row * cellH + Math.max(0, (cellH - size - 8) / 2);
+    text_(slide, word, wordX, wordY, Math.max(20, cellW - 10), Math.min(cellH, size + 10), size, true, colors[i % colors.length], SlidesApp.ParagraphAlignment.CENTER);
   }
+  if (results.length > maxWords) text_(slide, '+' + (results.length - maxWords) + ' more words', box.x, box.y + box.h - 16, box.w, 16, 9, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
 }
 
-function renderQa_(slide, questions) {
+function renderQa_(slide, questions, box) {
   if (!questions.length) {
-    waiting_(slide);
+    waiting_(slide, box);
     return;
   }
-  for (var i = 0; i < Math.min(questions.length, 5); i++) {
-    rounded_(slide, 255, 165 + i * 52, 385, 40, '#F4F7F4', '#DDEBE3');
-    text_(slide, questions[i].question_text || questions[i].text || '', 268, 176 + i * 52, 310, 20, 12, true, '#17172F');
-    text_(slide, '+' + (questions[i].upvote_count || 0), 600, 176 + i * 52, 35, 20, 11, true, '#168A3A');
+  var visible = Math.min(questions.length, Math.max(2, Math.floor((box.h - 18) / 48)));
+  var rowHeight = Math.max(38, Math.min(48, (box.h - 22) / visible));
+  for (var i = 0; i < visible; i++) {
+    var y = box.y + i * rowHeight;
+    rounded_(slide, box.x, y, box.w, Math.min(38, rowHeight - 6), '#F4F7F4', '#DDEBE3');
+    text_(slide, truncate_(questions[i].question_text || questions[i].text || '', Math.floor((box.w - 70) / 6)), box.x + 12, y + 10, box.w - 70, 18, 10, true, '#17172F');
+    text_(slide, '+' + (questions[i].upvote_count || 0), box.x + box.w - 50, y + 10, 38, 18, 9, true, '#168A3A');
   }
+  if (questions.length > visible) text_(slide, '+' + (questions.length - visible) + ' more questions', box.x, box.y + box.h - 16, box.w, 16, 9, false, '#6B7B8D');
 }
 
-function renderOpenText_(slide, items) {
+function renderOpenText_(slide, items, box) {
   if (!items.length) {
-    waiting_(slide);
+    waiting_(slide, box);
     return;
   }
-  for (var i = 0; i < Math.min(items.length, 5); i++) {
-    rounded_(slide, 255, 165 + i * 52, 385, 40, '#F4F7F4', '#DDEBE3');
-    text_(slide, items[i].text || items[i].text_value || JSON.stringify(items[i]), 270, 176 + i * 52, 340, 20, 12, true, '#17172F');
+  var visible = Math.min(items.length, Math.max(2, Math.floor((box.h - 18) / 48)));
+  var rowHeight = Math.max(38, Math.min(48, (box.h - 22) / visible));
+  for (var i = 0; i < visible; i++) {
+    var y = box.y + i * rowHeight;
+    rounded_(slide, box.x, y, box.w, Math.min(38, rowHeight - 6), '#F4F7F4', '#DDEBE3');
+    text_(slide, truncate_(items[i].text || items[i].text_value || JSON.stringify(items[i]), Math.floor((box.w - 24) / 6)), box.x + 12, y + 10, box.w - 24, 18, 10, true, '#17172F');
   }
+  if (items.length > visible) text_(slide, '+' + (items.length - visible) + ' more responses', box.x, box.y + box.h - 16, box.w, 16, 9, false, '#6B7B8D');
 }
 
-function renderRating_(slide, results) {
+function renderRating_(slide, results, box) {
   var average = Number(results && results.average_rating ? results.average_rating : 0);
   var count = Number(results && results.rating_count ? results.rating_count : 0);
   if (!count) {
-    waiting_(slide);
+    waiting_(slide, box);
     return;
   }
 
-  text_(slide, String(average.toFixed ? average.toFixed(1) : average), 300, 185, 170, 80, 54, true, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
-  text_(slide, 'average rating', 320, 262, 130, 22, 13, true, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
-  text_(slide, count + ' response' + (count === 1 ? '' : 's'), 475, 222, 150, 30, 20, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
-  bar_(slide, 310, 315, 270, 14, Math.min(100, average / 5 * 100), '#168A3A');
+  text_(slide, String(average.toFixed ? average.toFixed(1) : average), box.x, box.y + 12, box.w * 0.42, 70, 48, true, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, 'average rating', box.x, box.y + 80, box.w * 0.42, 22, 12, true, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, count + ' response' + (count === 1 ? '' : 's'), box.x + box.w * 0.48, box.y + 45, box.w * 0.42, 30, 18, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
+  bar_(slide, box.x + box.w * 0.08, box.y + 135, box.w * 0.84, 14, Math.min(100, average / 5 * 100), '#168A3A');
 }
 
-function waiting_(slide) {
-  text_(slide, 'Waiting for responses…', 270, 240, 360, 34, 22, true, '#A3AEA8', SlidesApp.ParagraphAlignment.CENTER);
-  text_(slide, 'Results will show here once your audience responds.', 275, 282, 350, 28, 13, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
+function waiting_(slide, box) {
+  text_(slide, 'Waiting for responses…', box.x, box.y + Math.max(30, box.h * 0.32), box.w, 34, 21, true, '#A3AEA8', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, 'Results will show here once your audience responds.', box.x + 10, box.y + Math.max(68, box.h * 0.32 + 40), box.w - 20, 28, 12, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
 }
 
 function findInteraction_(eventId, interactionId) {
@@ -602,6 +660,12 @@ function label_(interaction) {
 
 function host_() {
   return SLIDEENGAGE_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
+function truncate_(value, maxLength) {
+  var text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!maxLength || text.length <= maxLength) return text;
+  return text.slice(0, Math.max(0, maxLength - 1)).trim() + '…';
 }
 
 function text_(slide, text, left, top, width, height, size, bold, color, align) {
