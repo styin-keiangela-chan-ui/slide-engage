@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 type TooltipPosition = 'top' | 'bottom' | 'left' | 'right';
 
@@ -13,26 +14,80 @@ type SETooltipProps = {
 
 export default function SETooltip({ text, children, position = 'top', className = '' }: SETooltipProps) {
   const wrapperRef = useRef<HTMLSpanElement | null>(null);
+  const tooltipRef = useRef<HTMLSpanElement | null>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [visible, setVisible] = useState(false);
   const [placement, setPlacement] = useState<TooltipPosition>(position);
+  const [mounted, setMounted] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
 
   useEffect(() => {
-    if (!visible || !wrapperRef.current) return;
+    setMounted(true);
+  }, []);
 
-    const rect = wrapperRef.current.getBoundingClientRect();
-    const space = {
-      top: rect.top,
-      bottom: window.innerHeight - rect.bottom,
-      left: rect.left,
-      right: window.innerWidth - rect.right,
+  useEffect(() => {
+    if (!visible) return;
+
+    function placeTooltip() {
+      const anchor = wrapperRef.current;
+      const tooltip = tooltipRef.current;
+      if (!anchor || !tooltip) return;
+
+      const gap = 10;
+      const edge = 8;
+      const rect = anchor.getBoundingClientRect();
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const width = tooltipRect.width || 120;
+      const height = tooltipRect.height || 34;
+
+      const placementOptions: TooltipPosition[] = [
+        position,
+        'bottom',
+        'top',
+        'right',
+        'left',
+      ];
+      const candidates = placementOptions.filter((item, index, array) => array.indexOf(item) === index);
+
+      function nextCoords(nextPlacement: TooltipPosition) {
+        if (nextPlacement === 'bottom') {
+          return { top: rect.bottom + gap, left: rect.left + rect.width / 2 - width / 2 };
+        }
+        if (nextPlacement === 'left') {
+          return { top: rect.top + rect.height / 2 - height / 2, left: rect.left - width - gap };
+        }
+        if (nextPlacement === 'right') {
+          return { top: rect.top + rect.height / 2 - height / 2, left: rect.right + gap };
+        }
+        return { top: rect.top - height - gap, left: rect.left + rect.width / 2 - width / 2 };
+      }
+
+      const chosen = candidates.find(candidate => {
+        const point = nextCoords(candidate);
+        return (
+          point.top >= edge &&
+          point.left >= edge &&
+          point.top + height <= window.innerHeight - edge &&
+          point.left + width <= window.innerWidth - edge
+        );
+      }) || position;
+
+      const point = nextCoords(chosen);
+      setPlacement(chosen);
+      setCoords({
+        top: Math.max(edge, Math.min(point.top, window.innerHeight - height - edge)),
+        left: Math.max(edge, Math.min(point.left, window.innerWidth - width - edge)),
+      });
+    }
+
+    const frame = window.requestAnimationFrame(placeTooltip);
+    window.addEventListener('resize', placeTooltip);
+    window.addEventListener('scroll', placeTooltip, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', placeTooltip);
+      window.removeEventListener('scroll', placeTooltip, true);
     };
-
-    if (position === 'top' && space.top < 48 && space.bottom > space.top) setPlacement('bottom');
-    else if (position === 'bottom' && space.bottom < 48 && space.top > space.bottom) setPlacement('top');
-    else if (position === 'left' && space.left < 160 && space.right > space.left) setPlacement('right');
-    else if (position === 'right' && space.right < 160 && space.left > space.right) setPlacement('left');
-    else setPlacement(position);
   }, [position, visible]);
 
   function clearPressTimer() {
@@ -56,13 +111,6 @@ export default function SETooltip({ text, children, position = 'top', className 
     pressTimer.current = setTimeout(show, 500);
   }
 
-  const placementClasses: Record<TooltipPosition, string> = {
-    top: 'bottom-full left-1/2 mb-2 -translate-x-1/2',
-    bottom: 'left-1/2 top-full mt-2 -translate-x-1/2',
-    left: 'right-full top-1/2 mr-2 -translate-y-1/2',
-    right: 'left-full top-1/2 ml-2 -translate-y-1/2',
-  };
-
   const arrowClasses: Record<TooltipPosition, string> = {
     top: 'left-1/2 top-full -translate-x-1/2 border-l-transparent border-r-transparent border-b-transparent border-t-[#1F2933]',
     bottom: 'bottom-full left-1/2 -translate-x-1/2 border-l-transparent border-r-transparent border-t-transparent border-b-[#1F2933]',
@@ -84,15 +132,20 @@ export default function SETooltip({ text, children, position = 'top', className 
       onTouchCancel={hide}
     >
       {children}
-      <span
-        role="tooltip"
-        className={`pointer-events-none absolute z-[9999] max-w-[240px] whitespace-nowrap rounded-[8px] bg-[#1F2933] px-2.5 py-1.5 text-xs font-bold leading-tight text-white shadow-lg transition-all duration-200 ${
-          visible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
-        } ${placementClasses[placement]}`}
-      >
-        {text}
-        <span className={`absolute h-0 w-0 border-4 ${arrowClasses[placement]}`} />
-      </span>
+      {mounted && createPortal(
+        <span
+          ref={tooltipRef}
+          role="tooltip"
+          style={{ top: coords.top, left: coords.left }}
+          className={`pointer-events-none fixed z-[99999] max-w-[240px] rounded-[8px] bg-[#1F2933] px-2.5 py-1.5 text-xs font-bold leading-tight text-white shadow-lg transition-all duration-150 ${
+            visible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
+          }`}
+        >
+          {text}
+          <span className={`absolute h-0 w-0 border-4 ${arrowClasses[placement]}`} />
+        </span>,
+        document.body
+      )}
     </span>
   );
 }

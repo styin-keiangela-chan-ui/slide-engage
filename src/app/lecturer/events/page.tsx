@@ -216,7 +216,7 @@ export default function LecturerEventsPage() {
   function openDuplicateDialog(event: EventRow) {
     setSelectedEvent(event);
     setPopupPosition(null);
-    setEventName(`${event.event_name} copy`);
+    setEventName('');
     setStartDate(event.start_date || todayIso());
     setEndDate(event.end_date || event.start_date || addDaysIso(2));
     setDuplicateCode(eventCode());
@@ -610,13 +610,13 @@ export default function LecturerEventsPage() {
           startDate={startDate}
           endDate={endDate}
           eventCode={duplicateCode}
+          suggestedName={`${selectedEvent.event_name} copy`}
           onNameChange={setEventName}
           onStartChange={value => {
             setStartDate(value);
             if (endDate < value) setEndDate(value);
           }}
           onEndChange={setEndDate}
-          onCodeChange={setDuplicateCode}
           onCancel={() => setDialog(null)}
           onSubmit={duplicateEvent}
           error={error}
@@ -750,10 +750,10 @@ function DuplicateModal({
   startDate,
   endDate,
   eventCode,
+  suggestedName,
   onNameChange,
   onStartChange,
   onEndChange,
-  onCodeChange,
   onCancel,
   onSubmit,
   error,
@@ -763,10 +763,10 @@ function DuplicateModal({
   startDate: string;
   endDate: string;
   eventCode: string;
+  suggestedName: string;
   onNameChange: (value: string) => void;
   onStartChange: (value: string) => void;
   onEndChange: (value: string) => void;
-  onCodeChange: (value: string) => void;
   onCancel: () => void;
   onSubmit: () => void;
   error?: string;
@@ -785,11 +785,24 @@ function DuplicateModal({
       </div>
       <label className="mb-4 block">
         <span className="mb-2 block text-sm font-bold text-[#1A1A2E]">Give your event a name</span>
-        <input value={eventName} onChange={event => onNameChange(event.target.value)} className="h-11 w-full rounded-[11px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]" />
+        <input
+          value={eventName}
+          onChange={event => onNameChange(event.target.value)}
+          placeholder={suggestedName}
+          className="h-11 w-full rounded-[11px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none placeholder:text-[#9AA6B2] focus:border-[#168A3A]"
+        />
+        {!eventName.trim() && (
+          <span className="mt-2 block text-xs font-bold text-[#6B7B8D]">Please enter an event name.</span>
+        )}
       </label>
       <label className="mb-6 block">
         <span className="mb-2 block text-sm font-bold text-[#1A1A2E]">Event code</span>
-        <input value={eventCode} onChange={event => onCodeChange(event.target.value.toUpperCase().replace('#', ''))} className="h-11 w-full rounded-[11px] border border-[#DDE8E1] px-4 text-sm font-semibold outline-none focus:border-[#168A3A]" />
+        <input
+          value={eventCode}
+          readOnly
+          disabled
+          className="h-11 w-full cursor-not-allowed rounded-[11px] border border-[#DDE8E1] bg-[#F3F4F6] px-4 text-sm font-semibold text-[#6B7B8D] outline-none"
+        />
       </label>
       <div className="flex justify-end gap-3">
         <button onClick={onCancel} className="rounded-[10px] px-5 py-2.5 text-sm font-bold text-[#6B7B8D] hover:bg-[#F3F4F6]">Cancel</button>
