@@ -84,7 +84,7 @@ Use this only for internal development. Published Marketplace users should not c
 5. Save the project.
 6. Reload the Google Slides presentation.
 7. Open `Extensions > SlideEngage > Open SlideEngage`.
-8. Click `Authorize connection` if the sidebar asks for permission.
+8. Click `Authorize Google Slides Add-on` if the sidebar asks for permission.
 9. Sign in with the same SlideEngage website account.
 10. Select or create an event.
 11. Create an interaction.
@@ -184,12 +184,13 @@ Expected user flow:
 If the add-on cannot call `UrlFetchApp.fetch`, users will see:
 
 ```text
-Please authorize SlideEngage to connect to the internet.
+Google permission is required before SlideEngage can connect to your account.
+Authorization required. Please click Authorize and allow Google permissions.
 ```
 
 Fix:
 
-1. Click `Authorize connection` in the sidebar.
+1. Click `Authorize Google Slides Add-on` in the sidebar.
 2. Complete Google authorization.
 3. Reload Google Slides if needed.
 4. Open SlideEngage again.

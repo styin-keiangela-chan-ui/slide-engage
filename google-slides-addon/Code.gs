@@ -76,6 +76,10 @@ function getAuthorizationStatus() {
 }
 
 function login(email, password) {
+  return loginSlideEngage(email, password);
+}
+
+function loginSlideEngage(email, password) {
   assertAuthorized_();
   if (!email || !password) throw new Error('Email and password required.');
   var data = apiFetch_('/api/auth/login', {
@@ -89,8 +93,14 @@ function login(email, password) {
 function authorizeSlideEngage() {
   try {
     assertAuthorized_();
-    UrlFetchApp.fetch(SLIDEENGAGE_URL, { muteHttpExceptions: true });
-    return { success: true };
+    var response = UrlFetchApp.fetch(SLIDEENGAGE_URL + '/api/health', {
+      method: 'get',
+      muteHttpExceptions: true,
+    });
+    return {
+      ok: true,
+      status: response.getResponseCode(),
+    };
   } catch (error) {
     throw normalizeFetchPermissionError_(error);
   }
@@ -99,7 +109,7 @@ function authorizeSlideEngage() {
 function assertAuthorized_() {
   var info = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
   if (info.getAuthorizationStatus() === ScriptApp.AuthorizationStatus.REQUIRED) {
-    throw new Error('Please authorize SlideEngage to connect to the internet.');
+    throw new Error('Google permission is required before SlideEngage can connect to your account.');
   }
 }
 
@@ -422,7 +432,7 @@ function apiFetch_(path, options) {
 function normalizeFetchPermissionError_(error) {
   var message = error && error.message ? error.message : String(error || '');
   if (/UrlFetchApp|external_request|permission|authorization|not have permission/i.test(message)) {
-    return new Error('Please authorize SlideEngage to connect to the internet.');
+    return new Error('Authorization required. Please click Authorize and allow Google permissions.');
   }
   if (/Address unavailable|DNS|timed out|failed/i.test(message)) {
     return new Error('Network error. SlideEngage could not reach the public website.');

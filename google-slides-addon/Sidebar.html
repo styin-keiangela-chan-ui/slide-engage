@@ -47,7 +47,7 @@
         <b>Lecturer login</b>
         <div class="small muted">Use your SlideEngage website email/Gmail and password.</div>
         <div id="permission" class="status permission hidden"></div>
-        <button class="btn secondary" onclick="authorize()">Authorize connection</button>
+        <button class="btn secondary" onclick="authorize()">Authorize Google Slides Add-on</button>
         <input id="email" class="input" placeholder="Email">
         <input id="password" class="input" type="password" placeholder="Password">
         <button class="btn" onclick="login()">Sign in</button>
@@ -125,9 +125,9 @@
       function $(id){return document.getElementById(id)}
       function show(message,isError){var s=$("status");s.textContent=message||"";s.className="status"+(isError?" error":"")+(message?"":" hidden")}
       function call(name,args,ok){show("Loading...");google.script.run.withSuccessHandler(function(result){show("");ok&&ok(result)}).withFailureHandler(function(err){handleFailure(err)})[name].apply(null,args||[])}
-      function handleFailure(err){var message=(err&&err.message)||String(err);if(/invalid email|invalid slideengage/i.test(message))message="Invalid SlideEngage email or password.";show(message,true);if(/authorize|permission|internet/i.test(message))checkAuthorization()}
+      function handleFailure(err){var message=(err&&err.message)||String(err);if(/invalid email|invalid slideengage/i.test(message))message="Invalid SlideEngage email or password.";if(/UrlFetchApp|external_request|permission|authorization|not have permission|authorize|internet/i.test(message))message="Authorization required. Please click Authorize and allow Google permissions.";show(message,true);if(/authorize|permission|internet/i.test(message))checkAuthorization()}
       function boot(){renderTemplates();checkAuthorization();call("getInitialState",[],function(result){state.session=result.session;state.events=result.events||[];state.selectedEvent=result.selectedEvent||null;state.interactions=result.interactions||[];render()})}
-      function checkAuthorization(){google.script.run.withSuccessHandler(function(result){var box=$("permission");if(!result||result.authorized){box.classList.add("hidden");return}box.innerHTML="Please authorize SlideEngage to connect to the internet. <a class=\"link\" target=\"_blank\" href=\""+result.authorizationUrl+"\">Open authorization</a>";box.classList.remove("hidden")}).withFailureHandler(function(){}).getAuthorizationStatus()}
+      function checkAuthorization(){google.script.run.withSuccessHandler(function(result){var box=$("permission");if(!result||result.authorized){box.classList.add("hidden");return}box.innerHTML="Google permission is required before SlideEngage can connect to your account. <a class=\"link\" target=\"_blank\" href=\""+result.authorizationUrl+"\">Open authorization</a>";box.classList.remove("hidden")}).withFailureHandler(function(){}).getAuthorizationStatus()}
 
       function render(){
         if(state.session){$("login").classList.add("hidden");$("app").classList.remove("hidden");$("hello").textContent=state.session.lecturer.name||state.session.lecturer.email}
@@ -150,8 +150,8 @@
       function escapeHtml(value){return String(value||"").replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]})}
       function escapeAttr(value){return escapeHtml(value).replace(/"/g,"&quot;")}
 
-      function authorize(){call("authorizeSlideEngage",[],function(){checkAuthorization();show("SlideEngage is authorized to connect to the internet.")})}
-      function login(){call("login",[$("email").value,$("password").value],function(result){state.session=result;refresh()})}
+      function authorize(){call("authorizeSlideEngage",[],function(){checkAuthorization();if($("email").value&&$("password").value){login();return}show("Google permission confirmed. Please sign in again.")})}
+      function login(){call("loginSlideEngage",[$("email").value,$("password").value],function(result){state.session=result;refresh()})}
       function logout(){call("logout",[],function(){state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[],config:{}};render();show("Signed out.")})}
       function refresh(){call("getInitialState",[],function(result){state.session=result.session;state.events=result.events||[];state.selectedEvent=result.selectedEvent||null;state.interactions=result.interactions||[];if(state.selectedInteraction){var found=findInteraction(state.selectedInteraction.id);state.selectedInteraction=found||null}render()})}
       function selectEvent(){call("selectEvent",[$("events").value],function(result){state.selectedEvent=result.selectedEvent;state.interactions=result.interactions||[];state.selectedInteraction=null;state.template=null;state.options=[];state.config={};render()})}

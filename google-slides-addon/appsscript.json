@@ -8,6 +8,10 @@
     "https://www.googleapis.com/auth/script.external_request",
     "https://www.googleapis.com/auth/userinfo.email"
   ],
+  "urlFetchWhitelist": [
+    "https://slide-engage.vercel.app/",
+    "https://slideengage.vercel.app/"
+  ],
   "addOns": {
     "common": {
       "name": "SlideEngage",
