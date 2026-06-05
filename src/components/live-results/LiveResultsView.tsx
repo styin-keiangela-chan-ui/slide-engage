@@ -94,7 +94,11 @@ function interactionLabel(interaction?: LiveInteraction | null) {
 
 function interactionWasAddedToSlides(interaction: LiveInteraction) {
   const config = (interaction.config || {}) as Record<string, any>;
-  return Boolean(config.google_slides_slide_id);
+  return Boolean(
+    config.google_slides_slide_id ||
+      config.powerpoint_slide_id ||
+      config.powerpoint_added_to_presentation
+  );
 }
 
 function compactTitle(value: string, fallback = 'Untitled interaction') {

@@ -81,24 +81,6 @@ export function GET() {
         padding: 10px;
         box-shadow: 0 1px 2px rgba(25, 26, 46, 0.04);
       }
-      .debug {
-        border-color: #b8dec5;
-        background: #fbfffc;
-        color: #315b40;
-        font-size: 12px;
-        line-height: 1.45;
-      }
-      .debug summary {
-        cursor: pointer;
-        color: var(--ink);
-        font-weight: 900;
-      }
-      .debug-list {
-        margin-top: 8px;
-        display: grid;
-        gap: 4px;
-        font-weight: 700;
-      }
       .hidden { display: none !important; }
       .row {
         display: flex;
@@ -409,20 +391,13 @@ export function GET() {
         <img src="/assets/icons/icon-64.png" alt="SlideEngage" />
         <div>
           <div class="brand-title">SlideEngage</div>
-          <div id="office-summary" class="brand-subtitle">Taskpane loading</div>
+          <div id="office-summary" class="brand-subtitle">PowerPoint add-in</div>
         </div>
       </div>
       <button id="logout-button" class="button secondary small hidden" type="button" title="Logout" aria-label="Logout">Logout</button>
     </header>
 
     <main class="shell">
-      <details class="card debug" open>
-        <summary>Office debug</summary>
-        <div id="debug-list" class="debug-list">
-          <div>Taskpane mounted</div>
-        </div>
-      </details>
-
       <section id="login-view" class="card">
         <h1 class="title">Lecturer login</h1>
         <div class="stack">
@@ -466,7 +441,6 @@ export function GET() {
             </div>
             <span id="selected-event-status" class="small muted"></span>
           </div>
-          <button id="insert-join-button" class="button secondary full" type="button" aria-label="Insert QR code and event joining information into PowerPoint" data-tooltip="Insert QR code and event joining information into PowerPoint">Insert joining instructions</button>
         </section>
 
         <section id="interaction-card" class="card hidden">
@@ -552,7 +526,7 @@ export function GET() {
         var templates = [
           { label: "Poll", icon: "📊", type: "poll", config: { poll_kind: "multiple_choice", results_visible: true, voting_open: true }, options: ["Option 1", "Option 2"] },
           { label: "Text", icon: "📝", type: "feedback", config: { poll_kind: "open_text", include_open_text: true, anonymous: true, voting_open: true } },
-          { label: "Word", icon: "☁️", type: "word_cloud", config: { max_words_per_participant: 3, allow_duplicate_words: true, voting_open: true } },
+          { label: "Word Cloud", icon: "☁️", type: "word_cloud", config: { max_words_per_participant: 3, allow_duplicate_words: true, voting_open: true } },
           { label: "Rating", icon: "⭐", type: "feedback", config: { poll_kind: "rating", include_star_ratings: true, scale: 5, voting_open: true } },
           { label: "Quiz", icon: "🎯", type: "quiz", config: { time_limit_seconds: 30, points: 100, voting_open: true }, options: [{ option_text: "Correct answer", is_correct: true }, { option_text: "Distractor", is_correct: false }] },
           { label: "Q&A", icon: "💬", type: "qa", config: { allow_anonymous_questions: true, moderation: false, voting_open: true } }
@@ -563,9 +537,6 @@ export function GET() {
         }
 
         function addDebug(message) {
-          var row = document.createElement("div");
-          row.textContent = message;
-          el("debug-list").appendChild(row);
           console.log("[SlideEngage taskpane]", message);
         }
 
@@ -665,14 +636,14 @@ export function GET() {
 
         function initializeOffice() {
           if (!window.Office || !Office.onReady) {
-            el("office-summary").textContent = "Office.js unavailable";
+            el("office-summary").textContent = "Browser preview";
             addDebug("Office.js unavailable");
             return;
           }
 
           Office.onReady(function (info) {
             var host = info && info.host ? info.host : "browser";
-            el("office-summary").textContent = "Office ready: " + host;
+            el("office-summary").textContent = host === "PowerPoint" ? "PowerPoint add-in" : "Browser preview";
             addDebug("Office ready");
           }).catch(function (error) {
             el("office-summary").textContent = "Office init failed";
@@ -963,12 +934,12 @@ export function GET() {
 
         function labelForInteraction(interaction) {
           var config = interaction.config || {};
-          if (interaction.type === "poll") return "Multiple choice";
+          if (interaction.type === "poll") return "Poll";
           if (interaction.type === "quiz") return "Quiz";
-          if (interaction.type === "word_cloud") return "Word cloud";
-          if (interaction.type === "qa") return "Audience Q&A";
+          if (interaction.type === "word_cloud") return "Word Cloud";
+          if (interaction.type === "qa") return "Q&A";
           if (interaction.type === "feedback" && config.poll_kind === "rating") return "Rating";
-          if (interaction.type === "feedback") return "Open text";
+          if (interaction.type === "feedback") return "Text";
           return interaction.type || "Interaction";
         }
 
@@ -1059,12 +1030,12 @@ export function GET() {
         }
 
         function defaultQuestion(label) {
-          if (label === "Multiple choice") return "How familiar are you with the topic?";
-          if (label === "Word cloud") return "In one word, describe today's topic";
-          if (label === "Open text") return "What should we discuss next?";
+          if (label === "Poll") return "How familiar are you with the topic?";
+          if (label === "Word Cloud") return "In one word, describe today's topic";
+          if (label === "Text") return "What should we discuss next?";
           if (label === "Rating") return "How would you rate this session?";
           if (label === "Quiz") return "Which answer is correct?";
-          if (label === "Audience Q&A") return "What questions should we answer?";
+          if (label === "Q&A") return "What questions should we answer?";
           return "Untitled interaction";
         }
 
@@ -1114,15 +1085,15 @@ export function GET() {
           var holder = el("interaction-settings");
           holder.innerHTML = "";
           if (!editorTemplate) return;
-          if (editorTemplate.label === "Word cloud") {
+          if (editorTemplate.label === "Word Cloud") {
             holder.appendChild(numberSetting("Max words per participant", "max_words_per_participant", config.max_words_per_participant || 3));
             holder.appendChild(toggleSetting("Allow duplicate words", "allow_duplicate_words", config.allow_duplicate_words !== false));
           }
-          if (editorTemplate.label === "Open text") {
+          if (editorTemplate.label === "Text") {
             holder.appendChild(numberSetting("Character limit", "character_limit", config.character_limit || 240));
             holder.appendChild(toggleSetting("Anonymous responses", "anonymous", config.anonymous !== false));
           }
-          if (editorTemplate.label === "Multiple choice") {
+          if (editorTemplate.label === "Poll") {
             holder.appendChild(toggleSetting("Multiple answers", "allow_multiple_answers", !!config.allow_multiple_answers));
             holder.appendChild(toggleSetting("Show respondent names", "show_respondent_names", !!config.show_respondent_names));
             holder.appendChild(toggleSetting("Poll results visible", "results_visible", config.results_visible !== false));
@@ -1135,7 +1106,7 @@ export function GET() {
             holder.appendChild(numberSetting("Timer seconds", "time_limit_seconds", config.time_limit_seconds || 30));
             holder.appendChild(numberSetting("Points", "points", config.points || 100));
           }
-          if (editorTemplate.label === "Audience Q&A") {
+          if (editorTemplate.label === "Q&A") {
             holder.appendChild(toggleSetting("Moderation", "moderation", !!config.moderation));
             holder.appendChild(toggleSetting("Replies", "replies_enabled", !!config.replies_enabled));
             holder.appendChild(numberSetting("Character limit", "character_limit", config.character_limit || 160));
@@ -1469,6 +1440,30 @@ export function GET() {
           return APP_URL + "/present/live-result/" + encodeURIComponent(selectedEvent.id) + "/" + encodeURIComponent(interaction.id) + "?source=powerpoint";
         }
 
+        function markPowerPointSlide(interaction) {
+          if (!interaction || !interaction.id || !selectedEvent) return Promise.resolve(interaction);
+          var config = Object.assign({}, interaction.config || {});
+          config.powerpoint_added_to_presentation = true;
+          config.powerpoint_slide_id = config.powerpoint_slide_id || "powerpoint-" + interaction.id;
+          config.powerpoint_event_id = selectedEvent.id;
+          config.powerpoint_presented_at = new Date().toISOString();
+          return request("/api/interactions", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: interaction.id, config: config })
+          }).then(function (data) {
+            if (data && data.interaction) {
+              selectedInteraction = data.interaction;
+              interaction.config = data.interaction.config || config;
+            }
+            loadInteractions();
+            return data && data.interaction ? data.interaction : interaction;
+          }).catch(function (error) {
+            addDebug("Unable to mark PowerPoint slide reference: " + (error && error.message ? error.message : "unknown error"));
+            return interaction;
+          });
+        }
+
         function insertInteractionSlide(interaction, options, resultData, isAutoRefresh) {
           if (!selectedEvent) return Promise.resolve();
           var joinUrl = APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
@@ -1504,7 +1499,14 @@ export function GET() {
               addDebug("Generated slide image: " + (!!data.imageBase64));
               addDebug("Generated slide SVG: " + (!!data.svgBase64));
             }
-            return insertVisualSlide(data, interaction, liveUrl, !!isAutoRefresh);
+            return insertVisualSlide(data, interaction, liveUrl, !!isAutoRefresh).then(function (inserted) {
+              if (!isAutoRefresh && inserted !== false) {
+                return markPowerPointSlide(interaction).then(function () {
+                  return inserted;
+                });
+              }
+              return inserted;
+            });
           }).catch(function (error) {
             setStatus("app-status", "Unable to create slide: " + error.message, true);
             addDebug("Create slide failed: " + error.message);
@@ -1901,23 +1903,6 @@ export function GET() {
           });
         }
 
-        function insertJoiningSlide() {
-          if (!selectedEvent) return;
-          var joinUrl = APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
-          var text = "SlideEngage joining instructions\\n\\nJoin at " + joinUrl + "\\n\\nEvent code: #" + selectedEvent.event_code;
-          if (window.Office && Office.context && Office.context.document && Office.context.document.setSelectedDataAsync) {
-            Office.context.document.setSelectedDataAsync(text, { coercionType: Office.CoercionType.Text }, function (result) {
-              if (result.status === Office.AsyncResultStatus.Succeeded) {
-                setStatus("app-status", "Joining instructions inserted.", false);
-              } else {
-                setStatus("app-status", result.error && result.error.message ? result.error.message : "Unable to insert text.", true);
-              }
-            });
-          } else {
-            setStatus("app-status", "PowerPoint text insertion API is not available in browser preview.", false);
-          }
-        }
-
         function loadResults(interactionId) {
           if (selectedInteraction && selectedInteraction.type === "qa") {
             loadQaResults(interactionId);
@@ -2074,7 +2059,6 @@ export function GET() {
             renderSelectedEvent();
             if (selectedEvent) loadInteractions();
           };
-          el("insert-join-button").onclick = insertJoiningSlide;
           el("close-editor").onclick = function () {
             el("interaction-editor").classList.add("hidden");
           };

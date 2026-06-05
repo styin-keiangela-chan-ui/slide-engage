@@ -23,7 +23,9 @@
       .btn.smallbtn{padding:7px 9px;font-size:12px}
       .btn:disabled{opacity:.55;cursor:not-allowed}
       .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-      .template{min-height:54px;border:1px solid #dfe9e3;border-radius:10px;padding:7px;background:#fff;text-align:center;font-weight:800;font-size:11px;display:grid;place-items:center;gap:2px}
+      .template{min-height:62px;border:1px solid #dfe9e3;border-radius:12px;padding:8px;background:#fff;text-align:center;font-weight:800;font-size:11px;display:grid;place-items:center;gap:3px;transition:background .15s ease,border-color .15s ease,transform .15s ease}
+      .template:hover,.template:focus{transform:translateY(-1px)}
+      .template span:first-child{font-size:18px;line-height:1}
       .template:hover,.item:hover{border-color:#168a3a;background:#f3fbf6}
       .item{border:1px solid #dfe9e3;border-radius:10px;padding:8px;background:#fff;text-align:left}
       .item.active{border-color:#168a3a;background:#eaf7ef}
@@ -90,7 +92,7 @@
         </div>
 
         <div class="card stack">
-          <button class="section-toggle" onclick="toggleSection('templates')" type="button"><span>Create interaction</span><span>⌄</span></button>
+          <button class="section-toggle" onclick="toggleSection('templates')" type="button"><span>Create New Interaction</span><span>⌄</span></button>
           <div id="templates" class="grid"></div>
         </div>
 
@@ -179,7 +181,7 @@
       function renderEvents(){var sel=$("events");sel.innerHTML="";var placeholder=document.createElement("option");placeholder.textContent=state.events.length?"Select event":"No events yet";placeholder.value="";sel.appendChild(placeholder);state.events.forEach(function(event){var option=document.createElement("option");option.value=event.id;option.textContent=(event.event_name||"Untitled")+" (#"+event.event_code+")";if(state.selectedEvent&&state.selectedEvent.id===event.id)option.selected=true;sel.appendChild(option)});$("eventInfo").textContent=state.selectedEvent?"Code: #"+state.selectedEvent.event_code+" | "+(state.selectedEvent.status||"closed"):"Please select an event."}
       function renderInteractions(){var list=$("interactions");list.innerHTML="";if(!state.interactions.length){list.innerHTML="<div class=\"small muted\">No interactions yet. Create one above.</div>";return}state.interactions.forEach(function(interaction){var row=document.createElement("div");row.className="item"+(state.selectedInteraction&&state.selectedInteraction.id===interaction.id?" active":"");var status=interaction.status||"draft";row.innerHTML="<div class=\"row\"><div style=\"min-width:0\"><b style=\"font-size:13px\">"+escapeHtml(interaction.title||"Untitled")+"</b><div class=\"small muted\">"+label(interaction)+"</div></div><span class=\"pill "+status+"\" title=\""+status+"\">"+status+"</span></div><div class=\"row wraprow\" style=\"margin-top:6px\"><button class=\"btn secondary smallbtn\" data-action=\"edit\" title=\"Edit interaction\" aria-label=\"Edit interaction\">Edit</button><button class=\"btn smallbtn\" data-action=\"present\" title=\"Show live results\" aria-label=\"Show live results\">Present</button><button class=\"btn danger smallbtn\" data-action=\"delete\" title=\"Delete interaction\" aria-label=\"Delete interaction\">🗑 Delete</button></div>";row.onclick=function(){openInteraction(interaction)};row.querySelector("[data-action=edit]").onclick=function(e){e.stopPropagation();openInteraction(interaction)};row.querySelector("[data-action=present]").onclick=function(e){e.stopPropagation();openInteraction(interaction);presentLive()};row.querySelector("[data-action=delete]").onclick=function(e){e.stopPropagation();deleteInteractionFromList(interaction)};list.appendChild(row)})}
       function iconFor(t){return t.type==="poll"?"📊":t.type==="word_cloud"?"☁️":t.type==="quiz"?"🎯":t.type==="qa"?"💬":t.config&&t.config.poll_kind==="rating"?"⭐":"📝"}
-      function shortLabel(label){return label==="Multiple Choice"?"Poll":label==="Open Text"?"Text":label==="Word Cloud"?"Word":label==="Audience Q&A"?"Q&A":label}
+      function shortLabel(label){return label==="Multiple Choice"?"Poll":label==="Open Text"?"Text":label==="Audience Q&A"?"Q&A":label}
       function tooltipFor(label){return label==="Multiple Choice"?"Create a poll with answer options":label==="Open Text"?"Collect text responses from participants":label==="Word Cloud"?"Create a live word cloud":label==="Rating"?"Create rating question":label==="Quiz"?"Create quiz":label==="Audience Q&A"?"Create audience Q&A":"Create interaction"}
       function toggleSection(id){$(id).classList.toggle("hidden")}
       function toggleNewEvent(){$("new-event-row").classList.toggle("hidden")}

@@ -75,17 +75,14 @@ export default function InteractionLiveResultPage({ params }: Props) {
   }, []);
 
   function handleBackToPresentation() {
-    if (source === 'powerpoint') {
-      setCloseHint('Please close this tab or use Alt+Tab / Cmd+Tab to return to PowerPoint.');
-      return;
-    }
-
     window.close();
     window.setTimeout(() => {
       setCloseHint(
-        source === 'google-slides'
-          ? 'Please close this tab or switch back to your Google Slides presentation.'
-          : 'Please close this tab or switch back to your presentation.'
+        source === 'powerpoint'
+          ? 'Please close this tab or use Cmd+Tab / Alt+Tab to return to PowerPoint.'
+          : source === 'google-slides'
+            ? 'Please close this tab or switch back to your Google Slides presentation.'
+            : 'Please close this tab or switch back to your presentation.'
       );
     }, 250);
   }
@@ -117,14 +114,18 @@ export default function InteractionLiveResultPage({ params }: Props) {
       <div className="fixed right-5 top-5 z-[60] flex max-w-[360px] items-center gap-3 rounded-2xl border border-white/15 bg-black/35 px-4 py-3 text-xs font-bold text-white shadow-xl backdrop-blur">
         <div className="leading-relaxed">
           <div>ESC = exit fullscreen</div>
-          <div>Close tab / Cmd+Tab = return to presentation</div>
+          <div>
+            {source === 'powerpoint'
+              ? 'Close tab / Cmd+Tab = return to PowerPoint'
+              : 'Close tab / Cmd+Tab = return to presentation'}
+          </div>
         </div>
         <button
           type="button"
           onClick={handleBackToPresentation}
           className="rounded-xl bg-white px-3 py-2 text-xs font-black text-[#17172F] transition hover:bg-[#EAF7EF]"
         >
-          Back to Presentation
+          {source === 'powerpoint' ? 'Back to PowerPoint' : 'Back to Presentation'}
         </button>
       </div>
       <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-full border border-white/15 bg-black/35 px-4 py-2 text-center text-sm font-bold text-white backdrop-blur">
