@@ -280,10 +280,17 @@ function drawInteractionSlide_(eventId, interactionId, updateExisting) {
   var interaction = findInteraction_(eventId, interactionId);
   var snapshot = buildInteractionSnapshot_(event, interaction);
   var slide = updateExisting ? findSlideForInteraction_(interactionId) : null;
+  var createdWithBatch = false;
+  if (!slide && !updateExisting) {
+    slide = tryDrawInteractionSlideBatch_(event, interaction, snapshot);
+    createdWithBatch = !!slide;
+  }
   if (!slide) slide = SlidesApp.getActivePresentation().appendSlide(SlidesApp.PredefinedLayout.BLANK);
 
-  clearSlide_(slide);
-  renderSlide_(slide, event, interaction, snapshot);
+  if (!createdWithBatch) {
+    clearSlide_(slide);
+    renderSlide_(slide, event, interaction, snapshot);
+  }
 
   var props = PropertiesService.getDocumentProperties();
   props.setProperty('SLIDEENGAGE_SLIDE_' + interactionId, slide.getObjectId());
@@ -304,6 +311,160 @@ function drawInteractionSlide_(eventId, interactionId, updateExisting) {
       hasResults: snapshot.hasResults,
     },
   };
+}
+
+function tryDrawInteractionSlideBatch_(event, interaction, snapshot) {
+  if (typeof Slides === 'undefined' || !Slides.Presentations || !Slides.Presentations.batchUpdate) return null;
+
+  try {
+    var presentation = SlidesApp.getActivePresentation();
+    var presentationId = presentation.getId();
+    var slideId = objectId_('se_slide');
+    var pageWidth = presentation.getPageWidth();
+    var pageHeight = presentation.getPageHeight();
+    var code = snapshot.eventCode || event.event_code || event.code;
+    var joinUrl = snapshot.joinUrl || (SLIDEENGAGE_URL + '/join?code=' + encodeURIComponent(code));
+    var qrUrl = SLIDEENGAGE_URL + '/api/qrcode?code=' + encodeURIComponent(code) + '&format=png';
+    var requests = [
+      {
+        createSlide: {
+          objectId: slideId,
+          insertionIndex: presentation.getSlides().length,
+          slideLayoutReference: { predefinedLayout: 'BLANK' },
+        },
+      },
+    ];
+
+    batchShape_(requests, objectId_('bg'), 'RECTANGLE', slideId, 0, 0, pageWidth, pageHeight, '#F4F7F4', '#F4F7F4');
+    batchText_(requests, objectId_('brand'), slideId, 'SlideEngage', 24, 16, 180, 24, 12, true, '#168A3A');
+    batchText_(requests, objectId_('type'), slideId, label_(interaction).toUpperCase(), 280, 16, 320, 24, 11, true, '#6B7B8D');
+
+    batchShape_(requests, objectId_('join'), 'ROUND_RECTANGLE', slideId, 30, 60, 165, 405, '#FFFFFF', '#DDEBE3');
+    batchText_(requests, objectId_('joinAt'), slideId, 'Join at', 48, 82, 130, 24, 15, true, '#17172F');
+    batchText_(requests, objectId_('host'), slideId, host_(), 48, 110, 134, 24, 13, true, '#168A3A');
+    requests.push({
+      createImage: {
+        url: qrUrl,
+        elementProperties: batchElement_(slideId, 45, 146, 135, 135),
+      },
+    });
+    batchText_(requests, objectId_('scan'), slideId, 'Scan QR code to join', 40, 296, 148, 24, 10, true, '#17172F', 'CENTER');
+    batchShape_(requests, objectId_('codeBox'), 'ROUND_RECTANGLE', slideId, 45, 328, 135, 48, '#EAF7EF', '#CBEAD4');
+    batchText_(requests, objectId_('eventCode'), slideId, '#' + code, 45, 338, 135, 30, 23, true, '#168A3A', 'CENTER');
+    batchText_(requests, objectId_('joinUrl'), slideId, truncate_(joinUrl, 34), 40, 396, 148, 36, 7, false, '#6B7B8D', 'CENTER');
+
+    batchShape_(requests, objectId_('main'), 'ROUND_RECTANGLE', slideId, 220, 60, 470, 405, '#FFFFFF', '#DDEBE3');
+    batchText_(requests, objectId_('question'), slideId, interaction.title || 'Untitled interaction', 248, 88, 415, 78, 29, true, '#17172F');
+    batchText_(requests, objectId_('instruction'), slideId, 'Scan the QR code or enter the event code to join.', 248, 170, 415, 24, 11, true, '#6B7B8D');
+
+    if (interaction.type === 'poll' || interaction.type === 'quiz') {
+      var options = (interaction.interaction_options || []).slice(0, 5);
+      for (var i = 0; i < options.length; i++) {
+        batchShape_(requests, objectId_('optionBox'), 'ROUND_RECTANGLE', slideId, 252, 220 + i * 46, 390, 34, '#F4F7F4', optionColor_(i));
+        batchText_(requests, objectId_('optionText'), slideId, String.fromCharCode(65 + i) + '. ' + truncate_(options[i].option_text || 'Option ' + (i + 1), 58), 266, 228 + i * 46, 360, 20, 14, true, '#17172F');
+      }
+    } else if (interaction.type === 'qa') {
+      batchText_(requests, objectId_('qaTitle'), slideId, 'Ask your question', 270, 230, 360, 34, 24, true, '#17172F', 'CENTER');
+      batchText_(requests, objectId_('qaHelp'), slideId, 'Questions will appear in SlideEngage live results.', 270, 272, 360, 28, 14, false, '#6B7B8D', 'CENTER');
+    } else {
+      batchText_(requests, objectId_('waiting'), slideId, 'Answer from your phone', 270, 235, 360, 34, 24, true, '#17172F', 'CENTER');
+      batchText_(requests, objectId_('waitingHelp'), slideId, 'Responses will appear in SlideEngage live results.', 270, 278, 360, 28, 14, false, '#6B7B8D', 'CENTER');
+    }
+
+    Slides.Presentations.batchUpdate({ requests: requests }, presentationId);
+    return findSlideById_(slideId);
+  } catch (error) {
+    return null;
+  }
+}
+
+function objectId_(prefix) {
+  return prefix + '_' + new Date().getTime().toString(36) + '_' + Math.floor(Math.random() * 100000).toString(36);
+}
+
+function batchElement_(pageId, left, top, width, height) {
+  return {
+    pageObjectId: pageId,
+    size: {
+      width: { magnitude: width, unit: 'PT' },
+      height: { magnitude: height, unit: 'PT' },
+    },
+    transform: {
+      scaleX: 1,
+      scaleY: 1,
+      translateX: left,
+      translateY: top,
+      unit: 'PT',
+    },
+  };
+}
+
+function batchShape_(requests, id, shapeType, pageId, left, top, width, height, fill, line) {
+  requests.push({
+    createShape: {
+      objectId: id,
+      shapeType: shapeType,
+      elementProperties: batchElement_(pageId, left, top, width, height),
+    },
+  });
+  requests.push({
+    updateShapeProperties: {
+      objectId: id,
+      shapeProperties: {
+        shapeBackgroundFill: { solidFill: { color: { rgbColor: hexRgb_(fill) } } },
+        outline: { outlineFill: { solidFill: { color: { rgbColor: hexRgb_(line || fill) } } }, weight: { magnitude: 1, unit: 'PT' } },
+      },
+      fields: 'shapeBackgroundFill.solidFill.color,outline.outlineFill.solidFill.color,outline.weight',
+    },
+  });
+}
+
+function batchText_(requests, id, pageId, text, left, top, width, height, fontSize, bold, color, align) {
+  requests.push({
+    createShape: {
+      objectId: id,
+      shapeType: 'TEXT_BOX',
+      elementProperties: batchElement_(pageId, left, top, width, height),
+    },
+  });
+  requests.push({ insertText: { objectId: id, text: String(text || '') } });
+  requests.push({
+    updateTextStyle: {
+      objectId: id,
+      style: {
+        fontSize: { magnitude: fontSize, unit: 'PT' },
+        foregroundColor: { opaqueColor: { rgbColor: hexRgb_(color) } },
+        bold: !!bold,
+      },
+      fields: 'fontSize,foregroundColor,bold',
+    },
+  });
+  if (align) {
+    requests.push({
+      updateParagraphStyle: {
+        objectId: id,
+        style: { alignment: align },
+        fields: 'alignment',
+      },
+    });
+  }
+}
+
+function hexRgb_(hex) {
+  var clean = String(hex || '#FFFFFF').replace('#', '');
+  return {
+    red: parseInt(clean.slice(0, 2), 16) / 255,
+    green: parseInt(clean.slice(2, 4), 16) / 255,
+    blue: parseInt(clean.slice(4, 6), 16) / 255,
+  };
+}
+
+function findSlideById_(slideId) {
+  var slides = SlidesApp.getActivePresentation().getSlides();
+  for (var i = 0; i < slides.length; i++) {
+    if (slides[i].getObjectId() === slideId) return slides[i];
+  }
+  return null;
 }
 
 function focusGeneratedSlide_(slide) {

@@ -13,6 +13,7 @@
 var SLIDEENGAGE_URL = 'https://slide-engage.vercel.app';
 var SESSION_KEY = 'SLIDEENGAGE_SESSION';
 var SELECTED_EVENT_KEY = 'SLIDEENGAGE_SELECTED_EVENT_ID';
+var QR_CACHE_PREFIX = 'SLIDEENGAGE_QR_';
 
 function onOpen() {
   SlidesApp.getUi()
@@ -42,13 +43,13 @@ function buildSidebarHtml_() {
     '<div class="row"><b id="hello"></b><button class="btn secondary" onclick="logout()">Logout</button></div>' +
     '<div class="card stack"><b>Events</b><select id="events" class="input" onchange="selectEvent()"></select><div class="row"><input id="newEventName" class="input" placeholder="New event name"><button class="btn" onclick="createEvent()">Create</button></div><div id="eventInfo" class="small muted"></div></div>' +
     '<div class="card stack"><b>Create new interaction</b><div id="templates" class="grid"></div></div>' +
-    '<div id="editor" class="card stack hidden"><div class="row"><b id="editorTitle">Editor</b><span id="interactionStatus" class="pill">draft</span></div><textarea id="question" class="input" rows="3" placeholder="Question"></textarea><div id="options" class="stack"></div><button id="addOption" class="btn secondary hidden" onclick="addOption()">Add option</button><button class="btn secondary" onclick="saveInteraction()">Save draft</button><button class="btn" onclick="insertSlide()">Add to Presentation</button><button class="btn secondary" onclick="openLiveResults()">Open Live Results</button><div class="row"><button class="btn secondary" onclick="goLive()">Go live</button><button class="btn secondary" onclick="closeLive()">Close</button><button class="btn danger" onclick="resetResults()">Reset</button></div></div>' +
+    '<div id="editor" class="card stack hidden"><div class="row"><b id="editorTitle">Editor</b><span id="interactionStatus" class="pill">draft</span></div><textarea id="question" class="input" rows="3" placeholder="Question"></textarea><div id="options" class="stack"></div><button id="addOption" class="btn secondary hidden" onclick="addOption()">Add option</button><button class="btn secondary" onclick="saveInteraction()">Save draft</button><button id="addPresentationButton" class="btn" onclick="insertSlide()">Add to Presentation</button><button class="btn secondary" onclick="openLiveResults()">Open Live Results</button><div class="row"><button class="btn secondary" onclick="goLive()">Go live</button><button class="btn secondary" onclick="closeLive()">Close</button><button class="btn danger" onclick="resetResults()">Reset</button></div></div>' +
     '<div class="card stack"><div class="row"><b>Interactions</b><button class="btn secondary" onclick="refresh()">Refresh</button></div><div id="interactions" class="stack"></div></div>' +
     '</section>' +
     '</div><script>' +
-    'var state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[]};' +
+    'var state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[]};var slideCreateInFlight=false;' +
     'var templates=[{label:"Multiple choice",type:"poll",options:["Option 1","Option 2"],config:{poll_kind:"multiple_choice",results_visible:true,voting_open:true}},{label:"Open text",type:"feedback",options:[],config:{poll_kind:"open_text",include_open_text:true,anonymous:true,voting_open:true}},{label:"Word cloud",type:"word_cloud",options:[],config:{max_words_per_participant:3,allow_duplicate_words:true,voting_open:true}},{label:"Rating",type:"feedback",options:[],config:{poll_kind:"rating",include_star_ratings:true,scale:5,voting_open:true}},{label:"Quiz",type:"quiz",options:["Correct answer","Distractor"],config:{time_limit_seconds:30,points:100,voting_open:true}},{label:"Audience Q&A",type:"qa",options:[],config:{allow_anonymous_questions:true,moderation:false,voting_open:true}}];' +
-    'function $(id){return document.getElementById(id)}function show(m,e){var s=$("status");s.textContent=m||"";s.className="status"+(e?" error":"")+(m?"":" hidden")}function call(name,args,ok){show("Loading...");google.script.run.withSuccessHandler(function(r){show("");ok&&ok(r)}).withFailureHandler(function(err){handleFailure(err)})[name].apply(null,args||[])}function handleFailure(err){var message=(err&&err.message)||String(err);if(/invalid email|invalid slideengage/i.test(message))message="Invalid SlideEngage email or password.";if(/UrlFetchApp|external_request|permission|authorization|not have permission|authorize|internet/i.test(message))message="Authorization required. Please click Authorize and allow Google permissions.";show(message,true);if(/authorize|permission|internet/i.test(message))checkAuthorization()}' +
+    'function $(id){return document.getElementById(id)}function show(m,e){var s=$("status");s.textContent=m||"";s.className="status"+(e?" error":"")+(m?"":" hidden")}function call(name,args,ok,statusText){if(statusText!==null)show(statusText===undefined?"Loading...":statusText);google.script.run.withSuccessHandler(function(r){if(statusText!==null)show("");ok&&ok(r)}).withFailureHandler(function(err){handleFailure(err)})[name].apply(null,args||[])}function handleFailure(err){if(slideCreateInFlight)setSlideCreating(false);var message=(err&&err.message)||String(err);if(/invalid email|invalid slideengage/i.test(message))message="Invalid SlideEngage email or password.";if(/UrlFetchApp|external_request|permission|authorization|not have permission|authorize|internet/i.test(message))message="Authorization required. Please click Authorize and allow Google permissions.";show(message,true);if(/authorize|permission|internet/i.test(message))checkAuthorization()}' +
     'function boot(){renderTemplates();checkAuthorization();call("getInitialState",[],function(r){state.session=r.session;state.events=r.events||[];state.selectedEvent=r.selectedEvent||null;state.interactions=r.interactions||[];render()})}function checkAuthorization(){google.script.run.withSuccessHandler(function(r){var box=$("permission");if(!r||r.authorized){box.classList.add("hidden");return}box.innerHTML="Google permission is required before SlideEngage can connect to your account. <a class=\\"link\\" target=\\"_blank\\" href=\\""+r.authorizationUrl+"\\">Open authorization</a>";box.classList.remove("hidden")}).withFailureHandler(function(){}).getAuthorizationStatus()}' +
     'function render(){if(state.session){$("login").classList.add("hidden");$("app").classList.remove("hidden");$("hello").textContent=state.session.lecturer.name||state.session.lecturer.email}else{$("login").classList.remove("hidden");$("app").classList.add("hidden")}renderEvents();renderInteractions();renderEditor()}' +
     'function renderTemplates(){var box=$("templates");box.innerHTML="";templates.forEach(function(t){var b=document.createElement("button");b.className="item";b.textContent=t.label;b.onclick=function(){openTemplate(t)};box.appendChild(b)})}' +
@@ -60,9 +61,9 @@ function buildSidebarHtml_() {
     'function refresh(){call("getInitialState",[],function(r){state.session=r.session;state.events=r.events||[];state.selectedEvent=r.selectedEvent||null;state.interactions=r.interactions||[];render()})}function selectEvent(){call("selectEvent",[$("events").value],function(r){state.selectedEvent=r.selectedEvent;state.interactions=r.interactions||[];state.selectedInteraction=null;state.template=null;render()})}' +
     'function createEvent(){call("createEvent",[$("newEventName").value],function(r){$("newEventName").value="";state.events=r.events;state.selectedEvent=r.selectedEvent;state.interactions=[];render()})}function openTemplate(t){if(!state.selectedEvent){show("Select or create an event first.",true);return}state.template=t;state.selectedInteraction=null;state.options=(t.options||[]).map(function(x,i){return{option_text:typeof x==="string"?x:x.option_text,is_correct:i===0&&t.type==="quiz"}});renderEditor()}' +
     'function openInteraction(i){state.selectedInteraction=i;state.template=null;state.options=(i.interaction_options||[]).sort(function(a,b){return(a.position||0)-(b.position||0)}).map(function(o){return{option_text:o.option_text,is_correct:!!o.is_correct}});renderEditor()}' +
-    'function addOption(){state.options.push({option_text:"Option "+(state.options.length+1),is_correct:false});renderEditor()}function editorPayload(){return{id:state.selectedInteraction&&state.selectedInteraction.id,event_id:state.selectedEvent&&state.selectedEvent.id,type:(state.template&&state.template.type)||(state.selectedInteraction&&state.selectedInteraction.type),title:$("question").value,config:(state.template&&state.template.config)||(state.selectedInteraction&&state.selectedInteraction.config)||{},options:needsOptions()?state.options:[]}}function saveInteraction(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();show("Saved.")})}' +
+    'function addOption(){state.options.push({option_text:"Option "+(state.options.length+1),is_correct:false});renderEditor()}function editorPayload(){return{id:state.selectedInteraction&&state.selectedInteraction.id,event_id:state.selectedEvent&&state.selectedEvent.id,type:(state.template&&state.template.type)||(state.selectedInteraction&&state.selectedInteraction.type),title:$("question").value,config:(state.template&&state.template.config)||(state.selectedInteraction&&state.selectedInteraction.config)||{},options:needsOptions()?state.options:[]}}function validatePayload(p){if(!p.event_id)return"Select or create an event first.";if(!p.title)return"Question is required.";if((p.type==="poll"||p.type==="quiz")&&p.options.filter(function(o){return String(o.option_text||"").trim()}).length<2)return"At least 2 options are required.";return""}function saveInteraction(done){var payload=editorPayload();var error=validatePayload(payload);if(error){show(error,true);return}call("saveInteraction",[payload],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();show("Saved.");done&&done(r.interaction)})}' +
     'function goLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"live"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}function closeLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"closed"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}function resetResults(){if(!state.selectedInteraction)return;if(!confirm("Reset all participant responses for this interaction?"))return;call("resetResults",[state.selectedInteraction.id],function(r){show((r&&r.message)||"Results cleared successfully.")})}' +
-    'function insertSlide(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();call("insertInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Slide inserted. Use Open Live Results for realtime responses.")})})}function openLiveResults(){if(!state.selectedEvent||!state.selectedInteraction){show("Select an interaction first.",true);return}call("getLiveResultUrl",[state.selectedEvent.id,state.selectedInteraction.id],function(url){show("Opening live results. If it did not open, use this link: "+url);window.open(url,"_blank")})}' +
+    'function setSlideCreating(active){slideCreateInFlight=active;var btn=$("addPresentationButton");if(btn){btn.disabled=active;btn.textContent=active?"Creating slide...":"Add to Presentation"}}function insertSlide(){if(slideCreateInFlight)return;var payload=editorPayload();var validation=validatePayload(payload);if(validation){show(validation,true);return}setSlideCreating(true);show("Creating slide...");saveInteraction(function(interaction){call("insertInteractionSlide",[state.selectedEvent.id,interaction.id],function(){setSlideCreating(false);show("Slide added successfully.")},"Creating slide...")})}function openLiveResults(){if(!state.selectedEvent||!state.selectedInteraction){show("Select an interaction first.",true);return}call("getLiveResultUrl",[state.selectedEvent.id,state.selectedInteraction.id],function(url){var separator=url.indexOf("?")>=0?"&":"?";var sourceUrl=url+separator+"source=google-slides";show("Opening live results. If it did not open, use this link: "+sourceUrl);window.open(sourceUrl,"_blank")})}' +
     'boot();' +
     '</script></body></html>';
 }
@@ -288,7 +289,7 @@ function renderSlide_(slide, event, interaction, resultData) {
   text_(slide, 'Join at', 50, 82, 130, 24, 15, true, '#17172F');
   text_(slide, host_(), 48, 110, 134, 24, 13, true, '#168A3A');
   try {
-    var qr = UrlFetchApp.fetch(SLIDEENGAGE_URL + '/api/qrcode?code=' + encodeURIComponent(code) + '&format=png').getBlob().setName('slideengage-qr.png');
+    var qr = qrBlobForCode_(code);
     slide.insertImage(qr, 45, 146, 135, 135);
   } catch (e) {
     text_(slide, 'QR unavailable', 52, 190, 120, 24, 12, true, '#B42318', SlidesApp.ParagraphAlignment.CENTER);
@@ -378,6 +379,25 @@ function getResults_(interaction) {
     return { results: qa.questions || [], total_responses: (qa.questions || []).length };
   }
   return apiFetch_('/api/results?interaction_id=' + encodeURIComponent(interaction.id), { method: 'get' });
+}
+
+function qrBlobForCode_(code) {
+  var cache = CacheService.getScriptCache();
+  var cacheKey = QR_CACHE_PREFIX + code;
+  var cached = cache.get(cacheKey);
+  if (cached) {
+    return Utilities.newBlob(Utilities.base64Decode(cached), 'image/png', 'slideengage-qr.png');
+  }
+
+  var response = UrlFetchApp.fetch(SLIDEENGAGE_URL + '/api/qrcode?code=' + encodeURIComponent(code) + '&format=png', {
+    method: 'get',
+    muteHttpExceptions: true,
+  });
+  if (response.getResponseCode() >= 400) throw new Error('QR code unavailable.');
+
+  var blob = response.getBlob().setName('slideengage-qr.png');
+  cache.put(cacheKey, Utilities.base64Encode(blob.getBytes()), 21600);
+  return blob;
 }
 
 function listEvents_() {

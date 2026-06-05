@@ -1318,7 +1318,7 @@ export function GET() {
 
         function presenterUrl() {
           if (!selectedEvent || !selectedEvent.event_code) return "";
-          return APP_URL + "/present/" + encodeURIComponent(selectedEvent.event_code) + "?officePresenter=1";
+          return APP_URL + "/present/" + encodeURIComponent(selectedEvent.event_code) + "?officePresenter=1&source=powerpoint";
         }
 
         function presentLive() {
@@ -1418,7 +1418,7 @@ export function GET() {
         }
 
         function interactionLiveUrl(interaction) {
-          return APP_URL + "/present/live-result/" + encodeURIComponent(selectedEvent.id) + "/" + encodeURIComponent(interaction.id);
+          return APP_URL + "/present/live-result/" + encodeURIComponent(selectedEvent.id) + "/" + encodeURIComponent(interaction.id) + "?source=powerpoint";
         }
 
         function insertInteractionSlide(interaction, options, resultData, isAutoRefresh) {

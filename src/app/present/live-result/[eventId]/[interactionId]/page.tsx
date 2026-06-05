@@ -20,8 +20,12 @@ export default function InteractionLiveResultPage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [closeHint, setCloseHint] = useState('');
+  const [source, setSource] = useState<'google-slides' | 'powerpoint' | 'presentation'>('presentation');
 
   useEffect(() => {
+    const sourceParam = new URLSearchParams(window.location.search).get('source') || '';
+    if (sourceParam === 'google-slides' || sourceParam === 'powerpoint') setSource(sourceParam);
+
     params.then(value => {
       setEventId(value.eventId);
       setInteractionId(value.interactionId);
@@ -63,13 +67,28 @@ export default function InteractionLiveResultPage({ params }: Props) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       if (document.fullscreenElement) return;
-      window.close();
-      setCloseHint('You may close this tab to return to your presentation.');
+      setCloseHint('ESC exits fullscreen. Close this tab or switch back to your presentation window.');
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  function handleBackToPresentation() {
+    if (source === 'powerpoint') {
+      setCloseHint('Please close this tab or use Alt+Tab / Cmd+Tab to return to PowerPoint.');
+      return;
+    }
+
+    window.close();
+    window.setTimeout(() => {
+      setCloseHint(
+        source === 'google-slides'
+          ? 'Please close this tab or switch back to your Google Slides presentation.'
+          : 'Please close this tab or switch back to your presentation.'
+      );
+    }, 250);
+  }
 
   if (loading) {
     return (
@@ -95,8 +114,21 @@ export default function InteractionLiveResultPage({ params }: Props) {
 
   return (
     <main className="h-screen overflow-hidden bg-[#0F172A]">
-      <div className="fixed right-5 top-5 z-[60] rounded-full border border-white/15 bg-black/35 px-4 py-2 text-sm font-bold text-white backdrop-blur">
-        Press ESC to return to presentation
+      <div className="fixed right-5 top-5 z-[60] flex max-w-[360px] items-center gap-3 rounded-2xl border border-white/15 bg-black/35 px-4 py-3 text-xs font-bold text-white shadow-xl backdrop-blur">
+        <div className="leading-relaxed">
+          <div>ESC = exit fullscreen</div>
+          <div>Close tab / Cmd+Tab = return to presentation</div>
+        </div>
+        <button
+          type="button"
+          onClick={handleBackToPresentation}
+          className="rounded-xl bg-white px-3 py-2 text-xs font-black text-[#17172F] transition hover:bg-[#EAF7EF]"
+        >
+          Back to Presentation
+        </button>
+      </div>
+      <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-full border border-white/15 bg-black/35 px-4 py-2 text-center text-sm font-bold text-white backdrop-blur">
+        Press ESC to exit fullscreen, then return to your presentation tab/window.
       </div>
       {closeHint && (
         <div className="fixed left-1/2 top-5 z-[60] -translate-x-1/2 rounded-full bg-[#168A3A] px-4 py-2 text-sm font-bold text-white shadow-lg">
