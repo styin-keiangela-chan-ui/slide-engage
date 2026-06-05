@@ -44,6 +44,10 @@ export async function POST(req: NextRequest) {
     }
 
     const config = (interaction.config || {}) as Record<string, any>;
+    if (interaction.status === 'archived') {
+      return NextResponse.json({ error: 'This interaction has been deleted.' }, { status: 410 });
+    }
+
     if (interaction.status !== 'live' || config.voting_open === false) {
       return NextResponse.json({ error: 'Voting is closed for this interaction.' }, { status: 403 });
     }
@@ -93,12 +97,16 @@ export async function DELETE(req: NextRequest) {
 
   const { data: interaction, error: interactionError } = await supabase
     .from('interactions')
-    .select('id, type, config')
+    .select('id, type, status, config')
     .eq('id', interactionId)
     .single();
 
   if (interactionError || !interaction) {
     return NextResponse.json({ error: 'Interaction not found' }, { status: 404 });
+  }
+
+  if ((interaction as any).status === 'archived') {
+    return NextResponse.json({ error: 'This interaction has been deleted.' }, { status: 410 });
   }
 
   const { data: deletedResponses, error: responseError } = await supabase

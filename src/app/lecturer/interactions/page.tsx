@@ -77,6 +77,10 @@ export default function LecturerInteractionsPage() {
   const [message, setMessage] = useState('');
   const [editingInteraction, setEditingInteraction] = useState<EditableInteraction | null>(null);
   const [draft, setDraft] = useState<InteractionDraft | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<EditableInteraction | null>(null);
+  const [deleteStep, setDeleteStep] = useState<'live-warning' | 'confirm'>('confirm');
+  const [deletingInteraction, setDeletingInteraction] = useState(false);
+  const [interactionView, setInteractionView] = useState<'active' | 'archive'>('active');
 
   useEffect(() => {
     if (!loading && !lecturer) router.push('/lecturer/login');
@@ -121,7 +125,8 @@ export default function LecturerInteractionsPage() {
     }
 
     setLoadingData(true);
-    fetch(`/api/interactions?event_id=${selectedEvent.id}`, { cache: 'no-store' })
+    const viewQuery = interactionView === 'archive' ? '&view=archive' : '';
+    fetch(`/api/interactions?event_id=${selectedEvent.id}${viewQuery}`, { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
         const rows = (data.interactions || []) as EditableInteraction[];
@@ -134,7 +139,7 @@ export default function LecturerInteractionsPage() {
         });
       })
       .finally(() => setLoadingData(false));
-  }, [selectedEvent]);
+  }, [selectedEvent, interactionView]);
 
   function chooseEvent(eventId: string) {
     setError('');
@@ -301,6 +306,80 @@ export default function LecturerInteractionsPage() {
     }
   }
 
+  function requestDeleteInteraction(interaction: EditableInteraction) {
+    setError('');
+    setMessage('');
+    setDeleteTarget(interaction);
+    setDeleteStep(interaction.status === 'live' ? 'live-warning' : 'confirm');
+  }
+
+  async function confirmDeleteInteraction() {
+    if (!deleteTarget) return;
+
+    if (deleteStep === 'live-warning') {
+      setDeleteStep('confirm');
+      return;
+    }
+
+    setDeletingInteraction(true);
+    setError('');
+    setMessage('');
+
+    const res = await fetch(`/api/interactions?id=${deleteTarget.id}&confirm_live=true`, {
+      method: 'DELETE',
+    });
+    const data = await res.json();
+    setDeletingInteraction(false);
+
+    if (!res.ok) {
+      setError(data.error || 'Unable to delete interaction.');
+      return;
+    }
+
+    setInteractions(prev => prev.filter(item => item.id !== deleteTarget.id));
+    if (editingInteraction?.id === deleteTarget.id) {
+      closeEditor();
+    }
+    setDeleteTarget(null);
+    setDeleteStep('confirm');
+    setMessage(data.message || 'Interaction deleted successfully.');
+  }
+
+  async function restoreInteraction(interaction: EditableInteraction) {
+    setError('');
+    setMessage('');
+    const res = await fetch('/api/interactions', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: interaction.id, status: 'closed', restore: true }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      setError(data.error || 'Unable to restore interaction.');
+      return;
+    }
+
+    setInteractions(prev => prev.filter(item => item.id !== interaction.id));
+    setMessage('Interaction restored successfully.');
+  }
+
+  async function permanentlyDeleteInteraction(interaction: EditableInteraction) {
+    if (!window.confirm('This action is irreversible.\n\nDelete this interaction forever?')) return;
+    setError('');
+    setMessage('');
+    const res = await fetch(`/api/interactions?id=${interaction.id}&permanent=true`, { method: 'DELETE' });
+    const data = await res.json();
+
+    if (!res.ok) {
+      setError(data.error || 'Unable to permanently delete interaction.');
+      return;
+    }
+
+    setInteractions(prev => prev.filter(item => item.id !== interaction.id));
+    setMessage('Interaction permanently deleted.');
+  }
+
   if (loading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
   if (!lecturer) return null;
 
@@ -366,8 +445,32 @@ export default function LecturerInteractionsPage() {
           </section>
 
           <section className="rounded-[18px] border border-[#E2EBE6] bg-white">
-            <div className="border-b border-[#E2EBE6] px-5 py-4 text-sm font-bold text-[#1A1A2E]">
-              Interactions for selected event
+            <div className="flex flex-col gap-3 border-b border-[#E2EBE6] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm font-bold text-[#1A1A2E]">
+                {interactionView === 'archive' ? 'Interaction Archive Bin' : 'Interactions for selected event'}
+              </div>
+              <div className="flex w-fit overflow-hidden rounded-full border border-[#DDE8E1] bg-[#F4F7F4] p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInteractionView('active');
+                    closeEditor();
+                  }}
+                  className={`rounded-full px-3 py-1 text-xs font-bold ${interactionView === 'active' ? 'bg-white text-[#168A3A] shadow-sm' : 'text-[#6B7B8D]'}`}
+                >
+                  Active
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInteractionView('archive');
+                    closeEditor();
+                  }}
+                  className={`rounded-full px-3 py-1 text-xs font-bold ${interactionView === 'archive' ? 'bg-white text-[#168A3A] shadow-sm' : 'text-[#6B7B8D]'}`}
+                >
+                  Archive Bin
+                </button>
+              </div>
             </div>
             {!selectedEvent ? (
               <div className="px-7 py-10 text-center text-sm text-[#6B7B8D]">
@@ -378,11 +481,13 @@ export default function LecturerInteractionsPage() {
             ) : interactions.length === 0 ? (
               <div className="px-7 py-10 text-center">
                 <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[#EAF7EF] text-xl text-[#2D8A4E]">▦</div>
-                <h2 className="mb-1.5 text-base font-bold">No interactions yet</h2>
-                <p className="mb-6 text-sm text-[#6B7B8D]">Add a poll, quiz, word cloud, or Q&A to this event.</p>
-                <button onClick={addInteraction} className="rounded-[9px] bg-[#2D8A4E] px-5 py-2 text-sm font-semibold text-white">
-                  Add Interaction
-                </button>
+                <h2 className="mb-1.5 text-base font-bold">{interactionView === 'archive' ? 'Archive Bin is empty' : 'No interactions yet'}</h2>
+                <p className="mb-6 text-sm text-[#6B7B8D]">{interactionView === 'archive' ? 'Deleted interactions will appear here for restore or permanent deletion.' : 'Add a poll, quiz, word cloud, or Q&A to this event.'}</p>
+                {interactionView === 'active' && (
+                  <button onClick={addInteraction} className="rounded-[9px] bg-[#2D8A4E] px-5 py-2 text-sm font-semibold text-white">
+                    Add Interaction
+                  </button>
+                )}
               </div>
             ) : (
               <div className="divide-y divide-[#E2EBE6]">
@@ -394,32 +499,56 @@ export default function LecturerInteractionsPage() {
                         <div className="mt-1 text-xs text-[#6B7B8D]">{typeLabel(interaction)}</div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEditor(interaction)}
-                          aria-label="Edit question and settings"
-                          className="inline-flex items-center gap-1.5 rounded-full border border-[#DDE8E1] bg-white px-3 py-1 text-xs font-bold text-[#1A1A2E] transition hover:border-[#168A3A] hover:text-[#168A3A]"
-                        >
-                          <SETooltip text="Edit question and settings">
-                            <span className="inline-flex items-center gap-1.5">
-                              <span aria-hidden="true">✏</span>
-                              Edit
-                            </span>
-                          </SETooltip>
-                        </button>
-                        <SETooltip text={statusTooltip(interaction.status)}>
-                          <button
-                            type="button"
-                            onClick={() => toggleInteractionLive(interaction)}
-                            aria-label={statusTooltip(interaction.status)}
-                            className={`rounded-full px-2.5 py-1 text-xs font-bold transition hover:shadow-sm ${
-                            interaction.status === 'live'
-                              ? 'bg-[#EAF7EF] text-[#168A3A] hover:bg-[#D8F0E0]'
-                              : 'bg-[#F3F4F6] text-[#6B7B8D] hover:bg-[#EAF7EF] hover:text-[#168A3A]'
-                          }`}>
-                            {statusLabel(interaction.status)}
-                          </button>
-                        </SETooltip>
+                        {interactionView === 'archive' ? (
+                          <>
+                            <button type="button" onClick={() => restoreInteraction(interaction)} className="rounded-full border border-[#DDE8E1] bg-white px-3 py-1 text-xs font-bold text-[#168A3A] hover:bg-[#EAF7EF]">
+                              Restore
+                            </button>
+                            <button type="button" onClick={() => permanentlyDeleteInteraction(interaction)} className="rounded-full border border-[#F2D5D5] bg-white px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50">
+                              Delete Forever
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openEditor(interaction)}
+                              aria-label="Edit question and settings"
+                              className="inline-flex items-center gap-1.5 rounded-full border border-[#DDE8E1] bg-white px-3 py-1 text-xs font-bold text-[#1A1A2E] transition hover:border-[#168A3A] hover:text-[#168A3A]"
+                            >
+                              <SETooltip text="Edit question and settings">
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span aria-hidden="true">✏</span>
+                                  Edit
+                                </span>
+                              </SETooltip>
+                            </button>
+                            <SETooltip text={statusTooltip(interaction.status)}>
+                              <button
+                                type="button"
+                                onClick={() => toggleInteractionLive(interaction)}
+                                aria-label={statusTooltip(interaction.status)}
+                                className={`rounded-full px-2.5 py-1 text-xs font-bold transition hover:shadow-sm ${
+                                interaction.status === 'live'
+                                  ? 'bg-[#EAF7EF] text-[#168A3A] hover:bg-[#D8F0E0]'
+                                  : 'bg-[#F3F4F6] text-[#6B7B8D] hover:bg-[#EAF7EF] hover:text-[#168A3A]'
+                              }`}>
+                                {statusLabel(interaction.status)}
+                              </button>
+                            </SETooltip>
+                            <SETooltip text="Delete interaction">
+                              <button
+                                type="button"
+                                onClick={() => requestDeleteInteraction(interaction)}
+                                aria-label="Delete interaction"
+                                className="inline-flex items-center gap-1.5 rounded-full border border-[#F2D5D5] bg-white px-3 py-1 text-xs font-bold text-red-600 transition hover:bg-red-50"
+                              >
+                                <span aria-hidden="true">🗑</span>
+                                Delete
+                              </button>
+                            </SETooltip>
+                          </>
+                        )}
                       </div>
                     </div>
                     {editingInteraction?.id === interaction.id && draft && (
@@ -430,6 +559,7 @@ export default function LecturerInteractionsPage() {
                         onClose={closeEditor}
                         onSave={saveEditor}
                         onReset={resetEditingResults}
+                        onDelete={() => requestDeleteInteraction(editingInteraction)}
                         onTitleChange={value => setDraft(current => current ? { ...current, title: value } : current)}
                         onConfigChange={setDraftConfig}
                         onOptionChange={setDraftOption}
@@ -446,6 +576,19 @@ export default function LecturerInteractionsPage() {
           </DashboardShell>
         </main>
       </div>
+      {deleteTarget && (
+        <DeleteInteractionModal
+          interaction={deleteTarget}
+          step={deleteStep}
+          busy={deletingInteraction}
+          onCancel={() => {
+            if (deletingInteraction) return;
+            setDeleteTarget(null);
+            setDeleteStep('confirm');
+          }}
+          onConfirm={confirmDeleteInteraction}
+        />
+      )}
     </>
   );
 }
@@ -457,6 +600,7 @@ function InteractionEditPanel({
   onClose,
   onSave,
   onReset,
+  onDelete,
   onTitleChange,
   onConfigChange,
   onOptionChange,
@@ -470,6 +614,7 @@ function InteractionEditPanel({
   onClose: () => void;
   onSave: () => void;
   onReset: () => void;
+  onDelete: () => void;
   onTitleChange: (value: string) => void;
   onConfigChange: (key: string, value: unknown) => void;
   onOptionChange: (index: number, value: string) => void;
@@ -606,6 +751,12 @@ function InteractionEditPanel({
       </div>
 
       <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+        <SETooltip text="Delete interaction">
+          <button type="button" aria-label="Delete interaction" onClick={onDelete} disabled={saving} className="inline-flex items-center justify-center gap-1.5 rounded-[9px] border border-[#F2D5D5] bg-white px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">
+            <span aria-hidden="true">🗑</span>
+            Delete Interaction
+          </button>
+        </SETooltip>
         <button type="button" onClick={onClose} className="rounded-[9px] border border-[#DDE8E1] bg-white px-4 py-2 text-sm font-bold text-[#1A1A2E] hover:bg-[#F4F7F4]">
           Cancel
         </button>
@@ -619,6 +770,70 @@ function InteractionEditPanel({
             {saving ? 'Saving...' : 'Save changes'}
           </button>
         </SETooltip>
+      </div>
+    </div>
+  );
+}
+
+function DeleteInteractionModal({
+  interaction,
+  step,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  interaction: EditableInteraction;
+  step: 'live-warning' | 'confirm';
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const isLiveWarning = step === 'live-warning';
+
+  return (
+    <div className="fixed inset-0 z-[99990] flex items-center justify-center bg-black/35 px-4" role="dialog" aria-modal="true" aria-labelledby="delete-interaction-title">
+      <div className="w-full max-w-[440px] rounded-[18px] border border-[#F2D5D5] bg-white p-5 shadow-2xl">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-lg text-red-600" aria-hidden="true">
+            🗑
+          </div>
+          <div>
+            <h2 id="delete-interaction-title" className="text-lg font-extrabold text-[#1A1A2E]">
+              {isLiveWarning ? 'Live interaction warning' : 'Delete Interaction?'}
+            </h2>
+            <p className="mt-1 text-sm font-semibold text-[#6B7B8D]">{interaction.title || 'Untitled interaction'}</p>
+          </div>
+        </div>
+
+        {isLiveWarning ? (
+          <p className="text-sm leading-6 text-[#4F5F70]">
+            This interaction is currently live. Deleting it will immediately stop participant submissions and remove all collected responses.
+          </p>
+        ) : (
+          <div className="space-y-3 text-sm leading-6 text-[#4F5F70]">
+            <p>Are you sure you want to delete this interaction?</p>
+            <p className="font-bold text-red-600">This action cannot be undone.</p>
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-[9px] border border-[#DDE8E1] bg-white px-4 py-2 text-sm font-bold text-[#1A1A2E] hover:bg-[#F4F7F4] disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="rounded-[9px] bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60"
+          >
+            {busy ? 'Deleting...' : isLiveWarning ? 'Continue' : 'Delete'}
+          </button>
+        </div>
       </div>
     </div>
   );

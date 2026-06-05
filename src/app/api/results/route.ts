@@ -24,6 +24,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Interaction not found' }, { status: 404 });
   }
 
+  if (
+    interaction.status === 'archived' ||
+    (interaction as any).archived_at ||
+    (interaction as any).deleted_at
+  ) {
+    return NextResponse.json({ error: 'This interaction has been deleted.' }, { status: 410 });
+  }
+
   const config = (interaction.config || {}) as Record<string, any>;
   if (config.results_visible === false) {
     return NextResponse.json({

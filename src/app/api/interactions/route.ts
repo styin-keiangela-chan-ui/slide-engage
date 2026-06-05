@@ -6,20 +6,106 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+function archiveMigrationMessage(message: string) {
+  if (
+    message.includes('interactions_status_check') ||
+    message.includes('archived_at') ||
+    message.includes('deleted_at')
+  ) {
+    return 'Interaction archive is not enabled in Supabase yet. Run src/lib/supabase/migrations/20260606_interaction_archive_bin.sql in Supabase SQL Editor, then try again.';
+  }
+  return message;
+}
+
+async function deleteInteractionResults(interactionId: string) {
+  const { data: deletedResponses, error: responseError } = await supabase
+    .from('responses')
+    .delete()
+    .eq('interaction_id', interactionId)
+    .select('id');
+
+  if (responseError) throw new Error(responseError.message);
+
+  const { data: qaQuestions, error: qaReadError } = await supabase
+    .from('qa_questions')
+    .select('id')
+    .eq('interaction_id', interactionId);
+
+  if (qaReadError) throw new Error(qaReadError.message);
+
+  const questionIds = (qaQuestions || []).map(question => question.id);
+  let deletedUpvotesCount = 0;
+  let deletedQuestionsCount = 0;
+
+  if (questionIds.length > 0) {
+    const { data: deletedUpvotes, error: upvoteError } = await supabase
+      .from('qa_upvotes')
+      .delete()
+      .in('question_id', questionIds)
+      .select('id');
+
+    if (upvoteError) throw new Error(upvoteError.message);
+    deletedUpvotesCount = deletedUpvotes?.length || 0;
+  }
+
+  const { data: deletedQuestions, error: questionError } = await supabase
+    .from('qa_questions')
+    .delete()
+    .eq('interaction_id', interactionId)
+    .select('id');
+
+  if (questionError) throw new Error(questionError.message);
+  deletedQuestionsCount = deletedQuestions?.length || 0;
+
+  return {
+    responses_deleted: deletedResponses?.length || 0,
+    qa_questions_deleted: deletedQuestionsCount,
+    qa_upvotes_deleted: deletedUpvotesCount,
+  };
+}
+
+function clearPresentationReferences(config: Record<string, any>, timestamp: string) {
+  const next = { ...(config || {}) };
+  [
+    'google_slides_slide_id',
+    'google_slides_presentation_id',
+    'powerpoint_slide_id',
+    'powerpoint_shape_id',
+    'powerpoint_result_shape_id',
+    'slide_id',
+    'shape_id',
+  ].forEach(key => {
+    delete next[key];
+  });
+  next.deleted_from_presentations_at = timestamp;
+  next.vote_count = 0;
+  return next;
+}
+
 // GET /api/interactions?event_id=xxx
 export async function GET(req: NextRequest) {
   const eventId = req.nextUrl.searchParams.get('event_id');
+  const view = req.nextUrl.searchParams.get('view');
+  const includeArchived = req.nextUrl.searchParams.get('includeArchived') === 'true';
   if (!eventId) {
     return NextResponse.json({ error: 'event_id required' }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('interactions')
     .select('*, interaction_options(*)')
     .eq('event_id', eventId)
     .order('position', { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (view === 'archive' || includeArchived) {
+    query = query.eq('status', 'archived');
+  } else {
+    query = query.neq('status', 'archived');
+  }
+
+  const { data, error } = await query;
+
+  if (error) return NextResponse.json({ error: archiveMigrationMessage(error.message) }, { status: 500 });
   return NextResponse.json({ interactions: data });
 }
 
@@ -122,6 +208,23 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Interaction id required' }, { status: 400 });
     }
 
+    const { data: existingInteraction, error: existingError } = await supabase
+      .from('interactions')
+      .select('id, status')
+      .eq('id', id)
+      .single();
+
+    if (existingError || !existingInteraction) {
+      return NextResponse.json({ error: 'Interaction not found' }, { status: 404 });
+    }
+
+    const wantsRestore = updates.restore === true || (existingInteraction.status === 'archived' && updates.status && updates.status !== 'archived');
+    delete updates.restore;
+
+    if (existingInteraction.status === 'archived' && !wantsRestore) {
+      return NextResponse.json({ error: 'This interaction has been deleted.' }, { status: 410 });
+    }
+
     if (updates.status === 'live') {
       const { data: targetInteraction, error: targetError } = await supabase
         .from('interactions')
@@ -152,9 +255,16 @@ export async function PATCH(req: NextRequest) {
 
     }
 
+    const updatePayload: Record<string, any> = { ...updates, updated_at: new Date().toISOString() };
+    if (wantsRestore) {
+      updatePayload.status = updates.status || 'closed';
+      updatePayload.archived_at = null;
+      updatePayload.deleted_at = null;
+    }
+
     const { data, error } = await supabase
       .from('interactions')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq('id', id)
       .select()
       .single();
@@ -206,7 +316,88 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'id required' }, { status: 400 });
   }
 
-  const { error } = await supabase.from('interactions').delete().eq('id', id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ success: true });
+  const permanent = req.nextUrl.searchParams.get('permanent') === 'true';
+  const timestamp = new Date().toISOString();
+
+  const { data: interaction, error: readError } = await supabase
+    .from('interactions')
+    .select('id, status, config')
+    .eq('id', id)
+    .single();
+
+  if (readError || !interaction) {
+    return NextResponse.json({ error: 'Interaction not found' }, { status: 404 });
+  }
+
+  try {
+    const resultCounts = await deleteInteractionResults(id);
+
+    if (permanent) {
+      const { data: deletedOptions, error: optionError } = await supabase
+        .from('interaction_options')
+        .delete()
+        .eq('interaction_id', id)
+        .select('id');
+
+      if (optionError) throw new Error(optionError.message);
+
+      const { error: deleteError } = await supabase
+        .from('interactions')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) throw new Error(deleteError.message);
+
+      console.log('[SlideEngage] interaction permanently deleted', {
+        interaction_id: id,
+        responses_deleted: resultCounts.responses_deleted,
+        qa_questions_deleted: resultCounts.qa_questions_deleted,
+        qa_upvotes_deleted: resultCounts.qa_upvotes_deleted,
+        options_deleted: deletedOptions?.length || 0,
+        timestamp,
+      });
+
+      return NextResponse.json({
+        success: true,
+        permanent: true,
+        interaction_id: id,
+        options_deleted: deletedOptions?.length || 0,
+        timestamp,
+        ...resultCounts,
+      });
+    }
+
+    const { error: updateError } = await supabase
+      .from('interactions')
+      .update({
+        status: 'archived',
+        archived_at: timestamp,
+        deleted_at: timestamp,
+        updated_at: timestamp,
+        config: clearPresentationReferences((interaction as any).config || {}, timestamp),
+      })
+      .eq('id', id);
+
+    if (updateError) throw new Error(updateError.message);
+
+    console.log('[SlideEngage] interaction archived', {
+      interaction_id: id,
+      was_live: interaction.status === 'live',
+      responses_deleted: resultCounts.responses_deleted,
+      qa_questions_deleted: resultCounts.qa_questions_deleted,
+      qa_upvotes_deleted: resultCounts.qa_upvotes_deleted,
+      timestamp,
+    });
+
+    return NextResponse.json({
+      success: true,
+      archived: true,
+      message: 'Interaction deleted successfully.',
+      interaction_id: id,
+      timestamp,
+      ...resultCounts,
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: archiveMigrationMessage(error.message || 'Unable to delete interaction.') }, { status: 500 });
+  }
 }

@@ -495,6 +495,7 @@ export function GET() {
               <button id="save-interaction-button" class="button secondary small" type="button" aria-label="Save changes without going live" data-tooltip="Save changes without going live">Save</button>
               <button id="live-toggle-button" class="button secondary small" type="button" aria-label="Start accepting responses" data-tooltip="Start accepting responses">Go live</button>
               <button id="reset-results-button" class="button danger small" type="button" aria-label="Clear all participant responses" data-tooltip="Clear all participant responses">Reset results</button>
+              <button id="delete-interaction-button" class="button danger small" type="button" aria-label="Delete interaction" data-tooltip="Delete interaction">🗑 Delete Interaction</button>
               <button id="generate-slide-button" class="button secondary small" type="button" aria-label="Add interaction slide to PowerPoint" data-tooltip="Add question, QR code, event code and live results link to PowerPoint">Add to Presentation</button>
               <button id="present-live-button" class="button small" type="button" aria-label="Open fullscreen live results" data-tooltip="Open realtime live results in a browser tab">Open Live Results</button>
             </div>
@@ -907,13 +908,15 @@ export function GET() {
           }
           interactions.forEach(function (interaction) {
             try {
-              var item = document.createElement("button");
-              item.type = "button";
+              var item = document.createElement("div");
               item.className = "interaction-item";
-              item.innerHTML = '<div class="row"><div><div class="event-name"></div><div class="small muted"></div></div><span class="status-pill"></span></div>';
+              item.setAttribute("role", "button");
+              item.setAttribute("tabindex", "0");
+              item.innerHTML = '<div class="row"><div><div class="event-name"></div><div class="small muted"></div></div><span class="status-pill"></span></div><div class="row" style="margin-top:8px;justify-content:flex-end"><button class="button danger small delete-interaction-row" type="button" aria-label="Delete interaction" data-tooltip="Delete interaction">🗑 Delete</button></div>';
               var titleEl = item.querySelector(".event-name");
               var typeEl = item.querySelector(".small.muted");
               var statusEl = item.querySelector(".status-pill");
+              var deleteButton = item.querySelector(".delete-interaction-row");
               if (titleEl) titleEl.textContent = interaction.title || "Untitled";
               if (typeEl) typeEl.textContent = labelForInteraction(interaction);
               if (statusEl) {
@@ -932,6 +935,18 @@ export function GET() {
                   addDebug("Open interaction failed: " + (error && error.message ? error.message : "unknown error"));
                 }
               };
+              item.onkeydown = function (event) {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  item.click();
+                }
+              };
+              if (deleteButton) {
+                deleteButton.onclick = function (event) {
+                  event.stopPropagation();
+                  deleteInteraction(interaction);
+                };
+              }
               list.appendChild(item);
             } catch (error) {
               addDebug("Interaction card skipped: " + (error && error.message ? error.message : "unknown error"));
@@ -1234,6 +1249,7 @@ export function GET() {
           el("generate-slide-button").disabled = !hasSelected;
           el("live-toggle-button").disabled = !hasSelected;
           el("reset-results-button").disabled = !hasSelected;
+          el("delete-interaction-button").disabled = !hasSelected;
           if (hasSelected) {
             el("live-toggle-button").textContent = selectedInteraction.status === "live" ? "Close" : "Go live";
             el("live-toggle-button").className = selectedInteraction.status === "live" ? "button secondary small" : "button secondary small";
@@ -1313,6 +1329,38 @@ export function GET() {
             setStatus("app-status", error.message, true);
           }).finally(function () {
             setButtonLoading("reset-results-button", false);
+          });
+        }
+
+        function deleteInteraction(interaction) {
+          var target = interaction || selectedInteraction;
+          if (!target) return;
+          if (target.status === "live" && !confirm("This interaction is currently live.\\n\\nDeleting it will immediately stop participant submissions and remove all collected responses.")) {
+            return;
+          }
+          if (!confirm("Delete Interaction?\\n\\nAre you sure you want to delete this interaction?\\n\\nThis action cannot be undone.")) {
+            return;
+          }
+          setButtonLoading("delete-interaction-button", true, "Deleting");
+          request("/api/interactions?id=" + encodeURIComponent(target.id) + "&confirm_live=true", {
+            method: "DELETE"
+          }).then(function (data) {
+            interactions = interactions.filter(function (item) { return item.id !== target.id; });
+            if (selectedInteraction && selectedInteraction.id === target.id) {
+              selectedInteraction = null;
+              editorTemplate = null;
+              optionDrafts = [];
+              el("interaction-editor").classList.add("hidden");
+              el("results-list").innerHTML = "";
+            }
+            renderInteractions();
+            updateEditorButtons();
+            setStatus("app-status", data.message || "Interaction deleted successfully.", false);
+          }).catch(function (error) {
+            setStatus("app-status", error.message, true);
+          }).finally(function () {
+            setButtonLoading("delete-interaction-button", false);
+            updateEditorButtons();
           });
         }
 
@@ -2046,6 +2094,7 @@ export function GET() {
           el("present-live-button").onclick = presentLive;
           el("live-toggle-button").onclick = toggleLiveStatus;
           el("reset-results-button").onclick = resetResults;
+          el("delete-interaction-button").onclick = function () { deleteInteraction(selectedInteraction); };
           el("bottom-refresh-button").onclick = loadEvents;
           el("bottom-present-button").onclick = presentLive;
           el("bottom-results-button").onclick = function () {

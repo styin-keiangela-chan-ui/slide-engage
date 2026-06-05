@@ -206,10 +206,15 @@ function resetResults(interactionId) {
 
 function deleteInteraction(interactionId, eventId) {
   requireSession_();
-  apiFetch_('/api/interactions?id=' + encodeURIComponent(interactionId), {
+  var result = apiFetch_('/api/interactions?id=' + encodeURIComponent(interactionId) + '&confirm_live=true', {
     method: 'delete',
   });
-  return { success: true, interactions: listInteractions_(eventId) };
+  PropertiesService.getDocumentProperties().deleteProperty(slidePropertyKey_(interactionId));
+  return {
+    success: true,
+    message: result.message || 'Interaction deleted successfully.',
+    interactions: listInteractions_(eventId),
+  };
 }
 
 function insertInteractionSlide(eventId, interactionId) {

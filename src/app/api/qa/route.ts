@@ -18,6 +18,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'interaction_id required' }, { status: 400 });
   }
 
+  const { data: interaction, error: interactionError } = await supabase
+    .from('interactions')
+    .select('status')
+    .eq('id', interactionId)
+    .single();
+
+  if (interactionError || !interaction) {
+    return NextResponse.json({ error: 'Interaction not found' }, { status: 404 });
+  }
+
+  if (interaction.status === 'archived') {
+    return NextResponse.json({ error: 'This interaction has been deleted.' }, { status: 410 });
+  }
+
   let query = supabase
     .from('qa_questions')
     .select('*, participants(display_name)')
@@ -87,6 +101,10 @@ export async function POST(req: NextRequest) {
 
     if (interactionError || !interaction) {
       return NextResponse.json({ error: 'Interaction not found' }, { status: 404 });
+    }
+
+    if (interaction.status === 'archived') {
+      return NextResponse.json({ error: 'This interaction has been deleted.' }, { status: 410 });
     }
 
     if (interaction.status !== 'live') {

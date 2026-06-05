@@ -55,9 +55,11 @@ create table public.interactions (
   event_id uuid references public.events(id) on delete cascade not null,
   type text not null check (type in ('poll', 'quiz', 'qa', 'word_cloud', 'feedback')),
   title text not null,
-  status text default 'draft' check (status in ('draft', 'live', 'closed')),
+  status text default 'draft' check (status in ('draft', 'live', 'closed', 'archived')),
   config jsonb default '{}',
   position int default 0,
+  archived_at timestamptz,
+  deleted_at timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -124,6 +126,8 @@ create table public.qa_upvotes (
 create index idx_events_code on public.events(event_code);
 create index idx_events_lecturer on public.events(lecturer_id);
 create index idx_interactions_event on public.interactions(event_id);
+create index idx_interactions_archived_at on public.interactions(archived_at);
+create index idx_interactions_deleted_at on public.interactions(deleted_at);
 create index idx_participants_event on public.participants(event_id);
 create index idx_event_collaborators_event on public.event_collaborators(event_id);
 create index idx_event_collaborators_user on public.event_collaborators(user_id);

@@ -297,7 +297,7 @@ function PollActionMenu({
       <MenuButton icon="↗" label="Direct link" onClick={onDirectLink} />
       <MenuButton icon="↺" label="Reset results" onClick={onReset} />
       <div className="my-1 h-px bg-[#EFEFEF]" />
-      <MenuButton icon="🗑" label="Delete" onClick={onDelete} danger />
+      <MenuButton icon="🗑" label="Delete Interaction" onClick={onDelete} danger />
     </div>
   );
 }
@@ -734,14 +734,15 @@ export default function EventBuilderPage() {
   }
 
   async function deletePoll(item: SavedInteraction) {
-    if (!window.confirm('Delete this interaction?')) return;
+    if (item.status === 'live' && !window.confirm('This interaction is currently live.\n\nDeleting it will immediately stop participant submissions and remove all collected responses.')) return;
+    if (!window.confirm('Delete Interaction?\n\nAre you sure you want to delete this interaction?\n\nThis action cannot be undone.')) return;
     try {
-      const res = await fetch(`/api/interactions?id=${item.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/interactions?id=${item.id}&confirm_live=true`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Unable to delete interaction.');
       setInteractions(prev => prev.filter(current => current.id !== item.id));
       setOpenMenuId(null);
-      setStatus('Interaction deleted.');
+      setStatus(data.message || 'Interaction deleted successfully.');
     } catch (error: any) {
       setStatus(error.message);
     }
