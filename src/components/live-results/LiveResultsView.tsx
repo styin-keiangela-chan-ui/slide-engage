@@ -538,7 +538,7 @@ function AnimatedWordCloud({
 
   if (!cloudWords.length) {
     return (
-      <div className={`grid place-items-center rounded-[8px] ${presentationMode ? 'min-h-[62vh]' : 'min-h-[430px]'} ${
+      <div className={`grid h-full min-h-[260px] place-items-center rounded-[8px] ${
         theme === 'dark' ? 'bg-white/5 text-slate-200' : 'bg-[#F7FBF9] text-[#6B7B8D]'
       }`}>
         <p className="text-center text-xl font-semibold">Results will appear below</p>
@@ -547,12 +547,10 @@ function AnimatedWordCloud({
   }
 
   return (
-    <div ref={containerRef} className={`relative z-10 mx-auto h-full w-full overflow-hidden rounded-[8px] ${
+    <div ref={containerRef} className={`relative z-10 mx-auto h-full min-h-[260px] w-full overflow-hidden rounded-[8px] ${
       theme === 'dark'
         ? 'bg-transparent'
         : 'bg-gradient-to-br from-white via-[#F7FBF9] to-[#EEF7F1]'
-    } ${
-      presentationMode ? 'min-h-[62vh]' : 'min-h-[430px]'
     }`}>
       <div className={`pointer-events-none absolute inset-0 ${
         theme === 'dark'
@@ -1156,10 +1154,10 @@ export default function LiveResultsView({
   });
 
   const shellClass = isFullscreen
-    ? 'fixed inset-0 z-50 overflow-hidden bg-[#0F172A] text-white p-4 md:p-5 transition-colors'
+    ? 'fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#0F172A] p-4 text-white transition-colors md:p-5'
     : publicMode
-      ? 'h-screen overflow-hidden bg-[#0F172A] text-white p-4 md:p-5 transition-colors'
-      : 'rounded-[8px] border border-[#E2EBE6] bg-white p-6 shadow-sm';
+      ? 'flex h-screen flex-col overflow-hidden bg-[#0F172A] p-4 text-white transition-colors md:p-5'
+      : 'flex h-[calc(100vh-154px)] min-h-0 flex-col overflow-hidden rounded-[8px] border border-[#E2EBE6] bg-white p-4 shadow-sm';
 
   if (!event && !eventCode && !loading) {
     return <EmptyState>Please select an event first.</EmptyState>;
@@ -1227,8 +1225,8 @@ export default function LiveResultsView({
         <div
           className={`sticky top-0 z-30 border-b backdrop-blur-xl ${
             isFullscreen || publicMode
-              ? '-mx-4 -mt-4 mb-3 border-white/10 bg-[#0F172A]/88 px-4 py-2 md:-mx-5 md:-mt-5 md:px-5'
-              : '-mx-6 -mt-6 mb-6 border-[#E2EBE6] bg-white/92 px-6 py-3'
+              ? '-mx-4 -mt-4 mb-2 border-white/10 bg-[#0F172A]/88 px-4 py-2 md:-mx-5 md:-mt-5 md:px-5'
+              : '-mx-4 -mt-4 mb-3 border-[#E2EBE6] bg-white/92 px-4 py-2'
           }`}
         >
           <div className="flex items-center justify-between gap-4">
@@ -1291,15 +1289,15 @@ export default function LiveResultsView({
         </div>
       )}
 
-      <div className={publicMode || isFullscreen ? 'flex flex-wrap items-start justify-between gap-3' : 'flex flex-wrap items-start justify-between gap-4'}>
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="rounded-full bg-[#DFF5E7] px-3 py-1 text-sm font-bold text-[#16833A]">Live</span>
+      <div className={publicMode || isFullscreen ? 'flex shrink-0 flex-wrap items-start justify-between gap-2' : 'flex shrink-0 flex-wrap items-start justify-between gap-2'}>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-[#DFF5E7] px-2.5 py-0.5 text-xs font-bold text-[#16833A]">Live</span>
             <span className={isFullscreen || publicMode ? 'text-slate-300' : 'text-[#6B7B8D]'}>
               {interactionLabel(activeInteraction)} · #{event?.event_code}
             </span>
           </div>
-          <h1 className={`max-w-5xl font-extrabold leading-tight ${isFullscreen || publicMode ? 'mt-2 text-[28px] text-white md:text-[42px]' : 'mt-4 text-[36px] text-[#17172F] md:text-[52px]'}`}>
+          <h1 className={`line-clamp-2 max-w-5xl font-extrabold leading-tight ${isFullscreen || publicMode ? 'mt-1 text-[24px] text-white md:text-[34px]' : 'mt-1 text-[22px] text-[#17172F] md:text-[30px]'}`}>
             {activeInteraction.title}
           </h1>
           {liveInteractions.length > 1 && !publicMode && (
@@ -1320,16 +1318,7 @@ export default function LiveResultsView({
         )}
       </div>
 
-      {(isFullscreen || publicMode) && activeInteraction.type !== 'word_cloud' && activeInteraction.type !== 'poll' && activeInteraction.type !== 'quiz' && (
-        <div className="mt-8 grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <EventQRCode event={event} variant={isFullscreen || publicMode ? 'dark' : 'light'} presentation={isFullscreen || publicMode} />
-          <div className="flex items-end">
-            <JoinBanner event={event} variant={isFullscreen || publicMode ? 'dark' : 'light'} presentation={isFullscreen || publicMode} />
-          </div>
-        </div>
-      )}
-
-      <div className={isFullscreen || publicMode ? 'mt-3' : 'mt-8'}>{content}</div>
+      <div className={isFullscreen || publicMode ? 'mt-2 min-h-0 flex-1' : 'mt-3 min-h-0 flex-1'}>{content}</div>
     </div>
   );
 }
@@ -1366,117 +1355,89 @@ function renderResultContent({
     const correct = chartData.find((option: any) => option.is_correct);
     const totalResponses = payload?.total_responses || 0;
 
-    if (presentationMode) {
-      return (
-        <div className="grid h-[calc(100vh-220px)] min-h-[380px] gap-4 overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)]">
-          <div className="grid min-h-0 gap-3 overflow-hidden rounded-[18px] border border-white/10 bg-white/8 p-4 backdrop-blur-xl">
-            <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-4">
-              <EventQRCode event={event} variant="dark" compact />
-              <div className="min-w-0 space-y-3">
-                <div className="rounded-[14px] border border-emerald-300/20 bg-emerald-300/10 p-3">
-                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-200">Responses</p>
-                  <p className="mt-1 text-5xl font-black text-white">{totalResponses}</p>
-                </div>
-                <div className="rounded-[14px] border border-white/10 bg-white/8 p-3">
-                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-300">Event code</p>
-                  <p className="mt-1 truncate text-3xl font-black text-emerald-200">#{event?.event_code}</p>
-                </div>
-              </div>
-            </div>
-            <JoinBanner event={event} variant="dark" />
-            <p className="text-center text-sm font-semibold text-slate-300">
-              Scan the QR code or enter the event code to join.
-            </p>
-          </div>
-
-          <div className="grid min-h-0 gap-4 overflow-hidden lg:grid-rows-[minmax(0,0.86fr)_minmax(0,1fr)]">
-            <div className="min-h-0 rounded-[18px] border border-white/10 bg-white p-4 shadow-2xl">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 24, top: 8, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
-                  <YAxis
-                    dataKey="option_text"
-                    type="category"
-                    width={150}
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value: string) => compactTitle(value, 'Option').slice(0, 20)}
-                  />
-                  <Tooltip />
-                  <Bar dataKey="count" radius={[0, 8, 8, 0]}>
-                    {chartData.map((entry: any, index: number) => (
-                      <Cell key={entry.option_id || index} fill={entry.is_correct ? '#16833A' : chartColors[index % chartColors.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="grid min-h-0 gap-2 overflow-hidden rounded-[18px] border border-white/10 bg-white/95 p-4 text-[#17172F] shadow-2xl">
-              {chartData.length ? (
-                chartData.slice(0, 6).map((option: any, index: number) => (
-                  <div key={option.option_id || `${option.option_text}-${index}`} className="min-h-0 rounded-[12px] bg-[#F6F8F7] px-4 py-2">
-                    <div className="flex items-center justify-between gap-3 text-sm font-black">
-                      <span className="truncate">{option.option_text}</span>
-                      <span className="shrink-0 text-xl text-[#16833A]">{option.percentage || 0}%</span>
-                    </div>
-                    <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#DDEBE3]">
-                      <div
-                        className="h-full rounded-full bg-[#16833A] transition-all"
-                        style={{ width: `${Math.max(0, Math.min(100, Number(option.percentage || 0)))}%` }}
-                      />
-                    </div>
-                    <p className="mt-1 text-[11px] font-bold text-[#6B7B8D]">{option.count || 0} votes</p>
-                  </div>
-                ))
-              ) : (
-                <div className="grid place-items-center text-center text-lg font-bold text-[#6B7B8D]">
-                  Waiting for responses...
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
     return (
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_330px]">
-        <div className="h-[430px] rounded-[8px] border border-[#E2EBE6] bg-white p-5">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} layout="vertical" margin={{ left: 24, right: 40, top: 12, bottom: 12 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-              <XAxis type="number" allowDecimals={false} />
-              <YAxis dataKey="option_text" type="category" width={150} tick={{ fontSize: 14 }} />
-              <Tooltip />
-              <Bar dataKey="count" radius={[0, 8, 8, 0]}>
-                {chartData.map((entry: any, index: number) => (
-                  <Cell key={entry.option_id || index} fill={entry.is_correct ? '#16833A' : chartColors[index % chartColors.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+      <div className={`grid h-full min-h-0 gap-4 overflow-hidden lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)] ${
+        presentationMode ? 'text-white' : 'text-[#17172F]'
+      }`}>
+        <div className={`grid min-h-0 content-start gap-3 overflow-hidden rounded-[18px] p-3 backdrop-blur-xl ${
+          presentationMode ? 'border border-white/10 bg-white/8' : 'border border-[#E2EBE6] bg-[#F7FBF9]'
+        }`}>
+          <div className="grid grid-cols-[118px_minmax(0,1fr)] items-center gap-3">
+            <EventQRCode event={event} variant={presentationMode ? 'dark' : 'light'} compact />
+            <div className="min-w-0 space-y-2">
+              <div className={`rounded-[14px] p-3 ${
+                presentationMode ? 'border border-emerald-300/20 bg-emerald-300/10' : 'border border-[#CFE0D7] bg-white'
+              }`}>
+                <p className={`text-[10px] font-black uppercase tracking-[0.16em] ${presentationMode ? 'text-emerald-200' : 'text-[#6B7B8D]'}`}>Responses</p>
+                <p className={`mt-1 text-4xl font-black ${presentationMode ? 'text-white' : 'text-[#17172F]'}`}>{totalResponses}</p>
+              </div>
+              <div className={`rounded-[14px] p-3 ${
+                presentationMode ? 'border border-white/10 bg-white/8' : 'border border-[#CFE0D7] bg-white'
+              }`}>
+                <p className={`text-[10px] font-black uppercase tracking-[0.16em] ${presentationMode ? 'text-slate-300' : 'text-[#6B7B8D]'}`}>Event code</p>
+                <p className={`mt-1 truncate text-2xl font-black ${presentationMode ? 'text-emerald-200' : 'text-[#16833A]'}`}>#{event?.event_code}</p>
+              </div>
+            </div>
+          </div>
+          <JoinBanner event={event} variant={presentationMode ? 'dark' : 'light'} />
+          <p className={`text-center text-xs font-semibold ${presentationMode ? 'text-slate-300' : 'text-[#6B7B8D]'}`}>
+            Scan the QR code or enter the event code to join.
+          </p>
         </div>
 
-        <div className="rounded-[8px] border border-[#E2EBE6] bg-white p-5">
-          <p className="text-sm font-bold uppercase tracking-[0.12em] text-[#6B7B8D]">Responses</p>
-          <p className="mt-2 text-[44px] font-extrabold text-[#17172F]">{totalResponses}</p>
-          <div className="mt-6 space-y-3">
-            {chartData.map((option: any) => (
-              <div key={option.option_id} className="rounded-[8px] bg-[#F6F8F7] p-3">
-                <div className="flex items-center justify-between gap-3 text-sm font-semibold text-[#17172F]">
-                  <span>{option.option_text}</span>
-                  <span>{option.percentage}%</span>
+        <div className="grid min-h-0 gap-3 overflow-hidden lg:grid-rows-[minmax(0,0.78fr)_minmax(0,1fr)]">
+          <div className={`min-h-0 rounded-[18px] p-3 shadow-sm ${
+            presentationMode ? 'border border-white/10 bg-white' : 'border border-[#E2EBE6] bg-white'
+          }`}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 24, top: 6, bottom: 6 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+                <YAxis
+                  dataKey="option_text"
+                  type="category"
+                  width={140}
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(value: string) => compactTitle(value, 'Option').slice(0, 20)}
+                />
+                <Tooltip />
+                <Bar dataKey="count" radius={[0, 8, 8, 0]}>
+                  {chartData.map((entry: any, index: number) => (
+                    <Cell key={entry.option_id || index} fill={entry.is_correct ? '#16833A' : chartColors[index % chartColors.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="grid min-h-0 gap-2 overflow-hidden rounded-[18px] border border-[#E2EBE6] bg-white/95 p-3 text-[#17172F] shadow-sm">
+            {chartData.length ? (
+              chartData.slice(0, 6).map((option: any, index: number) => (
+                <div key={option.option_id || `${option.option_text}-${index}`} className="min-h-0 rounded-[12px] bg-[#F6F8F7] px-3 py-2">
+                  <div className="flex items-center justify-between gap-3 text-sm font-black">
+                    <span className="truncate">{option.option_text}</span>
+                    <span className="shrink-0 text-lg text-[#16833A]">{option.percentage || 0}%</span>
+                  </div>
+                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#DDEBE3]">
+                    <div
+                      className="h-full rounded-full bg-[#16833A] transition-all"
+                      style={{ width: `${Math.max(0, Math.min(100, Number(option.percentage || 0)))}%` }}
+                    />
+                  </div>
+                  <p className="mt-1 text-[11px] font-bold text-[#6B7B8D]">{option.count || 0} votes</p>
                 </div>
-                <p className="mt-1 text-xs text-[#6B7B8D]">{option.count} votes</p>
+              ))
+            ) : (
+              <div className="grid place-items-center text-center text-lg font-bold text-[#6B7B8D]">
+                Waiting for responses...
               </div>
-            ))}
+            )}
           </div>
           {interaction.type === 'quiz' && (
-            <div className="mt-6 border-t border-[#E2EBE6] pt-5">
+            <div className="hidden">
               <p className="text-sm font-bold text-[#17172F]">Correct answer</p>
               <p className="mt-1 text-[#16833A]">{correct?.option_text || 'Not selected'}</p>
-              <div className="mt-5 space-y-2">
+              <div className="mt-2 space-y-2">
                 <p className="text-sm font-bold text-[#17172F]">Leaderboard</p>
                 {responses
                   .slice()
@@ -1502,15 +1463,17 @@ function renderResultContent({
 
   if (interaction.type === 'word_cloud') {
     return (
-      <div className={`${presentationMode ? 'min-h-[66vh] p-3' : 'min-h-[430px] p-5'} rounded-[8px] border border-[#E2EBE6] bg-white shadow-sm`}>
-        <div className="grid gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
-          <div className="animate-[qrSlideIn_500ms_ease-out] lg:sticky lg:top-4 lg:self-start">
-            <EventQRCode event={event} />
+      <div className={`h-full min-h-0 rounded-[8px] border shadow-sm ${
+        presentationMode ? 'border-white/10 bg-white/5 p-3' : 'border-[#E2EBE6] bg-white p-3'
+      }`}>
+        <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(210px,280px)_minmax(0,1fr)]">
+          <div className="min-h-0 animate-[qrSlideIn_500ms_ease-out] overflow-hidden">
+            <EventQRCode event={event} variant={presentationMode ? 'dark' : 'light'} compact={!presentationMode} presentation={presentationMode} />
           </div>
-          <div className="min-w-0">
+          <div className="flex min-w-0 min-h-0 flex-col">
             <AnimatedWordCloud cloudWords={cloudWords} presentationMode={presentationMode} />
-            <div className="mx-auto mt-4 max-w-3xl">
-              <JoinBanner event={event} />
+            <div className="mx-auto mt-3 max-w-3xl shrink-0">
+              <JoinBanner event={event} variant={presentationMode ? 'dark' : 'light'} />
             </div>
           </div>
         </div>
@@ -1532,27 +1495,30 @@ function renderResultContent({
 
   if (interaction.type === 'qa') {
     return (
-      <div className="rounded-[8px] border border-[#E2EBE6] bg-white">
-        {questions.length ? (
-          questions.map(question => (
-            <div key={question.id} className="border-b border-[#E2EBE6] p-5 last:border-b-0">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    {question.is_pinned && <span className="rounded-full bg-[#FFF3D8] px-2 py-0.5 text-xs font-bold text-[#9A6500]">Pinned</span>}
-                    <span className="text-sm text-[#6B7B8D]">{question.participants?.display_name || 'Anonymous'} · {formatTime(question.created_at)}</span>
+      <div className="grid h-full min-h-0 gap-4 overflow-hidden lg:grid-cols-[minmax(210px,280px)_minmax(0,1fr)]">
+        <EventQRCode event={event} variant={presentationMode ? 'dark' : 'light'} compact={!presentationMode} presentation={presentationMode} />
+        <div className="min-h-0 overflow-hidden rounded-[8px] border border-[#E2EBE6] bg-white">
+          {questions.length ? (
+            questions.slice(0, 6).map(question => (
+              <div key={question.id} className="border-b border-[#E2EBE6] p-4 last:border-b-0">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      {question.is_pinned && <span className="rounded-full bg-[#FFF3D8] px-2 py-0.5 text-xs font-bold text-[#9A6500]">Pinned</span>}
+                      <span className="truncate text-xs text-[#6B7B8D]">{question.participants?.display_name || 'Anonymous'} · {formatTime(question.created_at)}</span>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-[18px] font-bold text-[#17172F]">{question.question_text}</p>
                   </div>
-                  <p className="mt-2 text-[24px] font-bold text-[#17172F]">{question.question_text}</p>
+                  <span className="shrink-0 rounded-full bg-[#EAF7EF] px-3 py-1 text-sm font-bold text-[#16833A]">
+                    {question.qa_upvotes?.length || 0} upvotes
+                  </span>
                 </div>
-                <span className="rounded-full bg-[#EAF7EF] px-3 py-1 text-sm font-bold text-[#16833A]">
-                  {question.qa_upvotes?.length || 0} upvotes
-                </span>
               </div>
-            </div>
-          ))
-        ) : (
-          <p className="p-12 text-center text-xl font-semibold text-[#6B7B8D]">Waiting for questions...</p>
-        )}
+            ))
+          ) : (
+            <p className="grid h-full place-items-center p-8 text-center text-xl font-semibold text-[#6B7B8D]">Waiting for questions...</p>
+          )}
+        </div>
       </div>
     );
   }
@@ -1568,14 +1534,16 @@ function renderResultContent({
     const average = payload?.results?.average_rating || 0;
 
     return (
-      <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="rounded-[8px] border border-[#E2EBE6] bg-white p-8 text-center">
-          <p className="text-sm font-bold uppercase tracking-[0.12em] text-[#6B7B8D]">Average score</p>
-          <p className="mt-4 text-[76px] font-extrabold text-[#16833A]">{average}</p>
-          <p className="text-[#6B7B8D]">from {payload?.results?.rating_count || 0} ratings</p>
+      <div className="grid h-full min-h-0 gap-4 overflow-hidden lg:grid-cols-[minmax(210px,280px)_minmax(0,1fr)]">
+        <EventQRCode event={event} variant={presentationMode ? 'dark' : 'light'} compact={!presentationMode} presentation={presentationMode} />
+        <div className="grid min-h-0 gap-4 overflow-hidden lg:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="rounded-[8px] border border-[#E2EBE6] bg-white p-5 text-center">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#6B7B8D]">Average score</p>
+          <p className="mt-3 text-[58px] font-extrabold text-[#16833A]">{average}</p>
+          <p className="text-sm text-[#6B7B8D]">from {payload?.results?.rating_count || 0} ratings</p>
         </div>
-        <div className="rounded-[8px] border border-[#E2EBE6] bg-white p-6">
-          <ResponsiveContainer width="100%" height={330}>
+        <div className="min-h-0 rounded-[8px] border border-[#E2EBE6] bg-white p-4">
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={distribution}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="score" />
@@ -1584,6 +1552,7 @@ function renderResultContent({
               <Bar dataKey="count" fill="#16833A" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+        </div>
         </div>
       </div>
     );
@@ -1598,17 +1567,20 @@ function renderResultContent({
     }));
 
   return (
-    <div className="rounded-[8px] border border-[#E2EBE6] bg-white">
-      {textResponses.length ? (
-        textResponses.slice().reverse().map((response: any, index: number) => (
-          <div key={`${response.submitted_at}-${index}`} className="border-b border-[#E2EBE6] p-5 last:border-b-0">
-            <p className="text-sm text-[#6B7B8D]">{response.display_name || 'Anonymous'}</p>
-            <p className="mt-2 text-[24px] font-bold text-[#17172F]">{response.text}</p>
-          </div>
-        ))
-      ) : (
-        <p className="p-12 text-center text-xl font-semibold text-[#6B7B8D]">Waiting for responses...</p>
-      )}
+    <div className="grid h-full min-h-0 gap-4 overflow-hidden lg:grid-cols-[minmax(210px,280px)_minmax(0,1fr)]">
+      <EventQRCode event={event} variant={presentationMode ? 'dark' : 'light'} compact={!presentationMode} presentation={presentationMode} />
+      <div className="min-h-0 overflow-hidden rounded-[8px] border border-[#E2EBE6] bg-white">
+        {textResponses.length ? (
+          textResponses.slice().reverse().slice(0, 7).map((response: any, index: number) => (
+            <div key={`${response.submitted_at}-${index}`} className="border-b border-[#E2EBE6] p-4 last:border-b-0">
+              <p className="text-xs text-[#6B7B8D]">{response.display_name || 'Anonymous'}</p>
+              <p className="mt-1 line-clamp-2 text-[18px] font-bold text-[#17172F]">{response.text}</p>
+            </div>
+          ))
+        ) : (
+          <p className="grid h-full place-items-center p-8 text-center text-xl font-semibold text-[#6B7B8D]">Waiting for responses...</p>
+        )}
+      </div>
     </div>
   );
 }

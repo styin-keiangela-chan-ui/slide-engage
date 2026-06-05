@@ -29,11 +29,11 @@ export default function LiveResultsPage() {
       <Navbar />
       <div className="flex h-[calc(100vh-64px)]">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto">
-          <DashboardShell>
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+        <main className="flex-1 overflow-hidden">
+          <DashboardShell className="h-full overflow-hidden py-4">
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 className="text-[28px] font-bold text-[#17172F]">Live Results</h1>
+              <h1 className="text-[24px] font-bold text-[#17172F]">Live Results</h1>
               <p className="mt-1 text-sm text-[#6B7B8D]">
                 {currentEvent
                   ? `${currentEvent.event_name} · #${currentEvent.event_code}`
