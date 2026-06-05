@@ -883,11 +883,10 @@ export function GET() {
               item.className = "interaction-item";
               item.setAttribute("role", "button");
               item.setAttribute("tabindex", "0");
-              item.innerHTML = '<div class="row"><div><div class="event-name"></div><div class="small muted"></div></div><span class="status-pill"></span></div><div class="row" style="margin-top:8px;justify-content:flex-end"><button class="button danger small delete-interaction-row" type="button" aria-label="Delete interaction" data-tooltip="Delete interaction">🗑 Delete</button></div>';
+              item.innerHTML = '<div class="row"><div><div class="event-name"></div><div class="small muted"></div></div><span class="status-pill"></span></div>';
               var titleEl = item.querySelector(".event-name");
               var typeEl = item.querySelector(".small.muted");
               var statusEl = item.querySelector(".status-pill");
-              var deleteButton = item.querySelector(".delete-interaction-row");
               if (titleEl) titleEl.textContent = interaction.title || "Untitled";
               if (typeEl) typeEl.textContent = labelForInteraction(interaction);
               if (statusEl) {
@@ -912,12 +911,6 @@ export function GET() {
                   item.click();
                 }
               };
-              if (deleteButton) {
-                deleteButton.onclick = function (event) {
-                  event.stopPropagation();
-                  deleteInteraction(interaction);
-                };
-              }
               list.appendChild(item);
             } catch (error) {
               addDebug("Interaction card skipped: " + (error && error.message ? error.message : "unknown error"));

@@ -389,6 +389,15 @@ function EventQRCode({
   const isDark = variant === 'dark';
   const qrSizeClass = presentation ? 'h-[220px] w-[220px]' : compact ? 'h-28 w-28' : 'h-40 w-40';
 
+  useEffect(() => {
+    if (!expanded) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [expanded]);
+
   const copyJoinLink = async () => {
     if (!joinLink) return;
     await navigator.clipboard?.writeText(joinLink);
@@ -453,14 +462,38 @@ function EventQRCode({
       </div>
 
       {expanded && (
-        <div className="fixed inset-0 z-[80] grid place-items-center bg-black/70 p-6 backdrop-blur-sm" onClick={() => setExpanded(false)}>
-          <div className="rounded-[20px] bg-white p-7 shadow-2xl" onClick={event => event.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-[100] grid place-items-center bg-black/75 p-4 backdrop-blur-sm"
+          onClick={() => setExpanded(false)}
+          role="presentation"
+        >
+          <div
+            className="relative max-h-[calc(100vh-32px)] w-full max-w-[620px] rounded-[24px] bg-white p-6 shadow-2xl"
+            onClick={event => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Event QR code"
+          >
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border border-[#DDEAE3] bg-white text-xl font-bold text-[#6B7B8D] shadow-sm transition hover:bg-[#F6F8F7] hover:text-[#17172F]"
+              aria-label="Close enlarged QR code"
+            >
+              ×
+            </button>
             {qrSrc && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={qrSrc} alt={`Join event ${eventCode}`} className="h-[360px] w-[360px]" />
+              <div className="mx-auto mt-5 w-fit rounded-[22px] bg-white p-5 shadow-[0_0_0_1px_rgba(221,234,227,0.9)]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={qrSrc}
+                  alt={`Join event ${eventCode}`}
+                  className="h-[min(66vh,520px)] w-[min(82vw,520px)] max-w-full object-contain"
+                />
+              </div>
             )}
             <p className="mt-4 text-center text-4xl font-black text-[#16833A]">#{eventCode}</p>
-            <p className="mt-2 max-w-[360px] break-words text-center text-sm text-[#6B7B8D]">{joinLink}</p>
+            <p className="mx-auto mt-2 max-w-[540px] break-all text-center text-sm font-semibold text-[#6B7B8D]">{joinLink}</p>
           </div>
         </div>
       )}
@@ -1389,25 +1422,31 @@ function renderResultContent({
           <div className={`min-h-0 rounded-[18px] p-3 shadow-sm ${
             presentationMode ? 'border border-white/10 bg-white' : 'border border-[#E2EBE6] bg-white'
           }`}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 24, top: 6, bottom: 6 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
-                <YAxis
-                  dataKey="option_text"
-                  type="category"
-                  width={140}
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value: string) => compactTitle(value, 'Option').slice(0, 20)}
-                />
-                <Tooltip />
-                <Bar dataKey="count" radius={[0, 8, 8, 0]}>
-                  {chartData.map((entry: any, index: number) => (
-                    <Cell key={entry.option_id || index} fill={entry.is_correct ? '#16833A' : chartColors[index % chartColors.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            {chartData.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 24, top: 6, bottom: 6 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+                  <YAxis
+                    dataKey="option_text"
+                    type="category"
+                    width={140}
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value: string) => compactTitle(value, 'Option').slice(0, 20)}
+                  />
+                  <Tooltip />
+                  <Bar dataKey="count" radius={[0, 8, 8, 0]}>
+                    {chartData.map((entry: any, index: number) => (
+                      <Cell key={entry.option_id || index} fill={entry.is_correct ? '#16833A' : chartColors[index % chartColors.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="grid h-full min-h-[180px] place-items-center rounded-[14px] bg-[#F6F8F7] p-6 text-center text-lg font-bold text-[#6B7B8D]">
+                Waiting for responses...
+              </div>
+            )}
           </div>
 
           <div className="grid min-h-0 gap-2 overflow-hidden rounded-[18px] border border-[#E2EBE6] bg-white/95 p-3 text-[#17172F] shadow-sm">

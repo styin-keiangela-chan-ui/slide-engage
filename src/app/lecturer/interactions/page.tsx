@@ -274,38 +274,6 @@ export default function LecturerInteractionsPage() {
     setMessage(data.message || 'Results cleared successfully.');
   }
 
-  async function toggleInteractionLive(interaction: EditableInteraction) {
-    if (!selectedEvent) {
-      setError('Please select or create an event before adding interactions.');
-      return;
-    }
-
-    if (interaction.status !== 'live' && selectedEvent.status !== 'live') {
-      setError('Make this event active before starting an interaction.');
-      return;
-    }
-
-    setError('');
-    const nextStatus = interaction.status === 'live' ? 'closed' : 'live';
-    const res = await fetch('/api/interactions', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: interaction.id, status: nextStatus }),
-    });
-    const data = await res.json();
-
-    if (!res.ok) {
-      setError(data.error || 'Unable to update interaction status.');
-      return;
-    }
-
-    setInteractions(prev => prev.map(item => item.id === interaction.id ? data.interaction : item));
-    if (editingInteraction?.id === interaction.id) {
-      setEditingInteraction(data.interaction);
-      setDraft(draftFromInteraction(data.interaction));
-    }
-  }
-
   function requestDeleteInteraction(interaction: EditableInteraction) {
     setError('');
     setMessage('');
@@ -493,10 +461,25 @@ export default function LecturerInteractionsPage() {
               <div className="divide-y divide-[#E2EBE6]">
                 {interactions.map(interaction => (
                   <div key={interaction.id}>
-                    <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div
+                      role={interactionView === 'active' ? 'button' : undefined}
+                      tabIndex={interactionView === 'active' ? 0 : undefined}
+                      onClick={interactionView === 'active' ? () => openEditor(interaction) : undefined}
+                      onKeyDown={interactionView === 'active' ? event => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          openEditor(interaction);
+                        }
+                      } : undefined}
+                      className={`flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between ${
+                        interactionView === 'active' ? 'cursor-pointer transition hover:bg-[#F6FBF8] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#168A3A]/30' : ''
+                      }`}
+                    >
                       <div className="min-w-0">
                         <div className="truncate text-sm font-bold text-[#1A1A2E]">{interaction.title}</div>
-                        <div className="mt-1 text-xs text-[#6B7B8D]">{typeLabel(interaction)}</div>
+                        <div className="mt-1 text-xs text-[#6B7B8D]">
+                          {typeLabel(interaction)} • {statusLabel(interaction.status)}
+                        </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         {interactionView === 'archive' ? (
@@ -509,45 +492,17 @@ export default function LecturerInteractionsPage() {
                             </button>
                           </>
                         ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => openEditor(interaction)}
-                              aria-label="Edit question and settings"
-                              className="inline-flex items-center gap-1.5 rounded-full border border-[#DDE8E1] bg-white px-3 py-1 text-xs font-bold text-[#1A1A2E] transition hover:border-[#168A3A] hover:text-[#168A3A]"
-                            >
-                              <SETooltip text="Edit question and settings">
-                                <span className="inline-flex items-center gap-1.5">
-                                  <span aria-hidden="true">✏</span>
-                                  Edit
-                                </span>
-                              </SETooltip>
-                            </button>
-                            <SETooltip text={statusTooltip(interaction.status)}>
-                              <button
-                                type="button"
-                                onClick={() => toggleInteractionLive(interaction)}
-                                aria-label={statusTooltip(interaction.status)}
-                                className={`rounded-full px-2.5 py-1 text-xs font-bold transition hover:shadow-sm ${
-                                interaction.status === 'live'
-                                  ? 'bg-[#EAF7EF] text-[#168A3A] hover:bg-[#D8F0E0]'
-                                  : 'bg-[#F3F4F6] text-[#6B7B8D] hover:bg-[#EAF7EF] hover:text-[#168A3A]'
-                              }`}>
-                                {statusLabel(interaction.status)}
-                              </button>
-                            </SETooltip>
-                            <SETooltip text="Delete interaction">
-                              <button
-                                type="button"
-                                onClick={() => requestDeleteInteraction(interaction)}
-                                aria-label="Delete interaction"
-                                className="inline-flex items-center gap-1.5 rounded-full border border-[#F2D5D5] bg-white px-3 py-1 text-xs font-bold text-red-600 transition hover:bg-red-50"
-                              >
-                                <span aria-hidden="true">🗑</span>
-                                Delete
-                              </button>
-                            </SETooltip>
-                          </>
+                          <SETooltip text={statusTooltip(interaction.status)}>
+                            <span
+                              aria-label={statusTooltip(interaction.status)}
+                              className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                              interaction.status === 'live'
+                                ? 'bg-[#EAF7EF] text-[#168A3A]'
+                                : 'bg-[#F3F4F6] text-[#6B7B8D]'
+                            }`}>
+                              {statusLabel(interaction.status)}
+                            </span>
+                          </SETooltip>
                         )}
                       </div>
                     </div>
