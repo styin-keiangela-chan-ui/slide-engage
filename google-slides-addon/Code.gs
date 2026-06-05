@@ -354,7 +354,6 @@ function buildInteractionSnapshot_(event, interaction) {
 function renderSlide_(slide, event, interaction, snapshot) {
   var code = snapshot.eventCode;
   var joinUrl = snapshot.joinUrl;
-  var liveUrl = snapshot.liveResultUrl;
   var page = pageLayout_();
   var join = page.join;
   var result = page.result;
@@ -365,27 +364,27 @@ function renderSlide_(slide, event, interaction, snapshot) {
   text_(slide, snapshot.interactionType.toUpperCase(), result.x + 30, 15, Math.min(300, result.w - 60), 24, 11, true, '#6B7B8D');
 
   rounded_(slide, join.x, join.y, join.w, join.h, '#FFFFFF', '#DDEBE3');
-  text_(slide, 'Join at', join.x + 20, join.y + 22, join.w - 40, 22, 13, true, '#17172F');
-  text_(slide, truncate_(host_(), 24), join.x + 20, join.y + 48, join.w - 40, 22, 12, true, '#168A3A');
-  var qrSize = Math.min(join.w - 42, join.h * 0.31, 126);
-  var qrTop = join.y + 92;
+  text_(slide, 'Join at', join.x + 18, join.y + 18, join.w - 36, 22, 14, true, '#17172F');
+  text_(slide, truncate_(host_(), 22), join.x + 18, join.y + 45, join.w - 36, 24, 13, true, '#168A3A');
+  var qrSize = Math.min(join.w - 30, join.h * 0.42, 170);
+  var qrTop = join.y + 82;
   try {
     var qr = qrBlobForCode_(code);
     slide.insertImage(qr, join.x + (join.w - qrSize) / 2, qrTop, qrSize, qrSize);
   } catch (e) {
     text_(slide, 'QR unavailable', join.x + 18, join.y + 135, join.w - 36, 24, 12, true, '#B42318', SlidesApp.ParagraphAlignment.CENTER);
   }
-  var belowQr = qrTop + qrSize + 16;
-  text_(slide, 'Scan QR code to join', join.x + 14, belowQr, join.w - 28, 22, 9, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
-  var codeTop = Math.min(belowQr + 34, join.y + join.h - 98);
-  rounded_(slide, join.x + 20, codeTop, join.w - 40, 38, '#EAF7EF', '#CBEAD4');
-  text_(slide, '#' + code, join.x + 20, codeTop + 8, join.w - 40, 24, 17, true, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
-  text_(slide, truncate_(joinUrl, Math.max(26, Math.floor(join.w / 4))), join.x + 15, codeTop + 48, join.w - 30, 30, 7, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
+  var belowQr = qrTop + qrSize + 14;
+  text_(slide, 'Scan QR code to join', join.x + 12, belowQr, join.w - 24, 24, 10, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
+  var codeTop = Math.min(belowQr + 32, join.y + join.h - 104);
+  rounded_(slide, join.x + 14, codeTop, join.w - 28, 46, '#EAF7EF', '#CBEAD4');
+  text_(slide, '#' + code, join.x + 14, codeTop + 8, join.w - 28, 30, 21, true, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, truncate_(joinUrl, Math.max(28, Math.floor(join.w / 3.8))), join.x + 12, codeTop + 56, join.w - 24, 30, 8, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
 
   rounded_(slide, result.x, result.y, result.w, result.h, '#FFFFFF', '#DDEBE3');
-  text_(slide, truncate_(snapshot.question, 110), result.x + 30, result.y + 30, result.w - 60, 58, 22, true, '#17172F');
-  text_(slide, 'Scan the QR code or enter the event code to join.', result.x + 30, result.y + 88, result.w - 60, 20, 10, true, '#6B7B8D');
-  renderQuestionSlideContent_(slide, interaction, content, liveUrl);
+  text_(slide, truncate_(snapshot.question, 96), result.x + 28, result.y + 28, result.w - 56, 74, 28, true, '#17172F');
+  text_(slide, 'Scan the QR code or enter the event code to join.', result.x + 28, result.y + 108, result.w - 56, 22, 11, true, '#6B7B8D');
+  renderQuestionSlideContent_(slide, interaction, content);
 }
 
 function pageLayout_() {
@@ -406,7 +405,7 @@ function pageLayout_() {
     margin: margin,
     join: { x: margin, y: top, w: joinWidth, h: panelHeight },
     result: result,
-    content: { x: result.x + 30, y: result.y + 122, w: result.w - 60, h: Math.max(120, result.h - 150) },
+    content: { x: result.x + 28, y: result.y + 152, w: result.w - 56, h: Math.max(150, result.h - 180) },
   };
 }
 
@@ -419,33 +418,23 @@ function liveResultUrl_(eventId, interactionId) {
   return SLIDEENGAGE_URL + '/present/live-result/' + encodeURIComponent(eventId) + '/' + encodeURIComponent(interactionId);
 }
 
-function renderQuestionSlideContent_(slide, interaction, box, liveUrl) {
+function renderQuestionSlideContent_(slide, interaction, box) {
   if (interaction.type === 'poll' || interaction.type === 'quiz') {
     var options = (interaction.interaction_options || []).sort(function (a, b) {
       return (a.position || 0) - (b.position || 0);
     });
-    var visible = Math.min(options.length, Math.max(2, Math.floor((box.h - 84) / 46)));
-    var rowHeight = Math.max(36, Math.min(46, (box.h - 104) / Math.max(1, visible)));
+    var visible = Math.min(options.length, Math.max(2, Math.floor((box.h - 18) / 54)));
+    var rowHeight = Math.max(42, Math.min(58, (box.h - 10) / Math.max(1, visible)));
     for (var i = 0; i < visible; i++) {
       var y = box.y + i * rowHeight;
-      rounded_(slide, box.x, y, box.w, Math.min(36, rowHeight - 6), '#F4F7F4', '#DDEBE3');
-      text_(slide, String.fromCharCode(65 + i) + '. ' + truncate_(options[i].option_text || 'Option', Math.floor((box.w - 36) / 6)), box.x + 12, y + 9, box.w - 24, 18, 10, true, options[i].is_correct ? '#168A3A' : '#17172F');
+      rounded_(slide, box.x, y, box.w, Math.min(46, rowHeight - 8), '#F4F7F4', '#DDEBE3');
+      text_(slide, String.fromCharCode(65 + i) + '. ' + truncate_(options[i].option_text || 'Option', Math.floor((box.w - 36) / 5.2)), box.x + 14, y + 11, box.w - 28, 23, 13, true, options[i].is_correct ? '#168A3A' : '#17172F');
     }
-    if (options.length > visible) text_(slide, '+' + (options.length - visible) + ' more options', box.x, box.y + Math.max(0, visible * rowHeight), box.w, 18, 9, false, '#6B7B8D');
+    if (options.length > visible) text_(slide, '+' + (options.length - visible) + ' more options', box.x, box.y + Math.max(0, visible * rowHeight), box.w, 20, 10, false, '#6B7B8D');
   } else {
-    text_(slide, 'Live results open in a realtime browser view.', box.x, box.y + Math.max(24, box.h * 0.24), box.w, 34, 20, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
-    text_(slide, 'Click View Live Results during presenting to see audience responses update instantly.', box.x + 10, box.y + Math.max(62, box.h * 0.24 + 38), box.w - 20, 34, 11, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
+    text_(slide, 'Answer from your phone', box.x, box.y + Math.max(28, box.h * 0.24), box.w, 40, 24, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
+    text_(slide, 'Scan the QR code or enter the event code to submit your response.', box.x + 10, box.y + Math.max(74, box.h * 0.24 + 44), box.w - 20, 40, 13, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
   }
-
-  var buttonWidth = Math.min(260, box.w);
-  var buttonX = box.x + Math.max(0, (box.w - buttonWidth) / 2);
-  var buttonY = box.y + box.h - 68;
-  rounded_(slide, buttonX, buttonY, buttonWidth, 38, '#168A3A', '#168A3A');
-  var button = text_(slide, 'View Live Results', buttonX, buttonY + 9, buttonWidth, 18, 12, true, '#FFFFFF', SlidesApp.ParagraphAlignment.CENTER);
-  try {
-    button.getText().getTextStyle().setLinkUrl(liveUrl);
-  } catch (e) {}
-  text_(slide, truncate_(liveUrl, Math.max(32, Math.floor(box.w / 5))), box.x, buttonY + 48, box.w, 18, 7, false, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
 }
 
 function renderResults_(slide, interaction, data, box) {

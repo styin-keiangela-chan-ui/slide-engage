@@ -243,41 +243,37 @@ function markInteractionSlide_(interaction, slideId) {
 function renderSlide_(slide, event, interaction, resultData) {
   var code = event.event_code || event.code;
   var joinUrl = SLIDEENGAGE_URL + '/join?code=' + encodeURIComponent(code);
-  var liveUrl = getLiveResultUrl(event.id, interaction.id);
   slide.getBackground().setSolidFill('#F4F7F4');
   text_(slide, 'SlideEngage', 25, 15, 180, 24, 11, true, '#168A3A');
   text_(slide, label_(interaction).toUpperCase(), 280, 15, 300, 24, 11, true, '#6B7B8D');
 
   rounded_(slide, 30, 60, 165, 405, '#FFFFFF', '#DDEBE3');
-  text_(slide, 'Join at', 55, 85, 120, 24, 14, true, '#17172F');
-  text_(slide, host_(), 55, 112, 120, 24, 13, true, '#168A3A');
+  text_(slide, 'Join at', 50, 82, 130, 24, 15, true, '#17172F');
+  text_(slide, host_(), 48, 110, 134, 24, 13, true, '#168A3A');
   try {
     var qr = UrlFetchApp.fetch(SLIDEENGAGE_URL + '/api/qrcode?code=' + encodeURIComponent(code) + '&format=png').getBlob().setName('slideengage-qr.png');
-    slide.insertImage(qr, 52, 155, 120, 120);
+    slide.insertImage(qr, 45, 146, 135, 135);
   } catch (e) {
     text_(slide, 'QR unavailable', 52, 190, 120, 24, 12, true, '#B42318', SlidesApp.ParagraphAlignment.CENTER);
   }
-  text_(slide, 'Scan QR code to join', 42, 292, 145, 24, 10, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
-  rounded_(slide, 52, 330, 120, 42, '#EAF7EF', '#CBEAD4');
-  text_(slide, '#' + code, 52, 340, 120, 28, 20, true, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
-  text_(slide, joinUrl, 42, 392, 145, 34, 7, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, 'Scan QR code to join', 40, 296, 148, 24, 10, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
+  rounded_(slide, 45, 328, 135, 48, '#EAF7EF', '#CBEAD4');
+  text_(slide, '#' + code, 45, 338, 135, 30, 23, true, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, joinUrl, 40, 396, 148, 36, 7, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
 
   rounded_(slide, 220, 60, 470, 405, '#FFFFFF', '#DDEBE3');
-  text_(slide, interaction.title || 'Untitled interaction', 250, 92, 410, 55, 24, true, '#17172F');
-  text_(slide, 'Scan the QR code or enter the event code to join.', 250, 148, 410, 22, 10, true, '#6B7B8D');
+  text_(slide, interaction.title || 'Untitled interaction', 248, 88, 415, 72, 29, true, '#17172F');
+  text_(slide, 'Scan the QR code or enter the event code to join.', 248, 164, 415, 22, 11, true, '#6B7B8D');
   if (interaction.type === 'poll' || interaction.type === 'quiz') {
     var options = interaction.interaction_options || [];
-    for (var i = 0; i < Math.min(options.length, 6); i++) {
-      rounded_(slide, 250, 182 + i * 42, 380, 30, '#F4F7F4', '#DDEBE3');
-      text_(slide, String.fromCharCode(65 + i) + '. ' + (options[i].option_text || 'Option'), 262, 190 + i * 42, 354, 16, 10, true, options[i].is_correct ? '#168A3A' : '#17172F');
+    for (var i = 0; i < Math.min(options.length, 5); i++) {
+      rounded_(slide, 248, 205 + i * 48, 390, 38, '#F4F7F4', '#DDEBE3');
+      text_(slide, String.fromCharCode(65 + i) + '. ' + (options[i].option_text || 'Option'), 262, 216 + i * 48, 360, 20, 13, true, options[i].is_correct ? '#168A3A' : '#17172F');
     }
   } else {
-    text_(slide, 'Live results open in a realtime browser view.', 250, 225, 410, 28, 16, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
+    text_(slide, 'Answer from your phone', 250, 245, 410, 34, 24, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
+    text_(slide, 'Scan the QR code or enter the event code to submit your response.', 255, 292, 400, 38, 13, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
   }
-  rounded_(slide, 325, 380, 220, 38, '#168A3A', '#168A3A');
-  var button = text_(slide, 'View Live Results', 325, 390, 220, 18, 12, true, '#FFFFFF', SlidesApp.ParagraphAlignment.CENTER);
-  try { button.getText().getTextStyle().setLinkUrl(liveUrl); } catch (e) {}
-  text_(slide, liveUrl, 250, 428, 410, 18, 7, false, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
 }
 
 function renderResults_(slide, interaction, data) {
