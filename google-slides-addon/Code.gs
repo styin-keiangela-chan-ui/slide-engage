@@ -17,8 +17,6 @@ function onOpen() {
   SlidesApp.getUi()
     .createMenu('🎯 SlideEngage')
     .addItem('Open SlideEngage', 'showSlideEngageSidebar')
-    .addSeparator()
-    .addItem('Update current SlideEngage snapshot', 'updateSelectedInteractionSnapshot')
     .addToUi();
 }
 
@@ -253,11 +251,14 @@ function getLivePresenterUrl(eventId) {
   return presenterUrl_(event);
 }
 
+function getLiveResultUrl(eventId, interactionId) {
+  return liveResultUrl_(eventId, interactionId);
+}
+
 function presentLiveSlide(eventId, interactionId, insertNew) {
   setInteractionStatus(interactionId, 'live');
   var result = drawInteractionSlide_(eventId, interactionId, !insertNew);
-  var event = apiFetch_('/api/events?id=' + encodeURIComponent(eventId), { method: 'get' }).event;
-  result.presenter_url = presenterUrl_(event);
+  result.presenter_url = liveResultUrl_(eventId, interactionId);
   return result;
 }
 
@@ -297,6 +298,7 @@ function drawInteractionSlide_(eventId, interactionId, updateExisting) {
       interactionType: snapshot.interactionType,
       totalResponses: snapshot.totalResponses,
       joinUrl: snapshot.joinUrl,
+      liveResultUrl: snapshot.liveResultUrl,
       hasResults: snapshot.hasResults,
     },
   };
@@ -323,6 +325,7 @@ function buildInteractionSnapshot_(event, interaction) {
     question: interaction.title || 'Untitled interaction',
     interactionType: label_(interaction),
     joinUrl: SLIDEENGAGE_URL + '/join?code=' + encodeURIComponent(code),
+    liveResultUrl: liveResultUrl_(event.id, interaction.id),
     qrCode: SLIDEENGAGE_URL + '/api/qrcode?code=' + encodeURIComponent(code) + '&format=png',
     resultData: resultData,
     totalResponses: resultData.total_responses || 0,
@@ -333,6 +336,7 @@ function buildInteractionSnapshot_(event, interaction) {
 function renderSlide_(slide, event, interaction, snapshot) {
   var code = snapshot.eventCode;
   var joinUrl = snapshot.joinUrl;
+  var liveUrl = snapshot.liveResultUrl;
   var page = pageLayout_();
   var join = page.join;
   var result = page.result;
@@ -362,8 +366,8 @@ function renderSlide_(slide, event, interaction, snapshot) {
 
   rounded_(slide, result.x, result.y, result.w, result.h, '#FFFFFF', '#DDEBE3');
   text_(slide, truncate_(snapshot.question, 110), result.x + 30, result.y + 30, result.w - 60, 58, 22, true, '#17172F');
-  text_(slide, snapshot.hasResults ? 'Live result snapshot' : 'Waiting for responses…', result.x + 30, result.y + 88, result.w - 60, 20, 10, true, snapshot.hasResults ? '#168A3A' : '#A3AEA8');
-  renderResults_(slide, interaction, snapshot.resultData, content);
+  text_(slide, 'Scan the QR code or enter the event code to join.', result.x + 30, result.y + 88, result.w - 60, 20, 10, true, '#6B7B8D');
+  renderQuestionSlideContent_(slide, interaction, content, liveUrl);
 }
 
 function pageLayout_() {
@@ -391,6 +395,39 @@ function pageLayout_() {
 function presenterUrl_(event) {
   var code = event.event_code || event.code;
   return SLIDEENGAGE_URL + '/present/' + encodeURIComponent(code);
+}
+
+function liveResultUrl_(eventId, interactionId) {
+  return SLIDEENGAGE_URL + '/present/live-result/' + encodeURIComponent(eventId) + '/' + encodeURIComponent(interactionId);
+}
+
+function renderQuestionSlideContent_(slide, interaction, box, liveUrl) {
+  if (interaction.type === 'poll' || interaction.type === 'quiz') {
+    var options = (interaction.interaction_options || []).sort(function (a, b) {
+      return (a.position || 0) - (b.position || 0);
+    });
+    var visible = Math.min(options.length, Math.max(2, Math.floor((box.h - 84) / 46)));
+    var rowHeight = Math.max(36, Math.min(46, (box.h - 104) / Math.max(1, visible)));
+    for (var i = 0; i < visible; i++) {
+      var y = box.y + i * rowHeight;
+      rounded_(slide, box.x, y, box.w, Math.min(36, rowHeight - 6), '#F4F7F4', '#DDEBE3');
+      text_(slide, String.fromCharCode(65 + i) + '. ' + truncate_(options[i].option_text || 'Option', Math.floor((box.w - 36) / 6)), box.x + 12, y + 9, box.w - 24, 18, 10, true, options[i].is_correct ? '#168A3A' : '#17172F');
+    }
+    if (options.length > visible) text_(slide, '+' + (options.length - visible) + ' more options', box.x, box.y + Math.max(0, visible * rowHeight), box.w, 18, 9, false, '#6B7B8D');
+  } else {
+    text_(slide, 'Live results open in a realtime browser view.', box.x, box.y + Math.max(24, box.h * 0.24), box.w, 34, 20, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
+    text_(slide, 'Click View Live Results during presenting to see audience responses update instantly.', box.x + 10, box.y + Math.max(62, box.h * 0.24 + 38), box.w - 20, 34, 11, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
+  }
+
+  var buttonWidth = Math.min(260, box.w);
+  var buttonX = box.x + Math.max(0, (box.w - buttonWidth) / 2);
+  var buttonY = box.y + box.h - 68;
+  rounded_(slide, buttonX, buttonY, buttonWidth, 38, '#168A3A', '#168A3A');
+  var button = text_(slide, 'View Live Results', buttonX, buttonY + 9, buttonWidth, 18, 12, true, '#FFFFFF', SlidesApp.ParagraphAlignment.CENTER);
+  try {
+    button.getText().getTextStyle().setLinkUrl(liveUrl);
+  } catch (e) {}
+  text_(slide, truncate_(liveUrl, Math.max(32, Math.floor(box.w / 5))), box.x, buttonY + 48, box.w, 18, 7, false, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
 }
 
 function renderResults_(slide, interaction, data, box) {

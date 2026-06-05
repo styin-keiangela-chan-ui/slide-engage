@@ -495,7 +495,8 @@ export function GET() {
               <button id="save-interaction-button" class="button secondary small" type="button" aria-label="Save changes without going live" data-tooltip="Save changes without going live">Save</button>
               <button id="live-toggle-button" class="button secondary small" type="button" aria-label="Start accepting responses" data-tooltip="Start accepting responses">Go live</button>
               <button id="reset-results-button" class="button danger small" type="button" aria-label="Clear all participant responses" data-tooltip="Clear all participant responses">Reset results</button>
-              <button id="present-live-button" class="button small" type="button" aria-label="Open fullscreen live presentation" data-tooltip="Open fullscreen live presentation">Present</button>
+              <button id="generate-slide-button" class="button secondary small" type="button" aria-label="Add interaction slide to PowerPoint" data-tooltip="Add question, QR code, event code and live results link to PowerPoint">Add to Presentation</button>
+              <button id="present-live-button" class="button small" type="button" aria-label="Open fullscreen live results" data-tooltip="Open realtime live results in a browser tab">Open Live Results</button>
             </div>
           </div>
         </section>
@@ -512,7 +513,7 @@ export function GET() {
         <div id="app-status" class="status hidden"></div>
         <div class="bottom-toolbar">
           <button id="bottom-refresh-button" class="button secondary small" type="button" aria-label="Reload latest data" data-tooltip="Reload latest data">Refresh</button>
-          <button id="bottom-present-button" class="button small" type="button" aria-label="Show live results" data-tooltip="Show live results">Present</button>
+          <button id="bottom-present-button" class="button small" type="button" aria-label="Open fullscreen live results" data-tooltip="Open realtime live results in a browser tab">Live Results</button>
           <button id="bottom-results-button" class="button secondary small" type="button" aria-label="Reload latest results" data-tooltip="Reload latest results">Results</button>
         </div>
       </section>
@@ -1230,6 +1231,7 @@ export function GET() {
         function updateEditorButtons() {
           var hasSelected = !!selectedInteraction;
           el("present-live-button").disabled = !hasSelected;
+          el("generate-slide-button").disabled = !hasSelected;
           el("live-toggle-button").disabled = !hasSelected;
           el("reset-results-button").disabled = !hasSelected;
           if (hasSelected) {
@@ -1359,7 +1361,7 @@ export function GET() {
           if (!selectedEvent || !interaction) return;
           presentOptions = presentOptions || {};
           if (!presentOptions.silent) {
-            setButtonLoading("present-live-button", true, "Creating slide");
+            setButtonLoading("generate-slide-button", true, "Creating slide");
             setStatus("app-status", "Creating PowerPoint slide...", false);
           }
           if (!presentOptions.silent) {
@@ -1373,39 +1375,9 @@ export function GET() {
             return !!option.option_text;
           });
           if (!presentOptions.silent) addDebug("Options: " + slideOptions.length);
-          var snapshotUrl = interaction.type === "qa"
-            ? "/api/qa?interaction_id=" + encodeURIComponent(interaction.id) + "&sort=popular"
-            : "/api/results?interaction_id=" + encodeURIComponent(interaction.id);
-          return request(snapshotUrl, { cache: "no-store" })
-            .catch(function (error) {
-              addDebug("Result snapshot failed: " + error.message);
-              return { results: [], total_responses: 0 };
-            })
-            .then(function (resultData) {
-              if (interaction.type === "qa") {
-                resultData = { results: resultData.questions || [], total_responses: (resultData.questions || []).length };
-              }
-              if (!presentOptions.silent) addDebug("Result snapshot responses: " + (resultData.total_responses || 0));
-              var signature = JSON.stringify({
-                id: interaction.id,
-                title: interaction.title,
-                status: interaction.status,
-                results: resultData.results || [],
-                total: resultData.total_responses || 0
-              });
-              if (presentOptions.silent && signature === liveSlideLastSignature) return true;
-              if (presentOptions.silent) {
-                return queueLiveSlideSnapshot(interaction, slideOptions, resultData, signature);
-              }
-              liveSlideLastSignature = signature;
-              return insertInteractionSlide(interaction, slideOptions, resultData, !!presentOptions.silent);
-            })
-            .then(function (inserted) {
-              if (inserted && presentOptions.startAutoRefresh) startLiveSlideRefresh(interaction);
-              return inserted;
-            })
+          return insertInteractionSlide(interaction, slideOptions, { results: [], total_responses: 0 }, false)
             .finally(function () {
-              if (!presentOptions.silent) setButtonLoading("present-live-button", false);
+              if (!presentOptions.silent) setButtonLoading("generate-slide-button", false);
             });
         }
 
@@ -1446,7 +1418,7 @@ export function GET() {
         }
 
         function interactionLiveUrl(interaction) {
-          return APP_URL + "/present/" + encodeURIComponent(selectedEvent.event_code);
+          return APP_URL + "/present/live-result/" + encodeURIComponent(selectedEvent.id) + "/" + encodeURIComponent(interaction.id);
         }
 
         function insertInteractionSlide(interaction, options, resultData, isAutoRefresh) {
@@ -1717,8 +1689,8 @@ export function GET() {
               },
               function (result) {
                 if (result.status === Office.AsyncResultStatus.Succeeded) {
-                  if (!isAutoRefresh) setStatus("app-status", "Slide inserted successfully. Live snapshot auto-refresh is starting.", false);
-                  addDebug(isAutoRefresh ? "PowerPoint live snapshot refreshed" : "PowerPoint image inserted successfully");
+                if (!isAutoRefresh) setStatus("app-status", "Slide inserted successfully. Use Open Live Results for realtime presentation.", false);
+                addDebug(isAutoRefresh ? "PowerPoint snapshot refreshed" : "PowerPoint image inserted successfully");
                   resolve(true);
                 } else {
                   var message = result.error && result.error.message ? result.error.message : "PowerPoint rejected the generated slide image.";
@@ -1780,8 +1752,8 @@ export function GET() {
             "Live result area:\\n" +
             (interaction.type === "word_cloud" ? "Live responses will appear here." :
               interaction.type === "qa" ? "Live questions will appear here." :
-              interaction.type === "poll" || interaction.type === "quiz" ? "Live bars and percentages will appear in the refreshed PowerPoint snapshot." :
-              "Live responses will appear in the refreshed PowerPoint snapshot.");
+              interaction.type === "poll" || interaction.type === "quiz" ? "Open the live result link to view realtime bars and percentages." :
+              "Open the live result link to view realtime responses.");
         }
 
         function buildFallbackHtml(interaction, liveUrlOverride) {
@@ -2031,6 +2003,11 @@ export function GET() {
             scheduleAutosave();
           };
           el("save-interaction-button").onclick = function () { saveEditor(false); };
+          el("generate-slide-button").onclick = function () {
+            saveEditor(false, function (interaction) {
+              presentInteraction(interaction);
+            });
+          };
           el("present-live-button").onclick = presentLive;
           el("live-toggle-button").onclick = toggleLiveStatus;
           el("reset-results-button").onclick = resetResults;

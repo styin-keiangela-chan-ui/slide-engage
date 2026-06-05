@@ -47,6 +47,7 @@ type JoinedQuestion = {
 type Props = {
   event?: Event | null;
   eventCode?: string;
+  preferredInteractionId?: string;
   publicMode?: boolean;
 };
 
@@ -797,7 +798,7 @@ function FullscreenPresentation({
   );
 }
 
-export default function LiveResultsView({ event: initialEvent = null, eventCode, publicMode = false }: Props) {
+export default function LiveResultsView({ event: initialEvent = null, eventCode, preferredInteractionId, publicMode = false }: Props) {
   const supabase = useMemo(() => createClient(), []);
   const [event, setEvent] = useState<Event | null>(initialEvent);
   const [liveInteractions, setLiveInteractions] = useState<LiveInteraction[]>([]);
@@ -933,8 +934,8 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
       setActiveInteraction(null);
       return;
     }
-    loadLiveInteractions(event.id);
-  }, [event?.id, loadLiveInteractions]);
+    loadLiveInteractions(event.id, preferredInteractionId);
+  }, [event?.id, loadLiveInteractions, preferredInteractionId]);
 
   useEffect(() => {
     loadResults(activeInteraction);

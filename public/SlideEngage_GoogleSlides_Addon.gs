@@ -42,7 +42,7 @@ function buildSidebarHtml_() {
     '<div class="row"><b id="hello"></b><button class="btn secondary" onclick="logout()">Logout</button></div>' +
     '<div class="card stack"><b>Events</b><select id="events" class="input" onchange="selectEvent()"></select><div class="row"><input id="newEventName" class="input" placeholder="New event name"><button class="btn" onclick="createEvent()">Create</button></div><div id="eventInfo" class="small muted"></div></div>' +
     '<div class="card stack"><b>Create new interaction</b><div id="templates" class="grid"></div></div>' +
-    '<div id="editor" class="card stack hidden"><div class="row"><b id="editorTitle">Editor</b><span id="interactionStatus" class="pill">draft</span></div><textarea id="question" class="input" rows="3" placeholder="Question"></textarea><div id="options" class="stack"></div><button id="addOption" class="btn secondary hidden" onclick="addOption()">Add option</button><button class="btn secondary" onclick="saveInteraction()">Save draft</button><button class="btn" onclick="insertSlide()">Present in Google Slides</button><div class="row"><button class="btn secondary" onclick="goLive()">Go live</button><button class="btn secondary" onclick="closeLive()">Close</button><button class="btn danger" onclick="resetResults()">Reset</button></div><button class="btn secondary" onclick="updateSnapshot()">Update slide snapshot</button></div>' +
+    '<div id="editor" class="card stack hidden"><div class="row"><b id="editorTitle">Editor</b><span id="interactionStatus" class="pill">draft</span></div><textarea id="question" class="input" rows="3" placeholder="Question"></textarea><div id="options" class="stack"></div><button id="addOption" class="btn secondary hidden" onclick="addOption()">Add option</button><button class="btn secondary" onclick="saveInteraction()">Save draft</button><button class="btn" onclick="insertSlide()">Add to Presentation</button><button class="btn secondary" onclick="openLiveResults()">Open Live Results</button><div class="row"><button class="btn secondary" onclick="goLive()">Go live</button><button class="btn secondary" onclick="closeLive()">Close</button><button class="btn danger" onclick="resetResults()">Reset</button></div></div>' +
     '<div class="card stack"><div class="row"><b>Interactions</b><button class="btn secondary" onclick="refresh()">Refresh</button></div><div id="interactions" class="stack"></div></div>' +
     '</section>' +
     '</div><script>' +
@@ -62,7 +62,7 @@ function buildSidebarHtml_() {
     'function openInteraction(i){state.selectedInteraction=i;state.template=null;state.options=(i.interaction_options||[]).sort(function(a,b){return(a.position||0)-(b.position||0)}).map(function(o){return{option_text:o.option_text,is_correct:!!o.is_correct}});renderEditor()}' +
     'function addOption(){state.options.push({option_text:"Option "+(state.options.length+1),is_correct:false});renderEditor()}function editorPayload(){return{id:state.selectedInteraction&&state.selectedInteraction.id,event_id:state.selectedEvent&&state.selectedEvent.id,type:(state.template&&state.template.type)||(state.selectedInteraction&&state.selectedInteraction.type),title:$("question").value,config:(state.template&&state.template.config)||(state.selectedInteraction&&state.selectedInteraction.config)||{},options:needsOptions()?state.options:[]}}function saveInteraction(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();show("Saved.")})}' +
     'function goLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"live"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}function closeLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"closed"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}function resetResults(){if(!state.selectedInteraction)return;if(!confirm("Reset all participant responses for this interaction?"))return;call("resetResults",[state.selectedInteraction.id],function(r){show((r&&r.message)||"Results cleared successfully.")})}' +
-    'function insertSlide(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();call("insertInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Slide inserted.")})})}function updateSnapshot(){if(!state.selectedInteraction)return;call("updateInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Slide snapshot updated.")})}' +
+    'function insertSlide(){call("saveInteraction",[editorPayload()],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();call("insertInteractionSlide",[state.selectedEvent.id,state.selectedInteraction.id],function(){show("Slide inserted. Use Open Live Results for realtime responses.")})})}function openLiveResults(){if(!state.selectedEvent||!state.selectedInteraction){show("Select an interaction first.",true);return}call("getLiveResultUrl",[state.selectedEvent.id,state.selectedInteraction.id],function(url){show("Opening live results. If it did not open, use this link: "+url);window.open(url,"_blank")})}' +
     'boot();' +
     '</script></body></html>';
 }
@@ -191,6 +191,10 @@ function updateInteractionSlide(eventId, interactionId) {
   return drawInteractionSlide_(eventId, interactionId, true);
 }
 
+function getLiveResultUrl(eventId, interactionId) {
+  return SLIDEENGAGE_URL + '/present/live-result/' + encodeURIComponent(eventId) + '/' + encodeURIComponent(interactionId);
+}
+
 function updateSelectedInteractionSnapshot() {
   var props = PropertiesService.getDocumentProperties();
   var eventId = props.getProperty('SLIDEENGAGE_LAST_EVENT_ID');
@@ -228,6 +232,7 @@ function drawInteractionSlide_(eventId, interactionId, updateExisting) {
 function renderSlide_(slide, event, interaction, resultData) {
   var code = event.event_code || event.code;
   var joinUrl = SLIDEENGAGE_URL + '/join?code=' + encodeURIComponent(code);
+  var liveUrl = getLiveResultUrl(event.id, interaction.id);
   slide.getBackground().setSolidFill('#F4F7F4');
   text_(slide, 'SlideEngage', 25, 15, 180, 24, 11, true, '#168A3A');
   text_(slide, label_(interaction).toUpperCase(), 280, 15, 300, 24, 11, true, '#6B7B8D');
@@ -248,7 +253,20 @@ function renderSlide_(slide, event, interaction, resultData) {
 
   rounded_(slide, 220, 60, 470, 405, '#FFFFFF', '#DDEBE3');
   text_(slide, interaction.title || 'Untitled interaction', 250, 92, 410, 55, 24, true, '#17172F');
-  renderResults_(slide, interaction, resultData);
+  text_(slide, 'Scan the QR code or enter the event code to join.', 250, 148, 410, 22, 10, true, '#6B7B8D');
+  if (interaction.type === 'poll' || interaction.type === 'quiz') {
+    var options = interaction.interaction_options || [];
+    for (var i = 0; i < Math.min(options.length, 6); i++) {
+      rounded_(slide, 250, 182 + i * 42, 380, 30, '#F4F7F4', '#DDEBE3');
+      text_(slide, String.fromCharCode(65 + i) + '. ' + (options[i].option_text || 'Option'), 262, 190 + i * 42, 354, 16, 10, true, options[i].is_correct ? '#168A3A' : '#17172F');
+    }
+  } else {
+    text_(slide, 'Live results open in a realtime browser view.', 250, 225, 410, 28, 16, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
+  }
+  rounded_(slide, 325, 380, 220, 38, '#168A3A', '#168A3A');
+  var button = text_(slide, 'View Live Results', 325, 390, 220, 18, 12, true, '#FFFFFF', SlidesApp.ParagraphAlignment.CENTER);
+  try { button.getText().getTextStyle().setLinkUrl(liveUrl); } catch (e) {}
+  text_(slide, liveUrl, 250, 428, 410, 18, 7, false, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
 }
 
 function renderResults_(slide, interaction, data) {

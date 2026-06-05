@@ -262,7 +262,6 @@ function buildPreviewSvg(body: InteractionSlideRequest, qrDataUri: string) {
   const width = 1920;
   const height = 1080;
   const label = body.interactionLabel || body.interactionType;
-  const rows = previewRows(body);
   const eventCode = body.eventCode.replace(/^#/, '');
   const joinHost = (() => {
     try {
@@ -272,68 +271,31 @@ function buildPreviewSvg(body: InteractionSlideRequest, qrDataUri: string) {
     }
   })();
 
-  let resultMarkup = '';
-  if (body.interactionType === 'word_cloud') {
-    if (!rows.length) {
-      resultMarkup = svgText('Live responses will appear here', 1205, 560, { size: 44, weight: 800, color: 'A3AEA8', anchor: 'middle' });
-    } else {
-      const placements = layoutWordCloud(rows, { left: 625, top: 330, width: 1165, height: 455 });
-      resultMarkup = placements.length
-        ? placements.map(word => svgText(word.text, word.x, word.y, {
-          size: word.size,
-          weight: 900,
-          color: word.color,
-          anchor: 'middle',
-          rotate: word.rotate,
-        })).join('')
-        : svgText('Live responses will appear here', 1205, 560, { size: 44, weight: 800, color: 'A3AEA8', anchor: 'middle' });
-    }
-  } else if (body.interactionType === 'poll' || body.interactionType === 'quiz') {
-    resultMarkup = rows.length
-      ? rows.map((row, index) => {
-          const y = 355 + index * 95;
-          const percentage = row.percentage || 0;
-          const barWidth = Math.max(14, 760 * (percentage / 100));
-          return [
-            svgText(truncate(row.label, 58), 690, y, { size: 29, weight: row.correct ? 900 : 700, color: '1A1A2E' }),
-            svgRoundRect(690, y + 24, 760, 22, 'E3E7E5', 'E3E7E5', 12),
-            svgRoundRect(690, y + 24, barWidth, 22, colors[index % colors.length], colors[index % colors.length], 12),
-            svgText(`${percentage}%`, 1495, y + 42, { size: 27, weight: 900, color: colors[index % colors.length] }),
-            svgText(`${row.count} votes`, 1595, y + 42, { size: 22, weight: 700, color: '6B7B8D' }),
-          ].join('');
-        }).join('')
-      : svgText('Waiting for responses', 1205, 560, { size: 48, weight: 900, color: 'A3AEA8', anchor: 'middle' });
-  } else if (body.interactionType === 'qa') {
-    resultMarkup = rows.length
-      ? rows.map((row, index) => {
-          const y = 340 + index * 112;
-          return [
-            svgRoundRect(690, y - 42, 930, 82, 'F4F7F4', 'DDEBE3', 18),
-            svgText(truncate(row.label, 74), 722, y + 8, { size: 27, weight: 800, color: '1A1A2E' }),
-            svgText(`+${row.count}`, 1540, y + 8, { size: 24, weight: 900, color: '168A3A' }),
-          ].join('');
-        }).join('')
-      : [
-          svgText('Ask your question', 1205, 505, { size: 52, weight: 900, color: '1A1A2E', anchor: 'middle' }),
-          svgText('Live questions will appear here', 1205, 560, { size: 31, weight: 700, color: 'A3AEA8', anchor: 'middle' }),
+  const optionRows = (body.interactionType === 'poll' || body.interactionType === 'quiz')
+    ? (body.options || []).slice(0, 6)
+    : [];
+  const resultMarkup = optionRows.length
+    ? optionRows.map((option, index) => {
+        const y = 355 + index * 78;
+        return [
+          svgRoundRect(690, y - 38, 980, 58, 'F4F7F4', 'DDEBE3', 16),
+          svgText(`${String.fromCharCode(65 + index)}. ${truncate(option.option_text || 'Option', 64)}`, 724, y, {
+            size: 29,
+            weight: option.is_correct ? 900 : 800,
+            color: option.is_correct ? '168A3A' : '1A1A2E',
+          }),
         ].join('');
-  } else {
-    resultMarkup = rows.length
-      ? rows.map((row, index) => {
-          const y = 355 + index * 112;
-          return [
-            svgRoundRect(690, y - 45, 930, 82, 'F4F7F4', 'DDEBE3', 18),
-            svgText(truncate(row.label, 78), 722, y + 8, { size: 27, weight: 800, color: '1A1A2E' }),
-          ].join('');
-        }).join('')
-      : svgText('Live responses will appear here', 1205, 560, { size: 44, weight: 800, color: 'A3AEA8', anchor: 'middle' });
-  }
+      }).join('')
+    : [
+        svgText('Live results open in a separate realtime view', 1205, 485, { size: 45, weight: 900, color: '1A1A2E', anchor: 'middle' }),
+        svgText('Click View Live Results during presenting to see responses update instantly.', 1205, 542, { size: 27, weight: 700, color: '6B7B8D', anchor: 'middle' }),
+      ].join('');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="${width}" height="${height}" fill="#F4F7F4"/>
   ${svgText('SlideEngage', 70, 68, { size: 28, weight: 900, color: '168A3A' })}
-  ${svgText('LIVE PRESENTATION', 620, 68, { size: 24, weight: 900, color: '6B7B8D' })}
+  ${svgText('INTERACTION SLIDE', 620, 68, { size: 24, weight: 900, color: '6B7B8D' })}
   ${svgRoundRect(72, 120, 430, 840, 'FFFFFF', 'DDEBE3', 28)}
   ${svgText('Join at', 132, 190, { size: 31, weight: 700, color: '1A1A2E' })}
   ${svgText(joinHost, 132, 236, { size: 33, weight: 900, color: '168A3A' })}
@@ -344,14 +306,14 @@ function buildPreviewSvg(body: InteractionSlideRequest, qrDataUri: string) {
   ${svgText(truncate(body.joinUrl, 44), 282, 842, { size: 20, weight: 700, color: '6B7B8D', anchor: 'middle' })}
   ${svgRoundRect(560, 120, 1288, 840, 'FFFFFF', 'DDEBE3', 28)}
   ${svgText(label.toUpperCase(), 620, 190, { size: 22, weight: 900, color: '6B7B8D' })}
-  ${svgText(`${body.totalResponses || 0} responses`, 1745, 190, { size: 22, weight: 700, color: '6B7B8D', anchor: 'end' })}
+  ${svgText('Scan the QR code or enter the event code to join.', 1745, 190, { size: 22, weight: 700, color: '6B7B8D', anchor: 'end' })}
   ${svgText(truncate(body.question, 72), 620, 270, { size: 48, weight: 900, color: '1A1A2E' })}
   <line x1="560" y1="306" x2="1848" y2="306" stroke="#E2EBE6" stroke-width="2"/>
   ${resultMarkup}
-  ${svgText('Live results update in presenter view', 620, 832, { size: 28, weight: 900, color: '168A3A' })}
+  ${svgText('View Live Results', 620, 832, { size: 34, weight: 900, color: '168A3A' })}
   ${svgText(truncate(body.liveUrl, 78), 620, 868, { size: 20, weight: 700, color: '6B7B8D' })}
   ${svgRoundRect(690, 902, 930, 54, 'EAF7EF', 'CBEAD4', 22)}
-  ${svgText(`Join at ${joinHost} and enter code #${eventCode}`, 1155, 939, { size: 24, weight: 900, color: '168A3A', anchor: 'middle' })}
+  ${svgText(`Click View Live Results for realtime responses`, 1155, 939, { size: 24, weight: 900, color: '168A3A', anchor: 'middle' })}
 </svg>`;
 }
 
@@ -374,7 +336,7 @@ function addJoinPanel(slide: any, pptx: any, qrDataUri: string, eventCode: strin
   slide.addText('Join at SlideEngage', { x: 0.72, y: 6.05, w: 2.2, h: 0.25, fontSize: 11, bold: true, align: 'center', color: '1A1A2E', margin: 0 });
 }
 
-function addFrame(slide: any, pptx: any, label: string, question: string, totalResponses: number) {
+function addFrame(slide: any, pptx: any, label: string, question: string) {
   slide.addShape(pptx.ShapeType.roundRect, {
     x: 3.45,
     y: 0.65,
@@ -385,9 +347,62 @@ function addFrame(slide: any, pptx: any, label: string, question: string, totalR
     line: { color: 'DDEBE3', width: 1 },
   });
   slide.addText(label.toUpperCase(), { x: 3.78, y: 0.92, w: 3.3, h: 0.25, fontSize: 10, bold: true, color: '6B7B8D', margin: 0 });
-  slide.addText(`${totalResponses || 0} responses`, { x: 11.25, y: 0.92, w: 1.1, h: 0.25, fontSize: 10, align: 'right', color: '6B7B8D', margin: 0 });
+  slide.addText('Scan the QR code or enter the event code to join.', { x: 8.0, y: 0.92, w: 4.05, h: 0.25, fontSize: 9, align: 'right', color: '6B7B8D', fit: 'shrink', margin: 0 });
   slide.addText(question, { x: 3.78, y: 1.32, w: 8.45, h: 0.6, fontSize: 21, bold: true, color: '1A1A2E', fit: 'shrink', margin: 0.02 });
   slide.addShape(pptx.ShapeType.line, { x: 3.45, y: 2.12, w: 9.35, h: 0, line: { color: 'E2EBE6', width: 1 } });
+}
+
+function addQuestionOptions(slide: any, pptx: any, options: InteractionOption[]) {
+  if (!options.length) {
+    slide.addText('Live results open in a separate realtime view.', {
+      x: 4.2,
+      y: 3.15,
+      w: 7.1,
+      h: 0.42,
+      fontSize: 22,
+      bold: true,
+      align: 'center',
+      color: '1A1A2E',
+      fit: 'shrink',
+      margin: 0,
+    });
+    slide.addText('Click View Live Results during presenting to see audience responses update instantly.', {
+      x: 4.25,
+      y: 3.65,
+      w: 7.0,
+      h: 0.36,
+      fontSize: 13,
+      align: 'center',
+      color: '6B7B8D',
+      fit: 'shrink',
+      margin: 0,
+    });
+    return;
+  }
+
+  options.slice(0, 6).forEach((option, index) => {
+    const y = 2.45 + index * 0.55;
+    slide.addShape(pptx.ShapeType.roundRect, {
+      x: 3.85,
+      y,
+      w: 8.25,
+      h: 0.42,
+      rectRadius: 0.04,
+      fill: { color: 'F4F7F4' },
+      line: { color: 'DDEBE3', width: 1 },
+    });
+    slide.addText(`${String.fromCharCode(65 + index)}. ${option.option_text || 'Option'}`, {
+      x: 4.08,
+      y: y + 0.11,
+      w: 7.8,
+      h: 0.18,
+      fontSize: 12,
+      bold: !!option.is_correct,
+      color: option.is_correct ? '168A3A' : '1A1A2E',
+      fit: 'shrink',
+      margin: 0,
+    });
+  });
 }
 
 function addPollResults(slide: any, pptx: any, options: InteractionOption[], results: any[]) {
@@ -518,20 +533,8 @@ export async function POST(req: NextRequest) {
     slide.addText('LIVE PRESENTATION', { x: 3.45, y: 0.2, w: 3.0, h: 0.3, fontSize: 10, bold: true, color: '6B7B8D', margin: 0 });
 
     addJoinPanel(slide, pptx, qrDataUri, eventCode, joinUrl);
-    addFrame(slide, pptx, body.interactionLabel || interactionType, question, body.totalResponses || 0);
-
-    const results = body.results;
-    if (interactionType === 'poll' || interactionType === 'quiz') {
-      addPollResults(slide, pptx, body.options || [], Array.isArray(results) ? results : []);
-    } else if (interactionType === 'word_cloud') {
-      addWordCloud(slide, Array.isArray(results) ? results : []);
-    } else if (interactionType === 'feedback' && results && typeof results === 'object' && 'average_rating' in results) {
-      addRating(slide, pptx, results);
-    } else if (interactionType === 'qa') {
-      addOpenText(slide, pptx, Array.isArray(results) ? results : []);
-    } else {
-      addOpenText(slide, pptx, Array.isArray(results) ? results : results?.text_responses || []);
-    }
+    addFrame(slide, pptx, body.interactionLabel || interactionType, question);
+    addQuestionOptions(slide, pptx, interactionType === 'poll' || interactionType === 'quiz' ? body.options || [] : []);
 
     slide.addShape(pptx.ShapeType.roundRect, {
       x: 3.85,
@@ -542,7 +545,7 @@ export async function POST(req: NextRequest) {
       fill: { color: 'EAF7EF' },
       line: { color: 'CBEAD4', width: 1 },
     });
-    slide.addText('Live results update in presenter view', {
+    slide.addText('View Live Results', {
       x: 4.02,
       y: 5.77,
       w: 7.45,
