@@ -62,6 +62,7 @@ export default function InteractionLiveResultPage({ params }: Props) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      if (document.fullscreenElement) return;
       window.close();
       setCloseHint('You may close this tab to return to your presentation.');
     };
@@ -102,7 +103,7 @@ export default function InteractionLiveResultPage({ params }: Props) {
           {closeHint}
         </div>
       )}
-      <LiveResultsView event={event} preferredInteractionId={interactionId} publicMode />
+      <LiveResultsView event={event} preferredInteractionId={interactionId} slidesOnly publicMode />
     </main>
   );
 }

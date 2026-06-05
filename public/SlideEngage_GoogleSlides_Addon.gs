@@ -226,7 +226,18 @@ function drawInteractionSlide_(eventId, interactionId, updateExisting) {
   props.setProperty('SLIDEENGAGE_SLIDE_' + interactionId, slide.getObjectId());
   props.setProperty('SLIDEENGAGE_LAST_EVENT_ID', eventId);
   props.setProperty('SLIDEENGAGE_LAST_INTERACTION_ID', interactionId);
+  markInteractionSlide_(interaction, slide.getObjectId());
   return { success: true, slide_id: slide.getObjectId() };
+}
+
+function markInteractionSlide_(interaction, slideId) {
+  var config = interaction && interaction.config ? interaction.config : {};
+  config.google_slides_slide_id = slideId;
+  config.google_slides_presented_at = new Date().toISOString();
+  try {
+    config.google_slides_presentation_id = SlidesApp.getActivePresentation().getId();
+  } catch (error) {}
+  apiFetch_('/api/interactions', { method: 'patch', payload: { id: interaction.id, config: config } });
 }
 
 function renderSlide_(slide, event, interaction, resultData) {

@@ -70,6 +70,9 @@ export interface InteractionConfig {
   category_tags?: boolean;
   points?: number;
   leaderboard?: boolean;
+  google_slides_slide_id?: string;
+  google_slides_presented_at?: string;
+  google_slides_presentation_id?: string;
 }
 
 export interface Interaction {

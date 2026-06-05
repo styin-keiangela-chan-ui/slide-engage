@@ -48,6 +48,7 @@ type Props = {
   event?: Event | null;
   eventCode?: string;
   preferredInteractionId?: string;
+  slidesOnly?: boolean;
   publicMode?: boolean;
 };
 
@@ -89,6 +90,16 @@ function interactionLabel(interaction?: LiveInteraction | null) {
   if (interaction.type === 'qa') return 'Audience Q&A';
   if (kind === 'rating') return 'Rating';
   return 'Open Text';
+}
+
+function interactionWasAddedToSlides(interaction: LiveInteraction) {
+  const config = (interaction.config || {}) as Record<string, any>;
+  return Boolean(config.google_slides_slide_id);
+}
+
+function compactTitle(value: string, fallback = 'Untitled interaction') {
+  const text = value?.trim() || fallback;
+  return text.length > 42 ? `${text.slice(0, 39)}...` : text;
 }
 
 function formatTime(value: string) {
@@ -798,7 +809,13 @@ function FullscreenPresentation({
   );
 }
 
-export default function LiveResultsView({ event: initialEvent = null, eventCode, preferredInteractionId, publicMode = false }: Props) {
+export default function LiveResultsView({
+  event: initialEvent = null,
+  eventCode,
+  preferredInteractionId,
+  slidesOnly = false,
+  publicMode = false,
+}: Props) {
   const supabase = useMemo(() => createClient(), []);
   const [event, setEvent] = useState<Event | null>(initialEvent);
   const [liveInteractions, setLiveInteractions] = useState<LiveInteraction[]>([]);
@@ -855,7 +872,11 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
         return;
       }
 
-      const rows = (data || []) as LiveInteraction[];
+      const rows = ((data || []) as LiveInteraction[]).filter(row => {
+        if (row.status === 'archived') return false;
+        if ((row as any).deleted_at || (row as any).archived_at || (row as any).is_deleted) return false;
+        return slidesOnly ? interactionWasAddedToSlides(row) : true;
+      });
       setLiveInteractions(rows);
       setActiveInteraction(current => {
         return (
@@ -866,7 +887,7 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
         );
       });
     },
-    [supabase]
+    [slidesOnly, supabase]
   );
 
   const loadQuestions = useCallback(
@@ -1043,6 +1064,21 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
     } catch {}
   };
 
+  const selectInteraction = useCallback((interaction: LiveInteraction) => {
+    setActiveInteraction(interaction);
+  }, []);
+
+  const moveInteraction = useCallback(
+    (direction: 1 | -1) => {
+      if (!liveInteractions.length || !activeInteraction) return;
+      const currentIndex = liveInteractions.findIndex(interaction => interaction.id === activeInteraction.id);
+      const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+      const nextIndex = (safeIndex + direction + liveInteractions.length) % liveInteractions.length;
+      setActiveInteraction(liveInteractions[nextIndex]);
+    },
+    [activeInteraction, liveInteractions]
+  );
+
   useEffect(() => {
     const onChange = () => {
       if (!document.fullscreenElement) setIsFullscreen(false);
@@ -1050,6 +1086,40 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
     document.addEventListener('fullscreenchange', onChange);
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        moveInteraction(-1);
+      }
+
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        moveInteraction(1);
+      }
+
+      if (event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        if (isFullscreen) {
+          exitFullscreen();
+        } else {
+          enterFullscreen();
+        }
+      }
+
+      if (event.key === 'Escape' && isFullscreen) {
+        event.preventDefault();
+        exitFullscreen();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [enterFullscreen, exitFullscreen, isFullscreen, moveInteraction]);
 
   const fallbackWords = useMemo(() => (Array.isArray(payload?.results) ? payload.results : []), [payload?.results]);
   const cloudWords = useMemo(
@@ -1122,14 +1192,16 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
         </div>
         <div className="mt-20 text-center">
           <p className={`text-[28px] font-semibold ${isFullscreen || publicMode ? 'text-slate-100' : 'text-[#6B7B8D]'}`}>
-            Waiting for lecturer to start an interaction.
+            {slidesOnly
+              ? 'No generated Google Slides interactions are live yet.'
+              : 'Waiting for lecturer to start an interaction.'}
           </p>
         </div>
       </div>
     );
   }
 
-  if ((isFullscreen || publicMode) && activeInteraction.type === 'word_cloud') {
+  if (isFullscreen && activeInteraction.type === 'word_cloud') {
     return (
       <div className={shellClass}>
         <FullscreenPresentation
@@ -1147,6 +1219,74 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
 
   return (
     <div className={shellClass}>
+      {liveInteractions.length > 0 && (
+        <div
+          className={`sticky top-0 z-30 -mx-6 -mt-6 mb-6 border-b px-6 py-3 backdrop-blur-xl ${
+            isFullscreen || publicMode
+              ? 'border-white/10 bg-[#0F172A]/88'
+              : 'border-[#E2EBE6] bg-white/92'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
+              {liveInteractions.map(item => {
+                const isActive = activeInteraction.id === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => selectInteraction(item)}
+                    className={`min-w-[210px] max-w-[260px] rounded-[10px] border px-4 py-3 text-left transition ${
+                      isActive
+                        ? isFullscreen || publicMode
+                          ? 'border-emerald-300/60 bg-emerald-300/15 text-emerald-100 shadow-[0_0_28px_rgba(45,212,191,0.16)]'
+                          : 'border-[#16833A] bg-[#EAF7EF] text-[#16833A] shadow-sm'
+                        : isFullscreen || publicMode
+                          ? 'border-white/10 bg-white/5 text-slate-200 hover:border-emerald-300/40 hover:bg-white/10'
+                          : 'border-[#E2EBE6] bg-white text-[#17172F] hover:border-[#16833A]'
+                    }`}
+                    aria-label={`Show live results for ${item.title}`}
+                    title={item.title}
+                  >
+                    <div className="truncate text-sm font-extrabold">{compactTitle(item.title)}</div>
+                    <div className={`mt-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] ${
+                      isActive
+                        ? isFullscreen || publicMode
+                          ? 'text-emerald-100'
+                          : 'text-[#16833A]'
+                        : isFullscreen || publicMode
+                          ? 'text-slate-400'
+                          : 'text-[#6B7B8D]'
+                    }`}>
+                      <span>{interactionLabel(item)}</span>
+                      <span>•</span>
+                      <span className={item.status === 'live' ? 'text-[#22C55E]' : ''}>{item.status}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={isFullscreen ? exitFullscreen : enterFullscreen}
+              className={`shrink-0 rounded-[8px] px-4 py-2 text-sm font-bold shadow-sm transition ${
+                isFullscreen || publicMode
+                  ? 'border border-white/15 bg-white/10 text-white hover:bg-white/15'
+                  : 'bg-[#16833A] text-white hover:bg-[#116C31]'
+              }`}
+              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              title="F"
+            >
+              {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+            </button>
+          </div>
+          <p className={`mt-2 text-xs ${isFullscreen || publicMode ? 'text-slate-400' : 'text-[#6B7B8D]'}`}>
+            Use ← / → to switch interactions, F for fullscreen, ESC to exit fullscreen.
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-3">
@@ -1165,7 +1305,7 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
           )}
         </div>
 
-        {!publicMode && (
+        {!publicMode && liveInteractions.length === 0 && (
           <button
             type="button"
             onClick={isFullscreen ? exitFullscreen : enterFullscreen}
@@ -1175,26 +1315,6 @@ export default function LiveResultsView({ event: initialEvent = null, eventCode,
           </button>
         )}
       </div>
-
-      {liveInteractions.length > 1 && !isFullscreen && !publicMode && (
-        <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
-          {liveInteractions.map(item => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setActiveInteraction(item)}
-              className={`min-w-[190px] rounded-[8px] border px-4 py-3 text-left transition ${
-                activeInteraction.id === item.id
-                  ? 'border-[#16833A] bg-[#EAF7EF] text-[#16833A] shadow-sm'
-                  : 'border-[#E2EBE6] bg-white text-[#17172F] hover:border-[#16833A]'
-              }`}
-            >
-              <div className="text-xs font-bold uppercase tracking-[0.1em]">{interactionLabel(item)}</div>
-              <div className="mt-1 truncate text-sm font-bold">{item.title}</div>
-            </button>
-          ))}
-        </div>
-      )}
 
       {(isFullscreen || publicMode) && activeInteraction.type !== 'word_cloud' && (
         <div className="mt-8 grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
