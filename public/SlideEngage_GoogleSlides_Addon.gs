@@ -227,7 +227,44 @@ function drawInteractionSlide_(eventId, interactionId, updateExisting) {
   props.setProperty('SLIDEENGAGE_LAST_EVENT_ID', eventId);
   props.setProperty('SLIDEENGAGE_LAST_INTERACTION_ID', interactionId);
   markInteractionSlide_(interaction, slide.getObjectId());
+  focusGeneratedSlide_(slide);
   return { success: true, slide_id: slide.getObjectId() };
+}
+
+function focusGeneratedSlide_(slide) {
+  if (!slide) return;
+
+  var highlight = null;
+  try {
+    var presentation = SlidesApp.getActivePresentation();
+    var pageWidth = presentation.getPageWidth();
+    var pageHeight = presentation.getPageHeight();
+    highlight = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, 8, 8, pageWidth - 16, pageHeight - 16);
+    highlight.getFill().setTransparent();
+    highlight.getLine().setSolidFill('#168A3A');
+    highlight.getLine().setWeight(5);
+  } catch (error) {}
+
+  try {
+    if (typeof slide.selectAsCurrentPage === 'function') slide.selectAsCurrentPage();
+  } catch (error) {}
+
+  try {
+    var elements = slide.getPageElements();
+    if (elements && elements.length && typeof elements[0].select === 'function') elements[0].select();
+  } catch (error) {}
+
+  try {
+    if (typeof SlidesApp.flush === 'function') SlidesApp.flush();
+  } catch (error) {}
+
+  if (highlight) {
+    try {
+      Utilities.sleep(1200);
+      highlight.remove();
+      if (typeof slide.selectAsCurrentPage === 'function') slide.selectAsCurrentPage();
+    } catch (error) {}
+  }
 }
 
 function markInteractionSlide_(interaction, slideId) {

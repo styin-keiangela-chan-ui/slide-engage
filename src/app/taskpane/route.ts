@@ -1507,6 +1507,32 @@ export function GET() {
           return !!(window.Office && Office.context && String(Office.context.platform || "").toLowerCase() === "mac");
         }
 
+        function focusNewestPowerPointSlide() {
+          return new Promise(function (resolve) {
+            if (!(window.Office && Office.context && Office.context.document && Office.context.document.goToByIdAsync && Office.GoToType && Office.GoToType.Index)) {
+              addDebug("PowerPoint slide navigation API unavailable; inserted content remains in the current visible slide.");
+              resolve(false);
+              return;
+            }
+
+            var target = Office.Index && Office.Index.Last ? Office.Index.Last : "last";
+            try {
+              Office.context.document.goToByIdAsync(target, Office.GoToType.Index, function (result) {
+                if (result && result.status === Office.AsyncResultStatus.Succeeded) {
+                  addDebug("PowerPoint navigated to the generated slide");
+                  resolve(true);
+                } else {
+                  addDebug("PowerPoint navigation unavailable after insertion: " + (result && result.error && result.error.message ? result.error.message : "unknown"));
+                  resolve(false);
+                }
+              });
+            } catch (error) {
+              addDebug("PowerPoint navigation failed: " + error.message);
+              resolve(false);
+            }
+          });
+        }
+
         function queueLiveSlideSnapshot(interaction, options, resultData, signature) {
           liveSlideQueuedSnapshot = {
             interaction: interaction,
@@ -1689,9 +1715,15 @@ export function GET() {
               },
               function (result) {
                 if (result.status === Office.AsyncResultStatus.Succeeded) {
-                if (!isAutoRefresh) setStatus("app-status", "Slide inserted successfully. Use Open Live Results for realtime presentation.", false);
-                addDebug(isAutoRefresh ? "PowerPoint snapshot refreshed" : "PowerPoint image inserted successfully");
-                  resolve(true);
+                  addDebug(isAutoRefresh ? "PowerPoint snapshot refreshed" : "PowerPoint image inserted successfully");
+                  if (isAutoRefresh) {
+                    resolve(true);
+                    return;
+                  }
+                  focusNewestPowerPointSlide().then(function () {
+                    setStatus("app-status", "Slide inserted successfully and brought into view.", false);
+                    resolve(true);
+                  });
                 } else {
                   var message = result.error && result.error.message ? result.error.message : "PowerPoint rejected the generated slide image.";
                   reject(new Error(message));
@@ -1712,8 +1744,12 @@ export function GET() {
               addDebug("Attempting generated PPTX insertion");
               Office.context.document.insertFileFromBase64Async(base64, function (result) {
                 if (result.status === Office.AsyncResultStatus.Succeeded) {
-                  setStatus("app-status", "Slide created successfully. Open the live view in the taskpane or use the link on the slide for realtime results.", false);
                   addDebug("PowerPoint slide inserted successfully");
+                  focusNewestPowerPointSlide().then(function () {
+                    setStatus("app-status", "Slide created successfully and brought into view.", false);
+                    resolve();
+                  });
+                  return;
                 } else {
                   var message = result.error && result.error.message ? result.error.message : "PowerPoint rejected the generated slide.";
                   setStatus("app-status", "Unable to create slide: " + message, true);
@@ -1721,7 +1757,6 @@ export function GET() {
                   insertPresentationText(interaction, liveUrl).then(resolve);
                   return;
                 }
-                resolve();
               });
             } else {
               setStatus("app-status", "Unable to create a new slide in this Office host. Inserted fallback slide text instead.", true);
