@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONSOLE_USER="$(stat -f '%Su' /dev/console)"
+USER_HOME="$(dscl . -read "/Users/${CONSOLE_USER}" NFSHomeDirectory | awk '{print $2}')"
+MANIFEST_SOURCE="/Library/Application Support/SlideEngage/OfficeAddin/manifest.xml"
+POWERPOINT_WEF_DIR="${USER_HOME}/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef"
+POWERPOINT_ALT_WEF_DIR="${USER_HOME}/Library/Containers/com.microsoft.Powerpoint/Data/Library/Application Support/Microsoft/Office/16.0/Wef"
+
+mkdir -p "${POWERPOINT_WEF_DIR}" "${POWERPOINT_ALT_WEF_DIR}"
+cp "${MANIFEST_SOURCE}" "${POWERPOINT_WEF_DIR}/SlideEngage.xml"
+cp "${MANIFEST_SOURCE}" "${POWERPOINT_ALT_WEF_DIR}/SlideEngage.xml"
+chown -R "${CONSOLE_USER}" "${POWERPOINT_WEF_DIR}" "${POWERPOINT_ALT_WEF_DIR}"
+
+exit 0

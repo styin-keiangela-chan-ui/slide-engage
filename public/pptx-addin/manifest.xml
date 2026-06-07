@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xsi:type="TaskPaneApp">
+
+  <Id>7fb5ad7a-78bf-4713-bec5-b70ed0a3209d</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>SlideEngage</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="SlideEngage"/>
+  <Description DefaultValue="SlideEngage PowerPoint task pane for live polls, Q&amp;A, QR joining, and audience interactions."/>
+  <IconUrl DefaultValue="https://slide-engage.vercel.app/assets/icons/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://slide-engage.vercel.app/assets/icons/icon-80.png"/>
+  <SupportUrl DefaultValue="https://slide-engage.vercel.app/support"/>
+
+  <AppDomains>
+    <AppDomain>https://slide-engage.vercel.app</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Presentation"/>
+  </Hosts>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://slide-engage.vercel.app/taskpane"/>
+  </DefaultSettings>
+
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>

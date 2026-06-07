@@ -1,0 +1,36 @@
+{
+  "timeZone": "Asia/Kuala_Lumpur",
+  "runtimeVersion": "V8",
+  "exceptionLogging": "STACKDRIVER",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/presentations.currentonly",
+    "https://www.googleapis.com/auth/script.container.ui",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/userinfo.email"
+  ],
+  "urlFetchWhitelist": [
+    "https://slide-engage.vercel.app/",
+    "https://slideengage.vercel.app/"
+  ],
+  "addOns": {
+    "common": {
+      "name": "SlideEngage",
+      "logoUrl": "https://slide-engage.vercel.app/assets/icons/icon-80.png",
+      "layoutProperties": {
+        "primaryColor": "#168A3A",
+        "secondaryColor": "#EAF7EF"
+      },
+      "homepageTrigger": {
+        "runFunction": "showHomepage"
+      },
+      "openLinkUrlPrefixes": [
+        "https://slide-engage.vercel.app"
+      ]
+    },
+    "slides": {
+      "homepageTrigger": {
+        "runFunction": "showHomepage"
+      }
+    }
+  }
+}
