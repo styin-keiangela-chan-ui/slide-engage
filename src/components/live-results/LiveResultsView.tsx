@@ -387,7 +387,7 @@ function EventQRCode({
   const joinLink = publicUrlReady && eventCode ? `${publicUrl}/join?code=${encodeURIComponent(eventCode)}` : '';
   const qrSrc = eventCode && publicUrlReady ? `/api/qrcode?code=${encodeURIComponent(eventCode)}&format=svg&v=${event?.id || eventCode}` : '';
   const isDark = variant === 'dark';
-  const qrSizeClass = presentation ? 'h-[220px] w-[220px]' : compact ? 'h-28 w-28' : 'h-40 w-40';
+  const qrSizeClass = presentation ? 'h-[220px] w-[220px]' : compact ? 'h-24 w-24' : 'h-40 w-40';
 
   useEffect(() => {
     if (!expanded) return undefined;
@@ -410,7 +410,7 @@ function EventQRCode({
           isDark
             ? 'rounded-[22px] border border-white/15 bg-white/10 text-white shadow-[0_0_45px_rgba(22,131,58,0.25)] backdrop-blur-xl'
             : 'rounded-[14px] border border-[#DDEAE3] bg-white/85 text-[#17172F] shadow-sm backdrop-blur'
-        } ${presentation ? 'p-5' : compact ? 'p-4' : 'p-5'}`}
+        } ${presentation ? 'p-5' : compact ? 'p-3' : 'p-5'}`}
       >
         <p className={`text-xs font-bold uppercase tracking-[0.18em] ${isDark ? 'text-emerald-200' : 'text-[#16833A]'}`}>
           Join live
@@ -418,7 +418,7 @@ function EventQRCode({
         <button
           type="button"
           onClick={() => qrSrc && setExpanded(true)}
-          className={`mt-4 block rounded-[12px] border p-3 transition hover:scale-[1.02] ${
+          className={`${compact ? 'mt-2 p-2' : 'mt-4 p-3'} block rounded-[12px] border transition hover:scale-[1.02] ${
             isDark ? 'border-emerald-300/30 bg-white shadow-[0_0_30px_rgba(74,222,128,0.26)]' : 'border-[#DDEAE3] bg-white'
           }`}
           aria-label="Enlarge event QR code"
@@ -432,15 +432,15 @@ function EventQRCode({
             </div>
           )}
         </button>
-        <p className={`mt-4 ${presentation ? 'text-base' : 'text-sm'} font-semibold ${isDark ? 'text-slate-200' : 'text-[#6B7B8D]'}`}>
+        <p className={`${compact ? 'mt-2 text-xs' : 'mt-4 text-sm'} ${presentation ? 'text-base' : ''} font-semibold ${isDark ? 'text-slate-200' : 'text-[#6B7B8D]'}`}>
           Scan QR code to join the event
         </p>
-        <div className={`mt-3 rounded-[10px] border px-3 py-2 text-center ${presentation ? 'text-4xl' : 'text-2xl'} font-black tracking-wide ${
+        <div className={`${compact ? 'mt-2 px-2 py-1 text-xl' : 'mt-3 px-3 py-2 text-2xl'} rounded-[10px] border text-center ${presentation ? 'text-4xl' : ''} font-black tracking-wide ${
           isDark ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-200' : 'border-[#CFE0D7] bg-[#EAF7EF] text-[#16833A]'
         }`}>
           #{eventCode || '------'}
         </div>
-        <p className={`mt-3 ${presentation ? 'max-w-[245px] text-sm' : 'max-w-[190px] text-xs'} break-words ${isDark ? 'text-slate-300' : 'text-[#6B7B8D]'}`}>
+        <p className={`${compact ? 'mt-2 max-w-[130px] text-[10px]' : 'mt-3 max-w-[190px] text-xs'} ${presentation ? 'max-w-[245px] text-sm' : ''} break-words ${isDark ? 'text-slate-300' : 'text-[#6B7B8D]'}`}>
           {publicUrl || 'Set NEXT_PUBLIC_APP_URL'}
         </p>
         {!compact && (
@@ -509,11 +509,11 @@ function JoinBanner({ event, variant = 'light', presentation = false }: { event:
 
   return (
     <div
-      className={`rounded-full px-5 py-3 text-center text-base font-semibold shadow-sm backdrop-blur md:text-lg ${
+      className={`rounded-full text-center font-semibold shadow-sm backdrop-blur ${
         isDark
           ? 'border border-white/10 bg-black/28 text-white shadow-2xl'
           : 'border border-[#DDEAE3] bg-[#EAF7EF]/80 text-[#17172F]'
-      } ${presentation ? 'md:text-3xl md:px-8 md:py-4' : ''}`}
+      } ${presentation ? 'px-6 py-3 text-base md:px-8 md:py-4 md:text-3xl' : 'px-3 py-1.5 text-xs md:text-sm'}`}
     >
       <span className="mr-2 text-[#16833A]">✣</span>
       Join at <span className="font-black text-[#16833A]">{displayDomain}</span> and enter code{' '}
@@ -859,9 +859,12 @@ export default function LiveResultsView({
   const [responses, setResponses] = useState<JoinedResponse[]>([]);
   const [questions, setQuestions] = useState<JoinedQuestion[]>([]);
   const [loading, setLoading] = useState(Boolean(eventCode && !initialEvent));
+  const [resultsLoading, setResultsLoading] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenTheme, setFullscreenTheme] = useState<PresentationTheme>('dark');
   const [wordCloudTick, setWordCloudTick] = useState(0);
+  const [layoutTick, setLayoutTick] = useState(0);
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -956,26 +959,32 @@ export default function LiveResultsView({
   const loadResults = useCallback(
     async (interaction: LiveInteraction | null) => {
       if (!interaction) {
+        setResultsLoading(false);
         setPayload(null);
         setResponses([]);
         setQuestions([]);
         return;
       }
 
-      const [resultResponse] = await Promise.all([
-        fetch(`/api/results?interaction_id=${interaction.id}`, { cache: 'no-store' }),
-        loadResponses(interaction.id),
-        interaction.type === 'qa' ? loadQuestions(interaction.id) : Promise.resolve(),
-      ]);
+      setResultsLoading(true);
+      try {
+        const [resultResponse] = await Promise.all([
+          fetch(`/api/results?interaction_id=${interaction.id}`, { cache: 'no-store' }),
+          loadResponses(interaction.id),
+          interaction.type === 'qa' ? loadQuestions(interaction.id) : Promise.resolve(),
+        ]);
 
-      if (!resultResponse.ok) {
-        const data = await resultResponse.json().catch(() => ({}));
-        setError(data.error || 'Unable to load live results.');
-        setPayload(null);
-        return;
+        if (!resultResponse.ok) {
+          const data = await resultResponse.json().catch(() => ({}));
+          setError(data.error || 'Unable to load live results.');
+          setPayload(null);
+          return;
+        }
+
+        setPayload(await resultResponse.json());
+      } finally {
+        setResultsLoading(false);
       }
-
-      setPayload(await resultResponse.json());
     },
     [loadQuestions, loadResponses]
   );
@@ -1079,6 +1088,30 @@ export default function LiveResultsView({
     const interval = window.setInterval(() => setWordCloudTick(value => value + 1), 3000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const element = shellRef.current;
+    if (!element) return;
+
+    let frame = 0;
+    const updateLayout = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => setLayoutTick(value => value + 1));
+    };
+
+    updateLayout();
+    const observer = new ResizeObserver(updateLayout);
+    observer.observe(element);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [activeInteraction?.id]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setLayoutTick(value => value + 1));
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeInteraction?.id, payload, responses.length, questions.length]);
 
   const enterFullscreen = async () => {
     setIsFullscreen(true);
@@ -1184,13 +1217,15 @@ export default function LiveResultsView({
     questions,
     cloudWords,
     presentationMode: isFullscreen || publicMode,
+    loading: resultsLoading,
+    layoutKey: `${activeInteraction?.id || 'none'}-${layoutTick}`,
   });
 
   const shellClass = isFullscreen
     ? 'fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#0F172A] p-4 text-white transition-colors md:p-5'
     : publicMode
       ? 'flex h-screen flex-col overflow-hidden bg-[#0F172A] p-4 text-white transition-colors md:p-5'
-      : 'flex h-[calc(100vh-154px)] min-h-0 flex-col overflow-hidden rounded-[8px] border border-[#E2EBE6] bg-white p-4 shadow-sm';
+      : 'flex h-full min-h-0 flex-col overflow-hidden rounded-[8px] border border-[#E2EBE6] bg-white p-3 shadow-sm';
 
   if (!event && !eventCode && !loading) {
     return <EmptyState>Please select an event first.</EmptyState>;
@@ -1206,7 +1241,7 @@ export default function LiveResultsView({
 
   if (!activeInteraction) {
     return (
-      <div className={shellClass}>
+      <div ref={shellRef} className={shellClass}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.12em] text-[#2D8A4E]">Live Results</p>
@@ -1221,12 +1256,12 @@ export default function LiveResultsView({
               onClick={isFullscreen ? exitFullscreen : enterFullscreen}
               className="rounded-[8px] border border-[#CFE0D7] px-4 py-2 text-sm font-semibold text-[#16833A] hover:bg-[#EAF7EF]"
             >
-              {isFullscreen ? 'Exit Fullscreen' : 'Present Fullscreen'}
+              {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
             </button>
           )}
         </div>
-        <div className="mt-20 text-center">
-          <p className={`text-[28px] font-semibold ${isFullscreen || publicMode ? 'text-slate-100' : 'text-[#6B7B8D]'}`}>
+        <div className="mt-8 text-center">
+          <p className={`text-[20px] font-semibold ${isFullscreen || publicMode ? 'text-slate-100' : 'text-[#6B7B8D]'}`}>
             {slidesOnly
               ? 'No generated Google Slides interactions are live yet.'
               : 'Waiting for lecturer to start an interaction.'}
@@ -1253,17 +1288,17 @@ export default function LiveResultsView({
   }
 
   return (
-    <div className={shellClass}>
+    <div ref={shellRef} className={shellClass}>
       {liveInteractions.length > 0 && (
         <div
           className={`sticky top-0 z-30 border-b backdrop-blur-xl ${
             isFullscreen || publicMode
-              ? '-mx-4 -mt-4 mb-2 border-white/10 bg-[#0F172A]/88 px-4 py-2 md:-mx-5 md:-mt-5 md:px-5'
-              : '-mx-4 -mt-4 mb-3 border-[#E2EBE6] bg-white/92 px-4 py-2'
+              ? '-mx-4 -mt-4 mb-1.5 border-white/10 bg-[#0F172A]/88 px-3 py-1.5 md:-mx-5 md:-mt-5 md:px-4'
+              : '-mx-3 -mt-3 mb-2 border-[#E2EBE6] bg-white/92 px-3 py-1.5'
           }`}
         >
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5">
               {liveInteractions.map(item => {
                 const isActive = activeInteraction.id === item.id;
                 return (
@@ -1271,7 +1306,7 @@ export default function LiveResultsView({
                     key={item.id}
                     type="button"
                     onClick={() => selectInteraction(item)}
-                    className={`min-w-[190px] max-w-[240px] rounded-[10px] border px-3 py-2 text-left transition ${
+                    className={`min-w-[150px] max-w-[210px] rounded-[8px] border px-2.5 py-1.5 text-left transition ${
                       isActive
                         ? isFullscreen || publicMode
                           ? 'border-emerald-300/60 bg-emerald-300/15 text-emerald-100 shadow-[0_0_28px_rgba(45,212,191,0.16)]'
@@ -1283,8 +1318,8 @@ export default function LiveResultsView({
                     aria-label={`Show live results for ${item.title}`}
                     title={item.title}
                   >
-                    <div className="truncate text-sm font-extrabold">{compactTitle(item.title)}</div>
-                    <div className={`mt-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] ${
+                    <div className="truncate text-xs font-extrabold">{compactTitle(item.title)}</div>
+                    <div className={`mt-0.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.06em] ${
                       isActive
                         ? isFullscreen || publicMode
                           ? 'text-emerald-100'
@@ -1305,7 +1340,7 @@ export default function LiveResultsView({
             <button
               type="button"
               onClick={isFullscreen ? exitFullscreen : enterFullscreen}
-              className={`shrink-0 rounded-[8px] px-4 py-2 text-sm font-bold shadow-sm transition ${
+              className={`shrink-0 rounded-[8px] px-3 py-1.5 text-xs font-bold shadow-sm transition ${
                 isFullscreen || publicMode
                   ? 'border border-white/15 bg-white/10 text-white hover:bg-white/15'
                   : 'bg-[#16833A] text-white hover:bg-[#116C31]'
@@ -1316,13 +1351,13 @@ export default function LiveResultsView({
               {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
             </button>
           </div>
-          <p className={`mt-1 text-[11px] ${isFullscreen || publicMode ? 'text-slate-400' : 'text-[#6B7B8D]'}`}>
+          <p className={`mt-0.5 text-[10px] ${isFullscreen || publicMode ? 'text-slate-400' : 'text-[#6B7B8D]'}`}>
             Use ← / → to switch interactions, F for fullscreen, ESC to exit fullscreen.
           </p>
         </div>
       )}
 
-      <div className={publicMode || isFullscreen ? 'flex shrink-0 flex-wrap items-start justify-between gap-2' : 'flex shrink-0 flex-wrap items-start justify-between gap-2'}>
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-[#DFF5E7] px-2.5 py-0.5 text-xs font-bold text-[#16833A]">Live</span>
@@ -1330,11 +1365,11 @@ export default function LiveResultsView({
               {interactionLabel(activeInteraction)} · #{event?.event_code}
             </span>
           </div>
-          <h1 className={`line-clamp-2 max-w-5xl font-extrabold leading-tight ${isFullscreen || publicMode ? 'mt-1 text-[24px] text-white md:text-[34px]' : 'mt-1 text-[22px] text-[#17172F] md:text-[30px]'}`}>
+          <h1 className={`line-clamp-2 max-w-5xl font-extrabold leading-tight ${isFullscreen || publicMode ? 'mt-1 text-[24px] text-white md:text-[34px]' : 'mt-1 text-[18px] text-[#17172F] md:text-[24px]'}`}>
             {activeInteraction.title}
           </h1>
           {liveInteractions.length > 1 && !publicMode && (
-            <p className={isFullscreen || publicMode ? 'mt-3 text-slate-300' : 'mt-3 text-[#6B7B8D]'}>
+            <p className={isFullscreen || publicMode ? 'mt-1 text-xs text-slate-300' : 'mt-1 text-xs text-[#6B7B8D]'}>
               {liveInteractions.length} live interactions in this event.
             </p>
           )}
@@ -1346,12 +1381,12 @@ export default function LiveResultsView({
             onClick={isFullscreen ? exitFullscreen : enterFullscreen}
             className="rounded-[8px] bg-[#16833A] px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#116C31]"
           >
-            {isFullscreen ? 'Exit Fullscreen' : 'Present Fullscreen'}
+            {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
           </button>
         )}
       </div>
 
-      <div className={isFullscreen || publicMode ? 'mt-2 min-h-0 flex-1' : 'mt-3 min-h-0 flex-1'}>{content}</div>
+      <div className={isFullscreen || publicMode ? 'mt-2 min-h-0 flex-1' : 'mt-2 min-h-0 flex-1'}>{content}</div>
     </div>
   );
 }
@@ -1364,6 +1399,8 @@ function renderResultContent({
   questions,
   cloudWords,
   presentationMode,
+  loading,
+  layoutKey,
 }: {
   event: Event | null;
   interaction: LiveInteraction | null;
@@ -1372,8 +1409,28 @@ function renderResultContent({
   questions: JoinedQuestion[];
   cloudWords: CloudWord[];
   presentationMode: boolean;
+  loading: boolean;
+  layoutKey: string;
 }) {
   if (!interaction) return null;
+
+  if (loading && !payload) {
+    return (
+      <div className="grid h-full min-h-0 gap-3 overflow-hidden lg:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
+        <div className="rounded-[12px] border border-[#E2EBE6] bg-[#F7FBF9] p-3">
+          <div className="h-28 rounded-[10px] bg-[#E6EEE9]" />
+          <div className="mt-3 h-7 rounded-full bg-[#E6EEE9]" />
+          <div className="mt-2 h-4 rounded bg-[#E6EEE9]" />
+        </div>
+        <div className="rounded-[12px] border border-[#E2EBE6] bg-white p-4">
+          <div className="h-6 w-1/3 rounded bg-[#E6EEE9]" />
+          <div className="mt-4 h-12 rounded bg-[#E6EEE9]" />
+          <div className="mt-3 h-12 rounded bg-[#E6EEE9]" />
+          <div className="mt-3 h-12 rounded bg-[#E6EEE9]" />
+        </div>
+      </div>
+    );
+  }
 
   if (payload?.hidden) {
     return (
@@ -1389,36 +1446,36 @@ function renderResultContent({
     const totalResponses = payload?.total_responses || 0;
 
     return (
-      <div className={`grid h-full min-h-0 gap-4 overflow-hidden lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)] ${
+      <div className={`grid h-full min-h-0 gap-3 overflow-hidden lg:grid-cols-[minmax(180px,250px)_minmax(0,1fr)] ${
         presentationMode ? 'text-white' : 'text-[#17172F]'
       }`}>
-        <div className={`grid min-h-0 content-start gap-3 overflow-hidden rounded-[18px] p-3 backdrop-blur-xl ${
+        <div className={`grid min-h-0 content-start gap-2 overflow-hidden rounded-[14px] p-2.5 backdrop-blur-xl ${
           presentationMode ? 'border border-white/10 bg-white/8' : 'border border-[#E2EBE6] bg-[#F7FBF9]'
         }`}>
-          <div className="grid grid-cols-[118px_minmax(0,1fr)] items-center gap-3">
+          <div className="grid grid-cols-[96px_minmax(0,1fr)] items-center gap-2">
             <EventQRCode event={event} variant={presentationMode ? 'dark' : 'light'} compact />
-            <div className="min-w-0 space-y-2">
-              <div className={`rounded-[14px] p-3 ${
+            <div className="min-w-0 space-y-1.5">
+              <div className={`rounded-[12px] p-2 ${
                 presentationMode ? 'border border-emerald-300/20 bg-emerald-300/10' : 'border border-[#CFE0D7] bg-white'
               }`}>
                 <p className={`text-[10px] font-black uppercase tracking-[0.16em] ${presentationMode ? 'text-emerald-200' : 'text-[#6B7B8D]'}`}>Responses</p>
-                <p className={`mt-1 text-4xl font-black ${presentationMode ? 'text-white' : 'text-[#17172F]'}`}>{totalResponses}</p>
+                <p className={`mt-0.5 text-3xl font-black ${presentationMode ? 'text-white' : 'text-[#17172F]'}`}>{totalResponses}</p>
               </div>
-              <div className={`rounded-[14px] p-3 ${
+              <div className={`rounded-[12px] p-2 ${
                 presentationMode ? 'border border-white/10 bg-white/8' : 'border border-[#CFE0D7] bg-white'
               }`}>
                 <p className={`text-[10px] font-black uppercase tracking-[0.16em] ${presentationMode ? 'text-slate-300' : 'text-[#6B7B8D]'}`}>Event code</p>
-                <p className={`mt-1 truncate text-2xl font-black ${presentationMode ? 'text-emerald-200' : 'text-[#16833A]'}`}>#{event?.event_code}</p>
+                <p className={`mt-0.5 truncate text-xl font-black ${presentationMode ? 'text-emerald-200' : 'text-[#16833A]'}`}>#{event?.event_code}</p>
               </div>
             </div>
           </div>
           <JoinBanner event={event} variant={presentationMode ? 'dark' : 'light'} />
-          <p className={`text-center text-xs font-semibold ${presentationMode ? 'text-slate-300' : 'text-[#6B7B8D]'}`}>
+          <p className={`text-center text-[11px] font-semibold ${presentationMode ? 'text-slate-300' : 'text-[#6B7B8D]'}`}>
             Scan the QR code or enter the event code to join.
           </p>
         </div>
 
-        <div className="grid min-h-0 gap-3 overflow-hidden lg:grid-rows-[minmax(0,0.78fr)_minmax(0,1fr)]">
+        <div key={layoutKey} className="grid min-h-0 gap-3 overflow-hidden lg:grid-rows-[minmax(0,0.72fr)_minmax(0,1fr)]">
           <div className={`min-h-0 rounded-[18px] p-3 shadow-sm ${
             presentationMode ? 'border border-white/10 bg-white' : 'border border-[#E2EBE6] bg-white'
           }`}>
@@ -1443,7 +1500,7 @@ function renderResultContent({
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="grid h-full min-h-[180px] place-items-center rounded-[14px] bg-[#F6F8F7] p-6 text-center text-lg font-bold text-[#6B7B8D]">
+              <div className="grid h-full min-h-[140px] place-items-center rounded-[14px] bg-[#F6F8F7] p-6 text-center text-base font-bold text-[#6B7B8D]">
                 Waiting for responses...
               </div>
             )}
@@ -1467,7 +1524,7 @@ function renderResultContent({
                 </div>
               ))
             ) : (
-              <div className="grid place-items-center text-center text-lg font-bold text-[#6B7B8D]">
+              <div className="grid place-items-center text-center text-base font-bold text-[#6B7B8D]">
                 Waiting for responses...
               </div>
             )}
@@ -1505,13 +1562,13 @@ function renderResultContent({
       <div className={`h-full min-h-0 rounded-[8px] border shadow-sm ${
         presentationMode ? 'border-white/10 bg-white/5 p-3' : 'border-[#E2EBE6] bg-white p-3'
       }`}>
-        <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(210px,280px)_minmax(0,1fr)]">
+        <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
           <div className="min-h-0 animate-[qrSlideIn_500ms_ease-out] overflow-hidden">
             <EventQRCode event={event} variant={presentationMode ? 'dark' : 'light'} compact={!presentationMode} presentation={presentationMode} />
           </div>
           <div className="flex min-w-0 min-h-0 flex-col">
             <AnimatedWordCloud cloudWords={cloudWords} presentationMode={presentationMode} />
-            <div className="mx-auto mt-3 max-w-3xl shrink-0">
+            <div className="mx-auto mt-2 max-w-3xl shrink-0">
               <JoinBanner event={event} variant={presentationMode ? 'dark' : 'light'} />
             </div>
           </div>
@@ -1534,7 +1591,7 @@ function renderResultContent({
 
   if (interaction.type === 'qa') {
     return (
-      <div className="grid h-full min-h-0 gap-4 overflow-hidden lg:grid-cols-[minmax(210px,280px)_minmax(0,1fr)]">
+      <div className="grid h-full min-h-0 gap-3 overflow-hidden lg:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
         <EventQRCode event={event} variant={presentationMode ? 'dark' : 'light'} compact={!presentationMode} presentation={presentationMode} />
         <div className="min-h-0 overflow-hidden rounded-[8px] border border-[#E2EBE6] bg-white">
           {questions.length ? (
@@ -1573,7 +1630,7 @@ function renderResultContent({
     const average = payload?.results?.average_rating || 0;
 
     return (
-      <div className="grid h-full min-h-0 gap-4 overflow-hidden lg:grid-cols-[minmax(210px,280px)_minmax(0,1fr)]">
+      <div className="grid h-full min-h-0 gap-3 overflow-hidden lg:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
         <EventQRCode event={event} variant={presentationMode ? 'dark' : 'light'} compact={!presentationMode} presentation={presentationMode} />
         <div className="grid min-h-0 gap-4 overflow-hidden lg:grid-cols-[220px_minmax(0,1fr)]">
         <div className="rounded-[8px] border border-[#E2EBE6] bg-white p-5 text-center">
@@ -1606,7 +1663,7 @@ function renderResultContent({
     }));
 
   return (
-    <div className="grid h-full min-h-0 gap-4 overflow-hidden lg:grid-cols-[minmax(210px,280px)_minmax(0,1fr)]">
+      <div className="grid h-full min-h-0 gap-3 overflow-hidden lg:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
       <EventQRCode event={event} variant={presentationMode ? 'dark' : 'light'} compact={!presentationMode} presentation={presentationMode} />
       <div className="min-h-0 overflow-hidden rounded-[8px] border border-[#E2EBE6] bg-white">
         {textResponses.length ? (

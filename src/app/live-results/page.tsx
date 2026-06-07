@@ -30,24 +30,26 @@ export default function LiveResultsPage() {
       <div className="flex h-[calc(100vh-64px)]">
         <Sidebar />
         <main className="flex-1 overflow-hidden">
-          <DashboardShell className="h-full overflow-hidden py-4">
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <DashboardShell className="flex h-full min-h-0 flex-col overflow-hidden py-2">
+          <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
             <div>
-              <h1 className="text-[24px] font-bold text-[#17172F]">Live Results</h1>
-              <p className="mt-1 text-sm text-[#6B7B8D]">
+              <h1 className="text-[20px] font-bold text-[#17172F]">Live Results</h1>
+              <p className="mt-0.5 text-xs text-[#6B7B8D]">
                 {currentEvent
                   ? `${currentEvent.event_name} · #${currentEvent.event_code}`
                   : 'Presentation results for your selected event'}
               </p>
             </div>
             {currentEvent && (
-              <span className="rounded-full bg-[#EAF7EF] px-3 py-1 text-sm font-bold text-[#16833A]">
+              <span className="rounded-full bg-[#EAF7EF] px-2.5 py-1 text-xs font-bold text-[#16833A]">
                 {currentEvent.status}
               </span>
             )}
           </div>
 
-          <LiveResultsView event={currentEvent} />
+          <div className="min-h-0 flex-1">
+            <LiveResultsView event={currentEvent} />
+          </div>
           </DashboardShell>
         </main>
       </div>
