@@ -1248,24 +1248,46 @@ export function GET() {
           });
         }
 
-        function setInteractionStatus(status) {
-          if (!selectedInteraction) return;
-          setButtonLoading("live-toggle-button", true, status === "live" ? "Starting" : "Closing");
+        function patchInteractionStatus(status) {
           var ready = status === "live" && selectedEvent && selectedEvent.status !== "live"
             ? updateEventStatus("live")
             : Promise.resolve();
-          ready.then(function () {
+          return ready.then(function () {
             return request("/api/interactions", {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ id: selectedInteraction.id, status: status })
             });
-          }).then(function (data) {
+          });
+        }
+
+        function applyInteractionStatusResult(data, status) {
+          selectedInteraction = data.interaction;
+          if (status !== "live" && liveSlideInteractionId === selectedInteraction.id) stopLiveSlideRefresh();
+          updateEditorButtons();
+          loadInteractions();
+          return selectedInteraction;
+        }
+
+        function ensureInteractionLive(interaction) {
+          if (!interaction) return Promise.reject(new Error("Select or create an interaction before adding it to the presentation."));
+          selectedInteraction = interaction;
+          if (selectedInteraction.status === "live") return Promise.resolve(selectedInteraction);
+          setStatus("app-status", "Starting interaction...", false);
+          return patchInteractionStatus("live").then(function (data) {
+            var liveInteraction = applyInteractionStatusResult(data, "live");
+            setStatus("app-status", "Interaction is live.", false);
+            return liveInteraction;
+          });
+        }
+
+        function setInteractionStatus(status) {
+          if (!selectedInteraction) return;
+          setButtonLoading("live-toggle-button", true, status === "live" ? "Starting" : "Closing");
+          patchInteractionStatus(status).then(function (data) {
+              applyInteractionStatusResult(data, status);
               selectedInteraction = data.interaction;
               setStatus("app-status", status === "live" ? "Interaction is live." : "Interaction closed.", false);
-              if (status !== "live" && liveSlideInteractionId === selectedInteraction.id) stopLiveSlideRefresh();
-              updateEditorButtons();
-              loadInteractions();
             }).catch(function (error) {
               setStatus("app-status", error.message, true);
             }).finally(function () {
@@ -1335,7 +1357,11 @@ export function GET() {
 
         function presentLive() {
           saveEditor(false, function () {
-            openPresenterWindow();
+            ensureInteractionLive(selectedInteraction).then(function () {
+              openPresenterWindow();
+            }).catch(function (error) {
+              setStatus("app-status", error.message, true);
+            });
           });
         }
 
@@ -1352,9 +1378,6 @@ export function GET() {
           if (!url) {
             setStatus("app-status", "Presenter URL is unavailable.", true);
             return;
-          }
-          if (selectedInteraction.status !== "live") {
-            setStatus("app-status", "Tip: click Go live before Present so students see this interaction.", false);
           }
           addDebug("Opening live presenter: " + url);
           try {
@@ -2070,7 +2093,11 @@ export function GET() {
           el("save-interaction-button").onclick = function () { saveEditor(false); };
           el("generate-slide-button").onclick = function () {
             saveEditor(false, function (interaction) {
-              presentInteraction(interaction);
+              ensureInteractionLive(interaction).then(function (liveInteraction) {
+                presentInteraction(liveInteraction);
+              }).catch(function (error) {
+                setStatus("app-status", error.message, true);
+              });
             });
           };
           el("present-live-button").onclick = presentLive;

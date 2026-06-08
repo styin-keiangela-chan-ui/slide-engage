@@ -197,6 +197,21 @@ function setInteractionStatus(interactionId, status) {
   };
 }
 
+function ensureEventLive_(eventId) {
+  requireSession_();
+  var event = apiFetch_('/api/events?id=' + encodeURIComponent(eventId), { method: 'get' }).event;
+  if (!isUsableEvent_(event)) {
+    PropertiesService.getUserProperties().deleteProperty(SELECTED_EVENT_KEY);
+    throw new Error('This event is archived or no longer available. Please select another event.');
+  }
+  if (event.status === 'live') return event;
+  var data = apiFetch_('/api/events', {
+    method: 'patch',
+    payload: { id: eventId, status: 'live' },
+  });
+  return data.event || event;
+}
+
 function resetResults(interactionId) {
   requireSession_();
   return apiFetch_('/api/responses?interaction_id=' + encodeURIComponent(interactionId), {
@@ -218,7 +233,12 @@ function deleteInteraction(interactionId, eventId) {
 }
 
 function insertInteractionSlide(eventId, interactionId) {
-  return drawInteractionSlide_(eventId, interactionId, false);
+  ensureEventLive_(eventId);
+  var statusResult = setInteractionStatus(interactionId, 'live');
+  var result = drawInteractionSlide_(eventId, interactionId, false);
+  result.interaction = statusResult.interaction;
+  result.interactions = statusResult.interactions;
+  return result;
 }
 
 function updateInteractionSlide(eventId, interactionId) {
@@ -261,9 +281,12 @@ function getLiveResultUrl(eventId, interactionId) {
 }
 
 function presentLiveSlide(eventId, interactionId, insertNew) {
-  setInteractionStatus(interactionId, 'live');
+  ensureEventLive_(eventId);
+  var statusResult = setInteractionStatus(interactionId, 'live');
   var result = drawInteractionSlide_(eventId, interactionId, !insertNew);
   result.presenter_url = liveResultUrl_(eventId, interactionId);
+  result.interaction = statusResult.interaction;
+  result.interactions = statusResult.interactions;
   return result;
 }
 

@@ -64,7 +64,7 @@ function buildSidebarHtml_() {
     'function openInteraction(i){state.selectedInteraction=i;state.template=null;state.options=(i.interaction_options||[]).sort(function(a,b){return(a.position||0)-(b.position||0)}).map(function(o){return{option_text:o.option_text,is_correct:!!o.is_correct}});renderEditor()}' +
     'function addOption(){state.options.push({option_text:"Option "+(state.options.length+1),is_correct:false});renderEditor()}function editorPayload(){return{id:state.selectedInteraction&&state.selectedInteraction.id,event_id:state.selectedEvent&&state.selectedEvent.id,type:(state.template&&state.template.type)||(state.selectedInteraction&&state.selectedInteraction.type),title:$("question").value,config:(state.template&&state.template.config)||(state.selectedInteraction&&state.selectedInteraction.config)||{},options:needsOptions()?state.options:[]}}function validatePayload(p){if(!p.event_id)return"Select or create an event first.";if(!p.title)return"Question is required.";if((p.type==="poll"||p.type==="quiz")&&p.options.filter(function(o){return String(o.option_text||"").trim()}).length<2)return"At least 2 options are required.";return""}function saveInteraction(done){var payload=editorPayload();var error=validatePayload(payload);if(error){show(error,true);return}call("saveInteraction",[payload],function(r){state.selectedInteraction=r.interaction;state.template=null;state.interactions=r.interactions;render();show("Saved.");done&&done(r.interaction)})}' +
     'function goLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"live"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}function closeLive(){if(!state.selectedInteraction)return;call("setInteractionStatus",[state.selectedInteraction.id,"closed"],function(r){state.selectedInteraction=r.interaction;state.interactions=r.interactions;render()})}function resetResults(){if(!state.selectedInteraction)return;if(!confirm("Reset all participant responses for this interaction?"))return;call("resetResults",[state.selectedInteraction.id],function(r){show((r&&r.message)||"Results cleared successfully.")})}function confirmDeleteInteraction(i){if(!i)return false;if(i.status==="live"&&!confirm("This interaction is currently live.\\n\\nDeleting it will immediately stop participant submissions and remove all collected responses."))return false;return confirm("Delete Interaction?\\n\\nAre you sure you want to delete this interaction?\\n\\nThis action cannot be undone.")}function deleteInteractionFromList(i){if(!i||!state.selectedEvent)return;if(!confirmDeleteInteraction(i))return;call("deleteInteraction",[i.id,state.selectedEvent.id],function(r){state.interactions=r.interactions||[];if(state.selectedInteraction&&state.selectedInteraction.id===i.id){state.selectedInteraction=null;state.template=null;state.options=[]}render();show("Interaction deleted successfully.")})}function deleteSelected(){deleteInteractionFromList(state.selectedInteraction)}' +
-    'function setSlideCreating(active){slideCreateInFlight=active;var btn=$("addPresentationButton");if(btn){btn.disabled=active;btn.textContent=active?"Creating slide...":"Add to Presentation"}}function insertSlide(){if(slideCreateInFlight)return;var payload=editorPayload();var validation=validatePayload(payload);if(validation){show(validation,true);return}setSlideCreating(true);show("Creating slide...");saveInteraction(function(interaction){call("insertInteractionSlide",[state.selectedEvent.id,interaction.id],function(){setSlideCreating(false);show("Slide added successfully.")},"Creating slide...")})}function openLiveResults(){if(!state.selectedEvent||!state.selectedInteraction){show("Select an interaction first.",true);return}console.log("[SlideEngage Google Slides] Opening live results",{eventId:state.selectedEvent.id,interactionId:state.selectedInteraction.id,interactionType:state.selectedInteraction.type});call("getLiveResultUrl",[state.selectedEvent.id,state.selectedInteraction.id],function(url){var separator=url.indexOf("?")>=0?"&":"?";var sourceUrl=url+separator+"source=google-slides";show("Opening live results. If it did not open, use this link: "+sourceUrl);window.open(sourceUrl,"_blank")})}' +
+    'function setSlideCreating(active){slideCreateInFlight=active;var btn=$("addPresentationButton");if(btn){btn.disabled=active;btn.textContent=active?"Creating slide...":"Add to Presentation"}}function insertSlide(){if(slideCreateInFlight)return;var payload=editorPayload();var validation=validatePayload(payload);if(validation){show(validation,true);return}setSlideCreating(true);show("Creating slide...");saveInteraction(function(interaction){call("insertInteractionSlide",[state.selectedEvent.id,interaction.id],function(r){if(r&&r.interaction){state.selectedInteraction=r.interaction;state.interactions=r.interactions||state.interactions}else{state.selectedInteraction.status="live";state.interactions=state.interactions.map(function(item){return item.id===state.selectedInteraction.id?state.selectedInteraction:item})}if(state.selectedEvent)state.selectedEvent.status="live";setSlideCreating(false);render();show("Slide added successfully.")},"Creating slide...")})}function openLiveResults(){if(!state.selectedEvent||!state.selectedInteraction){show("Select an interaction first.",true);return}console.log("[SlideEngage Google Slides] Opening live results",{eventId:state.selectedEvent.id,interactionId:state.selectedInteraction.id,interactionType:state.selectedInteraction.type});call("getLiveResultUrl",[state.selectedEvent.id,state.selectedInteraction.id],function(url){var separator=url.indexOf("?")>=0?"&":"?";var sourceUrl=url+separator+"source=google-slides";show("Opening live results. If it did not open, use this link: "+sourceUrl);window.open(sourceUrl,"_blank")})}' +
     'boot();' +
     '</script></body></html>';
 }
@@ -180,6 +180,18 @@ function setInteractionStatus(interactionId, status) {
   return { interaction: data.interaction, interactions: listInteractions_(data.interaction.event_id) };
 }
 
+function ensureEventLive_(eventId) {
+  requireSession_();
+  var event = apiFetch_('/api/events?id=' + encodeURIComponent(eventId), { method: 'get' }).event;
+  if (!isUsableEvent_(event)) {
+    PropertiesService.getUserProperties().deleteProperty(SELECTED_EVENT_KEY);
+    throw new Error('This event is archived or no longer available. Please select another event.');
+  }
+  if (event.status === 'live') return event;
+  var data = apiFetch_('/api/events', { method: 'patch', payload: { id: eventId, status: 'live' } });
+  return data.event || event;
+}
+
 function resetResults(interactionId) {
   requireSession_();
   return apiFetch_('/api/responses?interaction_id=' + encodeURIComponent(interactionId), { method: 'delete' });
@@ -197,7 +209,12 @@ function deleteInteraction(interactionId, eventId) {
 }
 
 function insertInteractionSlide(eventId, interactionId) {
-  return drawInteractionSlide_(eventId, interactionId, false);
+  ensureEventLive_(eventId);
+  var statusResult = setInteractionStatus(interactionId, 'live');
+  var result = drawInteractionSlide_(eventId, interactionId, false);
+  result.interaction = statusResult.interaction;
+  result.interactions = statusResult.interactions;
+  return result;
 }
 
 function updateInteractionSlide(eventId, interactionId) {
