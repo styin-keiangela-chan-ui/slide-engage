@@ -472,7 +472,7 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
     const res = await fetch('/api/qa', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: questionId, participant_id: participantId, is_hidden: true, is_pinned: false }),
+      body: JSON.stringify({ id: questionId, participant_id: participantId, is_hidden: true }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));

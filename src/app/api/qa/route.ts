@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, participant_id, question_text, is_pinned, is_hidden, ai_answer } = body;
+    const { id, participant_id, deleted_by, question_text, is_pinned, is_hidden, ai_answer } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Question id required' }, { status: 400 });
@@ -147,7 +147,11 @@ export async function PATCH(req: NextRequest) {
       updates.question_text = text;
     }
     if (typeof is_pinned === 'boolean') updates.is_pinned = is_pinned;
-    if (typeof is_hidden === 'boolean') updates.is_hidden = is_hidden;
+    if (typeof is_hidden === 'boolean') {
+      updates.is_hidden = is_hidden;
+      updates.deleted_at = is_hidden ? new Date().toISOString() : null;
+      updates.deleted_by = is_hidden ? String(deleted_by || participant_id || 'lecturer') : null;
+    }
     if (typeof ai_answer === 'string' || ai_answer === null) updates.ai_answer = ai_answer;
 
     if (!Object.keys(updates).length) {

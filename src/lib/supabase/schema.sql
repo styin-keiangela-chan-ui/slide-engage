@@ -110,6 +110,8 @@ create table public.qa_questions (
   question_text text not null,
   is_pinned boolean default false,
   is_hidden boolean default false,
+  deleted_at timestamptz,
+  deleted_by text,
   ai_answer text,
   created_at timestamptz default now()
 );
@@ -133,6 +135,7 @@ create index idx_event_collaborators_event on public.event_collaborators(event_i
 create index idx_event_collaborators_user on public.event_collaborators(user_id);
 create index idx_responses_interaction on public.responses(interaction_id);
 create index idx_qa_questions_interaction on public.qa_questions(interaction_id);
+create index idx_qa_questions_deleted_at on public.qa_questions(interaction_id, deleted_at desc) where deleted_at is not null;
 create index idx_qa_upvotes_question on public.qa_upvotes(question_id);
 
 -- ─── ENABLE REALTIME ─────────────────────────

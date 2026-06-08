@@ -924,6 +924,8 @@ export default function LiveResultsView({
   const [responses, setResponses] = useState<JoinedResponse[]>([]);
   const [questions, setQuestions] = useState<JoinedQuestion[]>([]);
   const [qaSort, setQaSort] = useState<'recent' | 'popular'>('recent');
+  const [qaRestoreMessage, setQaRestoreMessage] = useState('');
+  const [restoredQuestionId, setRestoredQuestionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(eventCode && !initialEvent));
   const [resultsLoading, setResultsLoading] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1096,10 +1098,31 @@ export default function LiveResultsView({
 
   const handleMarkQuestionAnswered = useCallback(
     async (question: JoinedQuestion) => {
-      await updateQuestion(question.id, { is_hidden: true, is_pinned: false });
+      await updateQuestion(question.id, { is_hidden: true, deleted_by: 'lecturer' });
     },
     [updateQuestion]
   );
+
+  const handleRestoreLastQuestion = useCallback(async () => {
+    if (!activeInteraction) return;
+
+    const res = await fetch('/api/qa/restore-last', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interaction_id: activeInteraction.id }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      setQaRestoreMessage(data.error || 'No question available to restore.');
+      return;
+    }
+
+    setQaRestoreMessage(data.message || 'Question restored successfully.');
+    setRestoredQuestionId(data.question?.id || null);
+    await loadResults(activeInteraction);
+    window.setTimeout(() => setRestoredQuestionId(null), 2200);
+  }, [activeInteraction, loadResults]);
 
   useEffect(() => {
     resolveEvent();
@@ -1332,9 +1355,12 @@ export default function LiveResultsView({
     loading: resultsLoading,
     layoutKey: `${activeInteraction?.id || 'none'}-${layoutTick}`,
     qaSort,
+    qaRestoreMessage,
+    restoredQuestionId,
     onQaSortChange: setQaSort,
     onToggleQuestionHighlight: handleToggleQuestionHighlight,
     onMarkQuestionAnswered: handleMarkQuestionAnswered,
+    onRestoreLastQuestion: handleRestoreLastQuestion,
   });
 
   const shellClass = isFullscreen
@@ -1521,9 +1547,12 @@ function renderResultContent({
   loading,
   layoutKey,
   qaSort,
+  qaRestoreMessage,
+  restoredQuestionId,
   onQaSortChange,
   onToggleQuestionHighlight,
   onMarkQuestionAnswered,
+  onRestoreLastQuestion,
 }: {
   event: Event | null;
   interaction: LiveInteraction | null;
@@ -1535,9 +1564,12 @@ function renderResultContent({
   loading: boolean;
   layoutKey: string;
   qaSort: 'recent' | 'popular';
+  qaRestoreMessage: string;
+  restoredQuestionId: string | null;
   onQaSortChange: (sort: 'recent' | 'popular') => void;
   onToggleQuestionHighlight: (question: JoinedQuestion) => void;
   onMarkQuestionAnswered: (question: JoinedQuestion) => void;
+  onRestoreLastQuestion: () => void;
 }) {
   if (!interaction) return null;
 
@@ -1712,31 +1744,51 @@ function renderResultContent({
     return (
       <LiveResultFrame event={event} presentationMode={presentationMode} layoutKey={layoutKey}>
         <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[8px] border border-[#E2EBE6] bg-white">
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#E2EBE6] px-4 py-3">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#E2EBE6] px-4 py-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#6B7B8D]">Audience Q&A</p>
               <p className="text-sm font-bold text-[#17172F]">{visibleQuestions.length} active questions</p>
             </div>
-            <div className="inline-flex rounded-full border border-[#DCE7E1] bg-[#F6F8F7] p-1 text-xs font-bold">
-              {(['recent', 'popular'] as const).map(sort => (
-                <button
-                  key={sort}
-                  type="button"
-                  onClick={() => onQaSortChange(sort)}
-                  className={`rounded-full px-3 py-1 capitalize transition ${
-                    qaSort === sort ? 'bg-[#16833A] text-white shadow-sm' : 'text-[#526173] hover:bg-white'
-                  }`}
-                >
-                  {sort}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex rounded-full border border-[#DCE7E1] bg-[#F6F8F7] p-1 text-xs font-bold">
+                {(['recent', 'popular'] as const).map(sort => (
+                  <button
+                    key={sort}
+                    type="button"
+                    onClick={() => onQaSortChange(sort)}
+                    className={`rounded-full px-3 py-1 capitalize transition ${
+                      qaSort === sort ? 'bg-[#16833A] text-white shadow-sm' : 'text-[#526173] hover:bg-white'
+                    }`}
+                  >
+                    {sort}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={onRestoreLastQuestion}
+                title="Restore last removed question"
+                aria-label="Restore last removed question"
+                className="rounded-full border border-[#BFE5CB] bg-white px-3 py-1.5 text-xs font-black text-[#16833A] shadow-sm transition hover:bg-[#F0FFF6]"
+              >
+                ↺ Restore Last Question
+              </button>
             </div>
+            {qaRestoreMessage && (
+              <div className="basis-full rounded-[10px] border border-[#DCE7E1] bg-[#F6F8F7] px-3 py-2 text-xs font-bold text-[#526173]">
+                {qaRestoreMessage}
+              </div>
+            )}
           </div>
 
           {visibleQuestions.length ? (
             <div className="min-h-0 flex-1 space-y-3 overflow-hidden p-4">
               {highlightedQuestion && (
-                <div className="rounded-[16px] border border-[#B7E1C6] bg-[#F0FFF6] p-5 shadow-sm">
+                <div
+                  className={`rounded-[16px] border border-[#B7E1C6] bg-[#F0FFF6] p-5 shadow-sm transition ${
+                    restoredQuestionId === highlightedQuestion.id ? 'animate-pulse ring-2 ring-[#16833A]/35' : ''
+                  }`}
+                >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -1776,7 +1828,12 @@ function renderResultContent({
 
               <div className="min-h-0 space-y-2 overflow-hidden">
                 {listQuestions.map(question => (
-                  <div key={question.id} className="rounded-[14px] border border-[#E2EBE6] bg-white p-3.5 shadow-sm">
+                  <div
+                    key={question.id}
+                    className={`rounded-[14px] border border-[#E2EBE6] bg-white p-3.5 shadow-sm transition ${
+                      restoredQuestionId === question.id ? 'animate-pulse ring-2 ring-[#16833A]/25' : ''
+                    }`}
+                  >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">

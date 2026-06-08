@@ -113,6 +113,8 @@ export interface QAQuestion {
   question_text: string;
   is_pinned: boolean;
   is_hidden: boolean;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
   ai_answer: string | null;
   created_at: string;
   // Joined fields
