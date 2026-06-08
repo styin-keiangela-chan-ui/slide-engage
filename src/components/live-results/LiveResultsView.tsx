@@ -1336,10 +1336,10 @@ export default function LiveResultsView({
     <div ref={shellRef} className={shellClass}>
       {liveInteractions.length > 0 && (
         <div
-          className={`sticky top-0 z-30 border-b backdrop-blur-xl ${
+          className={`relative z-20 shrink-0 border-b backdrop-blur-xl ${
             isFullscreen || publicMode
-              ? '-mx-4 -mt-4 mb-1.5 border-white/10 bg-[#0F172A]/88 px-3 py-1.5 md:-mx-5 md:-mt-5 md:px-4'
-              : '-mx-3 -mt-3 mb-2 border-[#E2EBE6] bg-white/92 px-3 py-1.5'
+              ? '-mx-4 mb-2 border-white/10 bg-[#0F172A]/88 px-3 py-1.5 md:-mx-5 md:px-4'
+              : '-mx-3 mb-2 border-[#E2EBE6] bg-white/92 px-3 py-1.5'
           }`}
         >
           <div className="flex items-center justify-between gap-3">
@@ -1396,13 +1396,16 @@ export default function LiveResultsView({
               {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
             </button>
           </div>
-          <p className={`mt-0.5 text-[10px] ${isFullscreen || publicMode ? 'text-slate-400' : 'text-[#6B7B8D]'}`}>
+          <p
+            className={`mt-0.5 hidden text-[10px] sm:block ${isFullscreen || publicMode ? 'text-slate-400' : 'text-[#6B7B8D]'}`}
+            title="Use left and right arrows to switch interactions. Press F for fullscreen and ESC to exit fullscreen."
+          >
             Use ← / → to switch interactions, F for fullscreen, ESC to exit fullscreen.
           </p>
         </div>
       )}
 
-      <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
+      <div className="relative z-10 flex shrink-0 flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-[#DFF5E7] px-2.5 py-0.5 text-xs font-bold text-[#16833A]">Live</span>

@@ -111,11 +111,11 @@ export default function InteractionLiveResultPage({ params }: Props) {
 
   return (
     <main className="h-screen overflow-hidden bg-[#0F172A]">
-      <div className="pointer-events-none fixed right-4 top-[72px] z-[45] flex max-w-[280px] flex-col items-end gap-2 sm:top-[78px]">
+      <div className="pointer-events-none fixed right-4 bottom-14 z-[35] flex max-w-[280px] flex-col items-end gap-2 sm:bottom-16">
         <div className="pointer-events-auto rounded-full border border-white/15 bg-black/35 px-2.5 py-1.5 text-xs font-black text-white shadow-xl backdrop-blur sm:hidden" title="ESC exits fullscreen. Close this tab to return to presentation.">
           i
         </div>
-        <div className="pointer-events-auto hidden rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-[11px] font-bold leading-snug text-white shadow-xl backdrop-blur sm:block">
+        <div className="pointer-events-auto hidden rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-[11px] font-bold leading-snug text-white shadow-xl backdrop-blur md:block">
           <div>ESC = exit fullscreen</div>
           <div className="text-white/75">
             {source === 'powerpoint'
@@ -131,11 +131,11 @@ export default function InteractionLiveResultPage({ params }: Props) {
           {source === 'powerpoint' ? 'Back to PowerPoint' : 'Back to Presentation'}
         </button>
       </div>
-      <div className="fixed bottom-4 left-1/2 z-[45] -translate-x-1/2 rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-center text-[11px] font-bold text-white/85 backdrop-blur sm:text-xs">
+      <div className="fixed bottom-4 left-1/2 z-[30] -translate-x-1/2 rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-center text-[11px] font-bold text-white/85 backdrop-blur sm:text-xs">
         Press ESC to exit fullscreen, then return to your presentation tab/window.
       </div>
       {closeHint && (
-        <div className="fixed left-1/2 top-5 z-[60] -translate-x-1/2 rounded-full bg-[#168A3A] px-4 py-2 text-sm font-bold text-white shadow-lg">
+        <div className="fixed left-1/2 bottom-24 z-[50] -translate-x-1/2 rounded-full bg-[#168A3A] px-4 py-2 text-sm font-bold text-white shadow-lg">
           {closeHint}
         </div>
       )}
