@@ -142,6 +142,44 @@ function EmptyState({ children }: { children: string }) {
   );
 }
 
+function QaModerationControls({
+  isHighlighted,
+  onToggleHighlight,
+  onMarkAnswered,
+}: {
+  isHighlighted: boolean;
+  onToggleHighlight: () => void;
+  onMarkAnswered: () => void;
+}) {
+  const baseClass =
+    'grid h-9 w-9 place-items-center rounded-full border text-base font-black shadow-sm transition hover:shadow-[0_0_18px_rgba(22,131,58,0.22)] focus:outline-none focus:ring-2 focus:ring-[#16833A]/30';
+  const inactiveClass = 'border-[#CFE0D7] bg-white text-[#526173] hover:border-[#16833A] hover:text-[#16833A]';
+  const activeClass = 'border-[#16833A] bg-[#16833A] text-white';
+
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      <button
+        type="button"
+        onClick={onToggleHighlight}
+        title={isHighlighted ? 'Unhighlight question' : 'Highlight question'}
+        aria-label={isHighlighted ? 'Unhighlight question' : 'Highlight question'}
+        className={`${baseClass} ${isHighlighted ? activeClass : inactiveClass}`}
+      >
+        ⏫
+      </button>
+      <button
+        type="button"
+        onClick={onMarkAnswered}
+        title="Mark as answered"
+        aria-label="Mark as answered"
+        className={`${baseClass} ${inactiveClass}`}
+      >
+        ✓
+      </button>
+    </div>
+  );
+}
+
 function hashText(value: string) {
   return value.split('').reduce((hash, char) => {
     return (hash * 31 + char.charCodeAt(0)) >>> 0;
@@ -929,7 +967,6 @@ export default function LiveResultsView({
   const [loading, setLoading] = useState(Boolean(eventCode && !initialEvent));
   const [resultsLoading, setResultsLoading] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [fullscreenTheme, setFullscreenTheme] = useState<PresentationTheme>('dark');
   const [isTaskbarVisible, setTaskbarVisible] = useState(false);
   const [wordCloudTick, setWordCloudTick] = useState(0);
   const [layoutTick, setLayoutTick] = useState(0);
@@ -1439,74 +1476,101 @@ export default function LiveResultsView({
   return (
     <div ref={shellRef} className={shellClass}>
       {liveInteractions.length > 0 && (
-        <div
-          className={`relative z-20 shrink-0 border-b backdrop-blur-xl ${
-            isFullscreen || publicMode
-              ? '-mx-4 mb-2 border-white/10 bg-[#0F172A]/88 px-3 py-1.5 md:-mx-5 md:px-4'
-              : '-mx-3 mb-2 border-[#E2EBE6] bg-white/92 px-3 py-1.5'
-          }`}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5">
-              {liveInteractions.map(item => {
-                const isActive = activeInteraction.id === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => selectInteraction(item)}
-                    className={`min-w-[150px] max-w-[210px] rounded-[8px] border px-2.5 py-1.5 text-left transition ${
-                      isActive
-                        ? isFullscreen || publicMode
-                          ? 'border-emerald-300/60 bg-emerald-300/15 text-emerald-100 shadow-[0_0_28px_rgba(45,212,191,0.16)]'
-                          : 'border-[#16833A] bg-[#EAF7EF] text-[#16833A] shadow-sm'
-                        : isFullscreen || publicMode
-                          ? 'border-white/10 bg-white/5 text-slate-200 hover:border-emerald-300/40 hover:bg-white/10'
-                          : 'border-[#E2EBE6] bg-white text-[#17172F] hover:border-[#16833A]'
-                    }`}
-                    aria-label={`Show live results for ${item.title}`}
-                    title={item.title}
-                  >
-                    <div className="truncate text-xs font-extrabold">{compactTitle(item.title)}</div>
-                    <div className={`mt-0.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.06em] ${
-                      isActive
-                        ? isFullscreen || publicMode
-                          ? 'text-emerald-100'
-                          : 'text-[#16833A]'
-                        : isFullscreen || publicMode
-                          ? 'text-slate-400'
-                          : 'text-[#6B7B8D]'
-                    }`}>
-                      <span>{interactionLabel(item)}</span>
-                      <span>•</span>
-                      <span className={item.status === 'live' ? 'text-[#22C55E]' : ''}>{item.status}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              onClick={isFullscreen ? exitFullscreen : enterFullscreen}
-              className={`shrink-0 rounded-[8px] px-3 py-1.5 text-xs font-bold shadow-sm transition ${
-                isFullscreen || publicMode
-                  ? 'border border-white/15 bg-white/10 text-white hover:bg-white/15'
-                  : 'bg-[#16833A] text-white hover:bg-[#116C31]'
-              }`}
-              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              title="F"
-            >
-              {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-            </button>
-          </div>
-          <p
-            className={`mt-0.5 hidden text-[10px] sm:block ${isFullscreen || publicMode ? 'text-slate-400' : 'text-[#6B7B8D]'}`}
-            title="Use left and right arrows to switch interactions. Press F for fullscreen and ESC to exit fullscreen."
+        <>
+          <button
+            type="button"
+            onMouseEnter={showTaskbar}
+            onFocus={showTaskbar}
+            onClick={() => {
+              if (isTaskbarVisible) {
+                setTaskbarVisible(false);
+                clearTaskbarHideTimer();
+              } else {
+                showTaskbar();
+              }
+            }}
+            aria-label="Show interaction navigation"
+            className={`absolute inset-x-0 top-0 z-40 h-2 rounded-t-[8px] transition ${
+              isFullscreen || publicMode ? 'bg-emerald-300/15 hover:bg-emerald-300/35' : 'bg-[#16833A]/5 hover:bg-[#16833A]/20'
+            }`}
+          />
+          <div
+            onMouseEnter={showTaskbar}
+            onMouseLeave={scheduleTaskbarHide}
+            onFocus={showTaskbar}
+            className={`absolute inset-x-0 top-0 z-50 border-b backdrop-blur-xl transition-all duration-300 ease-out ${
+              isTaskbarVisible ? 'translate-y-0 opacity-100' : '-translate-y-[calc(100%-8px)] opacity-0 pointer-events-none'
+            } ${
+              isFullscreen || publicMode
+                ? 'border-white/10 bg-[#0F172A]/92 px-3 py-1.5 md:px-4'
+                : 'border-[#E2EBE6] bg-white/95 px-3 py-1.5'
+            }`}
           >
-            Use ← / → to switch interactions, F for fullscreen, ESC to exit fullscreen.
-          </p>
-        </div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5">
+                {liveInteractions.map(item => {
+                  const isActive = activeInteraction.id === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        selectInteraction(item);
+                        scheduleTaskbarHide();
+                      }}
+                      className={`min-w-[150px] max-w-[210px] rounded-[8px] border px-2.5 py-1.5 text-left transition ${
+                        isActive
+                          ? isFullscreen || publicMode
+                            ? 'border-emerald-300/60 bg-emerald-300/15 text-emerald-100 shadow-[0_0_28px_rgba(45,212,191,0.16)]'
+                            : 'border-[#16833A] bg-[#EAF7EF] text-[#16833A] shadow-sm'
+                          : isFullscreen || publicMode
+                            ? 'border-white/10 bg-white/5 text-slate-200 hover:border-emerald-300/40 hover:bg-white/10'
+                            : 'border-[#E2EBE6] bg-white text-[#17172F] hover:border-[#16833A]'
+                      }`}
+                      aria-label={`Show live results for ${item.title}`}
+                      title={item.title}
+                    >
+                      <div className="truncate text-xs font-extrabold">{compactTitle(item.title)}</div>
+                      <div className={`mt-0.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.06em] ${
+                        isActive
+                          ? isFullscreen || publicMode
+                            ? 'text-emerald-100'
+                            : 'text-[#16833A]'
+                          : isFullscreen || publicMode
+                            ? 'text-slate-400'
+                            : 'text-[#6B7B8D]'
+                      }`}>
+                        <span>{interactionLabel(item)}</span>
+                        <span>•</span>
+                        <span className={item.status === 'live' ? 'text-[#22C55E]' : ''}>{item.status}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={isFullscreen ? exitFullscreen : enterFullscreen}
+                className={`shrink-0 rounded-[8px] px-3 py-1.5 text-xs font-bold shadow-sm transition ${
+                  isFullscreen || publicMode
+                    ? 'border border-white/15 bg-white/10 text-white hover:bg-white/15'
+                    : 'bg-[#16833A] text-white hover:bg-[#116C31]'
+                }`}
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                title="F"
+              >
+                {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+              </button>
+            </div>
+            <p
+              className={`mt-0.5 hidden text-[10px] sm:block ${isFullscreen || publicMode ? 'text-slate-400' : 'text-[#6B7B8D]'}`}
+              title="Use left and right arrows to switch interactions. Press F for fullscreen and ESC to exit fullscreen."
+            >
+              Use ← / → to switch interactions, F for fullscreen, ESC to exit fullscreen.
+            </p>
+          </div>
+        </>
       )}
 
       <div className="relative z-10 flex shrink-0 flex-wrap items-start justify-between gap-2">
@@ -1792,11 +1856,18 @@ function renderResultContent({
             <div className="min-h-0 flex-1 space-y-3 overflow-hidden p-4">
               {highlightedQuestion && (
                 <div
-                  className={`rounded-[16px] border border-[#B7E1C6] bg-[#F0FFF6] p-5 shadow-sm transition ${
+                  className={`relative rounded-[16px] border border-[#B7E1C6] bg-[#F0FFF6] p-5 shadow-sm transition ${
                     restoredQuestionId === highlightedQuestion.id ? 'animate-pulse ring-2 ring-[#16833A]/35' : ''
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="absolute right-4 top-4">
+                    <QaModerationControls
+                      isHighlighted
+                      onToggleHighlight={() => onToggleQuestionHighlight(highlightedQuestion)}
+                      onMarkAnswered={() => onMarkQuestionAnswered(highlightedQuestion)}
+                    />
+                  </div>
+                  <div className="flex items-start justify-between gap-4 pr-24">
                     <div className="min-w-0">
                       <div className="mb-2 flex flex-wrap items-center gap-2">
                         <span className="rounded-full bg-[#16833A] px-2.5 py-1 text-xs font-black uppercase tracking-[0.08em] text-white">
@@ -1814,22 +1885,6 @@ function renderResultContent({
                       {highlightedQuestion.qa_upvotes?.length || 0} ▲
                     </span>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onToggleQuestionHighlight(highlightedQuestion)}
-                      className="rounded-full border border-[#16833A] px-3 py-1.5 text-xs font-bold text-[#16833A] hover:bg-white"
-                    >
-                      Unhighlight
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onMarkQuestionAnswered(highlightedQuestion)}
-                      className="rounded-full border border-[#DCE7E1] px-3 py-1.5 text-xs font-bold text-[#526173] hover:bg-white"
-                    >
-                      Mark answered
-                    </button>
-                  </div>
                 </div>
               )}
 
@@ -1837,11 +1892,18 @@ function renderResultContent({
                 {listQuestions.map(question => (
                   <div
                     key={question.id}
-                    className={`rounded-[14px] border border-[#E2EBE6] bg-white p-3.5 shadow-sm transition ${
+                    className={`relative rounded-[14px] border border-[#E2EBE6] bg-white p-3.5 shadow-sm transition ${
                       restoredQuestionId === question.id ? 'animate-pulse ring-2 ring-[#16833A]/25' : ''
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="absolute right-3 top-3">
+                      <QaModerationControls
+                        isHighlighted={false}
+                        onToggleHighlight={() => onToggleQuestionHighlight(question)}
+                        onMarkAnswered={() => onMarkQuestionAnswered(question)}
+                      />
+                    </div>
+                    <div className="flex items-start justify-between gap-4 pr-24">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="truncate text-xs font-bold text-[#6B7B8D]">
@@ -1853,22 +1915,6 @@ function renderResultContent({
                       <span className="shrink-0 rounded-full bg-[#EAF7EF] px-3 py-1 text-sm font-black text-[#16833A]">
                         {question.qa_upvotes?.length || 0} ▲
                       </span>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onToggleQuestionHighlight(question)}
-                        className="rounded-full border border-[#DCE7E1] px-3 py-1 text-xs font-bold text-[#526173] hover:border-[#16833A] hover:text-[#16833A]"
-                      >
-                        Highlight
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onMarkQuestionAnswered(question)}
-                        className="rounded-full border border-[#DCE7E1] px-3 py-1 text-xs font-bold text-[#526173] hover:border-[#16833A] hover:text-[#16833A]"
-                      >
-                        Mark answered
-                      </button>
                     </div>
                   </div>
                 ))}
