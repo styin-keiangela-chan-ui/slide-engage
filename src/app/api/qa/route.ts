@@ -130,22 +130,36 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PATCH /api/qa — update question (pin, hide, ai_answer)
+// PATCH /api/qa — update question (pin, hide/withdraw/answered, ai_answer, participant edits)
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, ...updates } = body;
+    const { id, participant_id, question_text, is_pinned, is_hidden, ai_answer } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Question id required' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
-      .from('qa_questions')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+    const updates: Record<string, any> = {};
+    if (typeof question_text === 'string') {
+      const text = question_text.trim();
+      if (!text) return NextResponse.json({ error: 'Question cannot be empty.' }, { status: 400 });
+      updates.question_text = text;
+    }
+    if (typeof is_pinned === 'boolean') updates.is_pinned = is_pinned;
+    if (typeof is_hidden === 'boolean') updates.is_hidden = is_hidden;
+    if (typeof ai_answer === 'string' || ai_answer === null) updates.ai_answer = ai_answer;
+
+    if (!Object.keys(updates).length) {
+      return NextResponse.json({ error: 'No valid updates provided.' }, { status: 400 });
+    }
+
+    let query = supabase.from('qa_questions').update(updates).eq('id', id);
+    if (participant_id) {
+      query = query.eq('participant_id', participant_id);
+    }
+
+    const { data, error } = await query.select().single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ question: data });

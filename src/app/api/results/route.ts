@@ -6,6 +6,18 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+function normalizeInteractionType(type?: string | null) {
+  const value = String(type || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+
+  if (['qa', 'q&a', 'audience_qa', 'audience_q&a', 'audience_questions', 'audience_q_a'].includes(value)) {
+    return 'qa';
+  }
+  return value;
+}
+
 // GET /api/results?interaction_id=xxx — aggregated results for an interaction
 export async function GET(req: NextRequest) {
   const interactionId = req.nextUrl.searchParams.get('interaction_id');
@@ -33,6 +45,7 @@ export async function GET(req: NextRequest) {
   }
 
   const config = (interaction.config || {}) as Record<string, any>;
+  const interactionType = normalizeInteractionType(interaction.type);
   if (config.results_visible === false) {
     return NextResponse.json({
       interaction,
@@ -53,7 +66,7 @@ export async function GET(req: NextRequest) {
   const totalResponses = responses?.length || 0;
 
   // Build results based on type
-  if (interaction.type === 'poll' || interaction.type === 'quiz') {
+  if (interactionType === 'poll' || interactionType === 'quiz') {
     const options = interaction.interaction_options || [];
     const results = options
       .sort((a: any, b: any) => a.position - b.position)
@@ -76,7 +89,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  if (interaction.type === 'word_cloud') {
+  if (interactionType === 'word_cloud') {
     // Aggregate word frequencies
     const wordCounts: Record<string, number> = {};
     (responses || []).forEach(r => {
@@ -97,7 +110,25 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  if (interaction.type === 'feedback') {
+  if (interactionType === 'qa') {
+    const { data: questions, error: qaError } = await supabase
+      .from('qa_questions')
+      .select('*, participants(display_name), qa_upvotes(id)')
+      .eq('interaction_id', interactionId)
+      .eq('is_hidden', false)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (qaError) return NextResponse.json({ error: qaError.message }, { status: 500 });
+
+    return NextResponse.json({
+      interaction,
+      results: questions || [],
+      total_responses: questions?.length || 0,
+    });
+  }
+
+  if (interactionType === 'feedback') {
     // Average ratings and text responses
     const ratings = (responses || []).filter(r => r.rating_value !== null);
     const avgRating = ratings.length > 0

@@ -1430,6 +1430,11 @@ export function GET() {
         }
 
         function interactionLiveUrl(interaction) {
+          console.log("[SlideEngage taskpane] Opening live results", {
+            eventId: selectedEvent && selectedEvent.id,
+            interactionId: interaction && interaction.id,
+            interactionType: interaction && interaction.type
+          });
           return APP_URL + "/present/live-result/" + encodeURIComponent(selectedEvent.id) + "/" + encodeURIComponent(interaction.id) + "?source=powerpoint";
         }
 

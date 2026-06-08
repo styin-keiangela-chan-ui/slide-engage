@@ -118,6 +118,7 @@ export interface QAQuestion {
   // Joined fields
   upvote_count?: number;
   participant?: Participant;
+  display_name?: string;
   has_upvoted?: boolean;
 }
 

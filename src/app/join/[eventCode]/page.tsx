@@ -7,6 +7,23 @@ import { createClient } from '@/lib/supabase/client';
 import { getInteractionIcon } from '@/lib/utils';
 import type { Interaction, InteractionOption, QAQuestion } from '@/lib/types';
 
+function normalizeInteractionType(type?: string | null) {
+  const value = String(type || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+
+  if (['qa', 'q&a', 'audience_qa', 'audience_q&a', 'audience_questions', 'audience_q_a'].includes(value)) {
+    return 'qa';
+  }
+
+  return value;
+}
+
+function isQaInteraction(interaction: Interaction) {
+  return normalizeInteractionType(interaction.type) === 'qa';
+}
+
 export default function StudentSessionPage() {
   const router = useRouter();
   const params = useParams();
@@ -119,7 +136,7 @@ export default function StudentSessionPage() {
               </div>
             )}
             {liveInteractions
-              .filter(interaction => activeTab === 'qa' ? interaction.type === 'qa' : interaction.type !== 'qa')
+              .filter(interaction => activeTab === 'qa' ? isQaInteraction(interaction) : !isQaInteraction(interaction))
               .map(interaction => (
               <InteractionCard
                 key={interaction.id}
@@ -128,13 +145,13 @@ export default function StudentSessionPage() {
                 eventId={participant.event_id}
               />
             ))}
-            {activeTab === 'polls' && liveInteractions.filter(interaction => interaction.type !== 'qa').length === 0 && (
+            {activeTab === 'polls' && liveInteractions.filter(interaction => !isQaInteraction(interaction)).length === 0 && (
               <div className="rounded-[20px] border border-[#E2EBE6] bg-white p-8 text-center shadow">
                 <h2 className="text-lg font-bold">There are no active polls at the moment.</h2>
                 <button onClick={() => setActiveTab('qa')} className="mt-5 rounded-[9px] bg-[#168A3A] px-5 py-2 text-sm font-bold text-white">Go to Q&A</button>
               </div>
             )}
-            {activeTab === 'qa' && liveInteractions.filter(interaction => interaction.type === 'qa').length === 0 && (
+            {activeTab === 'qa' && liveInteractions.filter(interaction => isQaInteraction(interaction)).length === 0 && (
               <div className="rounded-[20px] border border-[#E2EBE6] bg-white p-8 text-center shadow">
                 <h2 className="text-lg font-bold">There are no active Q&A sessions yet.</h2>
                 <p className="mt-2 text-sm text-[#6B7B8D]">Please wait for your lecturer to start Q&A.</p>
@@ -168,6 +185,10 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
   // For Q&A
   const [questions, setQuestions] = useState<QAQuestion[]>([]);
   const [qaInput, setQaInput] = useState('');
+  const [qaMenuId, setQaMenuId] = useState<string | null>(null);
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [editingQuestionText, setEditingQuestionText] = useState('');
+  const [qaStatus, setQaStatus] = useState('');
 
   // For quiz timer
   const [quizTime, setQuizTime] = useState<number>(interaction.config?.time_limit_seconds || 30);
@@ -183,6 +204,10 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
     setFeedbackText('');
     setFeedbackSubmitted(false);
     setQuizResult(null);
+    setQaMenuId(null);
+    setEditingQuestionId(null);
+    setEditingQuestionText('');
+    setQaStatus('');
   }, [interaction.id, interaction.updated_at]);
 
   const notifyRealtime = useCallback(
@@ -242,7 +267,7 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
 
   // Fetch Q&A questions
   useEffect(() => {
-    if (interaction.type !== 'qa') return;
+    if (!isQaInteraction(interaction)) return;
     const fetchQ = async () => {
       const res = await fetch(`/api/qa?interaction_id=${interaction.id}&participant_id=${participantId}`);
       const data = await res.json();
@@ -252,6 +277,31 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
     const interval = setInterval(fetchQ, 3000);
     return () => clearInterval(interval);
   }, [interaction.id, interaction.type, interaction.updated_at, participantId]);
+
+  useEffect(() => {
+    if (!isQaInteraction(interaction)) return;
+    const channel = supabase
+      .channel(`student-qa-${interaction.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'qa_questions', filter: `interaction_id=eq.${interaction.id}` },
+        async () => {
+          const res = await fetch(`/api/qa?interaction_id=${interaction.id}&participant_id=${participantId}`);
+          const data = await res.json();
+          setQuestions(data.questions || []);
+        }
+      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'qa_upvotes' }, async () => {
+        const res = await fetch(`/api/qa?interaction_id=${interaction.id}&participant_id=${participantId}`);
+        const data = await res.json();
+        setQuestions(data.questions || []);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [interaction.id, interaction.type, participantId, supabase]);
 
   // ─ Submit handlers ─
 
@@ -382,8 +432,57 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
         }),
       });
       if (res.ok) notifyRealtime('qa_changed');
+      setQaStatus('Question submitted.');
       setQaInput('');
     } catch (e: any) { alert(e.message); }
+  };
+
+  const beginEditQuestion = (question: QAQuestion) => {
+    setEditingQuestionId(question.id);
+    setEditingQuestionText(question.question_text);
+    setQaMenuId(null);
+    setQaStatus('');
+  };
+
+  const handleEditQuestion = async (questionId: string) => {
+    const text = editingQuestionText.trim();
+    if (!text) return;
+    const res = await fetch('/api/qa', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: questionId, participant_id: participantId, question_text: text }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || 'Unable to edit question.');
+      return;
+    }
+    setEditingQuestionId(null);
+    setEditingQuestionText('');
+    setQaStatus('Question edited.');
+    notifyRealtime('qa_changed');
+    const result = await fetch(`/api/qa?interaction_id=${interaction.id}&participant_id=${participantId}`);
+    const data = await result.json();
+    setQuestions(data.questions || []);
+  };
+
+  const handleWithdrawQuestion = async (questionId: string) => {
+    const confirmed = window.confirm('Withdraw this question? It will be removed from Q&A and live results.');
+    if (!confirmed) return;
+    const res = await fetch('/api/qa', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: questionId, participant_id: participantId, is_hidden: true, is_pinned: false }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || 'Unable to withdraw question.');
+      return;
+    }
+    setQaMenuId(null);
+    setQaStatus('Question withdrawn.');
+    notifyRealtime('qa_changed');
+    setQuestions(current => current.filter(question => question.id !== questionId));
   };
 
   const handleUpvote = async (questionId: string) => {
@@ -411,14 +510,15 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
   const typeLabels: Record<string, string> = {
     poll: 'POLL', quiz: 'QUIZ', qa: 'Q&A', word_cloud: 'WORD CLOUD', feedback: 'FEEDBACK',
   };
+  const normalizedType = normalizeInteractionType(interaction.type);
 
   return (
     <div className="bg-white rounded-[20px] p-8 shadow border border-[#E2EBE6]">
       {/* Header */}
       <div className="flex items-center gap-2 mb-3.5">
-        <span className="text-xl">{getInteractionIcon(interaction.type)}</span>
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${chipColors[interaction.type] || ''}`}>
-          {typeLabels[interaction.type] || interaction.type} · LIVE
+        <span className="text-xl">{getInteractionIcon(normalizedType as any)}</span>
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${chipColors[normalizedType] || ''}`}>
+          {typeLabels[normalizedType] || normalizedType} · LIVE
         </span>
         {interaction.type === 'quiz' && !submitted && (
           <span className="ml-auto text-lg font-extrabold text-[#D46B08]">{quizTime}</span>
@@ -572,7 +672,7 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
       )}
 
       {/* ── Q&A ── */}
-      {interaction.type === 'qa' && (
+      {isQaInteraction(interaction) && (
         <>
           <div className="flex gap-2.5 mb-5">
             <input
@@ -589,6 +689,11 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
               Ask →
             </button>
           </div>
+          {qaStatus && (
+            <div className="mb-4 rounded-[10px] border border-[#BFE5CB] bg-[#F0FFF6] px-3 py-2 text-sm font-bold text-[#168A3A]">
+              {qaStatus}
+            </div>
+          )}
 
           {questions.length === 0 ? (
             <div className="py-8 text-center">
@@ -598,7 +703,7 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
           ) : (
             <div className="flex flex-col gap-2.5">
               {questions.map(q => (
-                <div key={q.id} className="bg-white rounded-[14px] border border-[#E2EBE6] p-3.5 flex items-start gap-3.5">
+                <div key={q.id} className="relative flex items-start gap-3.5 rounded-[14px] border border-[#E2EBE6] bg-white p-3.5">
                   <div className="flex flex-col items-center gap-1 shrink-0">
                     <button
                       onClick={() => handleUpvote(q.id)}
@@ -613,7 +718,37 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
                     <span className="text-[13px] font-bold">{q.upvote_count || 0}</span>
                   </div>
                   <div className="flex-1">
-                    <div className="text-sm font-medium">{q.question_text}</div>
+                    {editingQuestionId === q.id ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editingQuestionText}
+                          onChange={event => setEditingQuestionText(event.target.value)}
+                          className="min-h-[76px] w-full rounded-[10px] border border-[#BFE5CB] p-3 text-sm outline-none focus:border-[#168A3A]"
+                          maxLength={Number(interaction.config?.character_limit || 160)}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEditQuestion(q.id)}
+                            className="rounded-full bg-[#168A3A] px-3 py-1.5 text-xs font-bold text-white"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingQuestionId(null);
+                              setEditingQuestionText('');
+                            }}
+                            className="rounded-full border border-[#DCE7E1] px-3 py-1.5 text-xs font-bold text-[#526173]"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-sm font-medium">{q.question_text}</div>
+                    )}
                     <div className="text-xs text-[#6B7B8D] mt-1">
                       {(q as any).display_name || 'Anonymous'}
                     </div>
@@ -624,6 +759,36 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
                       </div>
                     )}
                   </div>
+                  {q.participant_id === participantId && editingQuestionId !== q.id && (
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setQaMenuId(current => (current === q.id ? null : q.id))}
+                        className="grid h-8 w-8 place-items-center rounded-full text-lg font-bold text-[#6B7B8D] hover:bg-[#F6F8F7]"
+                        aria-label="Question actions"
+                      >
+                        ⋯
+                      </button>
+                      {qaMenuId === q.id && (
+                        <div className="absolute right-0 top-9 z-20 w-44 overflow-hidden rounded-[12px] border border-[#E2EBE6] bg-white text-sm font-bold shadow-xl">
+                          <button
+                            type="button"
+                            onClick={() => beginEditQuestion(q)}
+                            className="block w-full px-4 py-3 text-left hover:bg-[#F6F8F7]"
+                          >
+                            Edit question
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleWithdrawQuestion(q.id)}
+                            className="block w-full px-4 py-3 text-left text-[#C53030] hover:bg-[#FFF5F5]"
+                          >
+                            Withdraw question
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

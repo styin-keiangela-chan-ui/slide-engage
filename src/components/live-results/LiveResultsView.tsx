@@ -40,6 +40,7 @@ type JoinedQuestion = {
   id: string;
   question_text: string;
   is_pinned: boolean;
+  is_hidden?: boolean;
   created_at: string;
   participants?: { display_name?: string | null } | null;
   qa_upvotes?: { id: string }[];
@@ -82,13 +83,32 @@ type WordBox = {
 const chartColors = ['#16833a', '#1f77b4', '#8b5cf6', '#f97316', '#dc2626', '#0891b2'];
 const wordCloudColors = ['#16833A', '#1D75D0', '#8B5CF6', '#E85D75', '#F97316', '#0891B2', '#6A8D0A', '#C026D3'];
 
+function normalizeInteractionType(type?: string | null) {
+  const value = String(type || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+
+  if (['qa', 'q&a', 'audience_qa', 'audience_q&a', 'audience_questions', 'audience_q_a'].includes(value)) {
+    return 'qa';
+  }
+  if (['wordcloud', 'word_cloud', 'word-cloud'].includes(value)) return 'word_cloud';
+  if (['multiple_choice', 'multiple-choice', 'poll'].includes(value)) return 'poll';
+  return value;
+}
+
+function isQaInteraction(interaction?: LiveInteraction | null) {
+  return normalizeInteractionType(interaction?.type) === 'qa';
+}
+
 function interactionLabel(interaction?: LiveInteraction | null) {
   if (!interaction) return 'Interaction';
   const kind = (interaction.config as Record<string, any>)?.poll_kind;
-  if (interaction.type === 'poll') return 'Multiple Choice';
-  if (interaction.type === 'quiz') return 'Quiz';
-  if (interaction.type === 'word_cloud') return 'Word Cloud';
-  if (interaction.type === 'qa') return 'Audience Q&A';
+  const type = normalizeInteractionType(interaction.type);
+  if (type === 'poll') return 'Multiple Choice';
+  if (type === 'quiz') return 'Quiz';
+  if (type === 'word_cloud') return 'Word Cloud';
+  if (type === 'qa') return 'Audience Q&A';
   if (kind === 'rating') return 'Rating';
   return 'Open Text';
 }
@@ -903,6 +923,7 @@ export default function LiveResultsView({
   const [payload, setPayload] = useState<ResultPayload | null>(null);
   const [responses, setResponses] = useState<JoinedResponse[]>([]);
   const [questions, setQuestions] = useState<JoinedQuestion[]>([]);
+  const [qaSort, setQaSort] = useState<'recent' | 'popular'>('recent');
   const [loading, setLoading] = useState(Boolean(eventCode && !initialEvent));
   const [resultsLoading, setResultsLoading] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -962,12 +983,19 @@ export default function LiveResultsView({
       });
       setLiveInteractions(rows);
       setActiveInteraction(current => {
-        return (
+        const selected =
           rows.find(row => row.id === preferredInteractionId) ||
           rows.find(row => row.id === current?.id) ||
           rows[0] ||
-          null
-        );
+          null;
+        if (selected) {
+          console.debug('[LiveResults] selected interaction', {
+            id: selected.id,
+            type: selected.type,
+            normalizedType: normalizeInteractionType(selected.type),
+          });
+        }
+        return selected;
       });
     },
     [slidesOnly, supabase]
@@ -1016,7 +1044,7 @@ export default function LiveResultsView({
         const [resultResponse] = await Promise.all([
           fetch(`/api/results?interaction_id=${interaction.id}`, { cache: 'no-store' }),
           loadResponses(interaction.id),
-          interaction.type === 'qa' ? loadQuestions(interaction.id) : Promise.resolve(),
+          isQaInteraction(interaction) ? loadQuestions(interaction.id) : Promise.resolve(),
         ]);
 
         if (!resultResponse.ok) {
@@ -1032,6 +1060,45 @@ export default function LiveResultsView({
       }
     },
     [loadQuestions, loadResponses]
+  );
+
+  const updateQuestion = useCallback(
+    async (questionId: string, updates: Record<string, unknown>) => {
+      const res = await fetch('/api/qa', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: questionId, ...updates }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || 'Unable to update question.');
+        return;
+      }
+
+      if (activeInteraction) {
+        await loadResults(activeInteraction);
+      }
+    },
+    [activeInteraction, loadResults]
+  );
+
+  const handleToggleQuestionHighlight = useCallback(
+    async (question: JoinedQuestion) => {
+      if (!activeInteraction) return;
+      if (!question.is_pinned) {
+        await supabase.from('qa_questions').update({ is_pinned: false }).eq('interaction_id', activeInteraction.id);
+      }
+      await updateQuestion(question.id, { is_pinned: !question.is_pinned });
+    },
+    [activeInteraction, supabase, updateQuestion]
+  );
+
+  const handleMarkQuestionAnswered = useCallback(
+    async (question: JoinedQuestion) => {
+      await updateQuestion(question.id, { is_hidden: true, is_pinned: false });
+    },
+    [updateQuestion]
   );
 
   useEffect(() => {
@@ -1104,7 +1171,7 @@ export default function LiveResultsView({
         () => loadResults(activeInteraction)
       )
       .on('postgres_changes', { event: '*', schema: 'public', table: 'qa_upvotes' }, () =>
-        activeInteraction.type === 'qa' ? loadResults(activeInteraction) : undefined
+        isQaInteraction(activeInteraction) ? loadResults(activeInteraction) : undefined
       )
       .on('broadcast', { event: 'response_inserted' }, payload => {
         if (payload.payload?.interaction_id === activeInteraction.id) {
@@ -1264,6 +1331,10 @@ export default function LiveResultsView({
     presentationMode: isFullscreen || publicMode,
     loading: resultsLoading,
     layoutKey: `${activeInteraction?.id || 'none'}-${layoutTick}`,
+    qaSort,
+    onQaSortChange: setQaSort,
+    onToggleQuestionHighlight: handleToggleQuestionHighlight,
+    onMarkQuestionAnswered: handleMarkQuestionAnswered,
   });
 
   const shellClass = isFullscreen
@@ -1449,6 +1520,10 @@ function renderResultContent({
   presentationMode,
   loading,
   layoutKey,
+  qaSort,
+  onQaSortChange,
+  onToggleQuestionHighlight,
+  onMarkQuestionAnswered,
 }: {
   event: Event | null;
   interaction: LiveInteraction | null;
@@ -1459,6 +1534,10 @@ function renderResultContent({
   presentationMode: boolean;
   loading: boolean;
   layoutKey: string;
+  qaSort: 'recent' | 'popular';
+  onQaSortChange: (sort: 'recent' | 'popular') => void;
+  onToggleQuestionHighlight: (question: JoinedQuestion) => void;
+  onMarkQuestionAnswered: (question: JoinedQuestion) => void;
 }) {
   if (!interaction) return null;
 
@@ -1617,29 +1696,124 @@ function renderResultContent({
     );
   }
 
-  if (interaction.type === 'qa') {
+  if (isQaInteraction(interaction)) {
+    const visibleQuestions = questions.filter(question => !question.is_hidden);
+    const sortedQuestions = [...visibleQuestions].sort((a, b) => {
+      if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+      if (qaSort === 'popular') {
+        const upvoteDiff = (b.qa_upvotes?.length || 0) - (a.qa_upvotes?.length || 0);
+        if (upvoteDiff !== 0) return upvoteDiff;
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+    const highlightedQuestion = sortedQuestions.find(question => question.is_pinned);
+    const listQuestions = sortedQuestions.filter(question => question.id !== highlightedQuestion?.id).slice(0, highlightedQuestion ? 5 : 7);
+
     return (
       <LiveResultFrame event={event} presentationMode={presentationMode} layoutKey={layoutKey}>
-        <div className="h-full min-h-0 overflow-hidden rounded-[8px] border border-[#E2EBE6] bg-white">
-          {questions.length ? (
-            questions.slice(0, 6).map(question => (
-              <div key={question.id} className="border-b border-[#E2EBE6] p-4 last:border-b-0">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      {question.is_pinned && <span className="rounded-full bg-[#FFF3D8] px-2 py-0.5 text-xs font-bold text-[#9A6500]">Pinned</span>}
-                      <span className="truncate text-xs text-[#6B7B8D]">{question.participants?.display_name || 'Anonymous'} · {formatTime(question.created_at)}</span>
+        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[8px] border border-[#E2EBE6] bg-white">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#E2EBE6] px-4 py-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#6B7B8D]">Audience Q&A</p>
+              <p className="text-sm font-bold text-[#17172F]">{visibleQuestions.length} active questions</p>
+            </div>
+            <div className="inline-flex rounded-full border border-[#DCE7E1] bg-[#F6F8F7] p-1 text-xs font-bold">
+              {(['recent', 'popular'] as const).map(sort => (
+                <button
+                  key={sort}
+                  type="button"
+                  onClick={() => onQaSortChange(sort)}
+                  className={`rounded-full px-3 py-1 capitalize transition ${
+                    qaSort === sort ? 'bg-[#16833A] text-white shadow-sm' : 'text-[#526173] hover:bg-white'
+                  }`}
+                >
+                  {sort}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {visibleQuestions.length ? (
+            <div className="min-h-0 flex-1 space-y-3 overflow-hidden p-4">
+              {highlightedQuestion && (
+                <div className="rounded-[16px] border border-[#B7E1C6] bg-[#F0FFF6] p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-[#16833A] px-2.5 py-1 text-xs font-black uppercase tracking-[0.08em] text-white">
+                          Highlighted
+                        </span>
+                        <span className="text-xs font-bold text-[#6B7B8D]">
+                          {highlightedQuestion.participants?.display_name || 'Anonymous'} · {formatTime(highlightedQuestion.created_at)}
+                        </span>
+                      </div>
+                      <p className="line-clamp-3 text-[clamp(22px,2.6vw,38px)] font-black leading-tight text-[#17172F]">
+                        {highlightedQuestion.question_text}
+                      </p>
                     </div>
-                    <p className="mt-2 line-clamp-2 text-[18px] font-bold text-[#17172F]">{question.question_text}</p>
+                    <span className="shrink-0 rounded-full bg-white px-3 py-1 text-sm font-black text-[#16833A] shadow-sm">
+                      {highlightedQuestion.qa_upvotes?.length || 0} ▲
+                    </span>
                   </div>
-                  <span className="shrink-0 rounded-full bg-[#EAF7EF] px-3 py-1 text-sm font-bold text-[#16833A]">
-                    {question.qa_upvotes?.length || 0} upvotes
-                  </span>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onToggleQuestionHighlight(highlightedQuestion)}
+                      className="rounded-full border border-[#16833A] px-3 py-1.5 text-xs font-bold text-[#16833A] hover:bg-white"
+                    >
+                      Unhighlight
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onMarkQuestionAnswered(highlightedQuestion)}
+                      className="rounded-full border border-[#DCE7E1] px-3 py-1.5 text-xs font-bold text-[#526173] hover:bg-white"
+                    >
+                      Mark answered
+                    </button>
+                  </div>
                 </div>
+              )}
+
+              <div className="min-h-0 space-y-2 overflow-hidden">
+                {listQuestions.map(question => (
+                  <div key={question.id} className="rounded-[14px] border border-[#E2EBE6] bg-white p-3.5 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="truncate text-xs font-bold text-[#6B7B8D]">
+                            {question.participants?.display_name || 'Anonymous'} · {formatTime(question.created_at)}
+                          </span>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-[17px] font-bold text-[#17172F]">{question.question_text}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-[#EAF7EF] px-3 py-1 text-sm font-black text-[#16833A]">
+                        {question.qa_upvotes?.length || 0} ▲
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onToggleQuestionHighlight(question)}
+                        className="rounded-full border border-[#DCE7E1] px-3 py-1 text-xs font-bold text-[#526173] hover:border-[#16833A] hover:text-[#16833A]"
+                      >
+                        Highlight
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onMarkQuestionAnswered(question)}
+                        className="rounded-full border border-[#DCE7E1] px-3 py-1 text-xs font-bold text-[#526173] hover:border-[#16833A] hover:text-[#16833A]"
+                      >
+                        Mark answered
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))
+            </div>
           ) : (
-            <p className="grid h-full place-items-center p-8 text-center text-xl font-semibold text-[#6B7B8D]">Waiting for questions...</p>
+            <p className="grid h-full place-items-center p-8 text-center text-xl font-semibold text-[#6B7B8D]">
+              Waiting for audience questions...
+            </p>
           )}
         </div>
       </LiveResultFrame>
