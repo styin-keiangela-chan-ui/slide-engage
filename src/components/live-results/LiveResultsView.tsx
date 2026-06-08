@@ -930,9 +930,11 @@ export default function LiveResultsView({
   const [resultsLoading, setResultsLoading] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenTheme, setFullscreenTheme] = useState<PresentationTheme>('dark');
+  const [isTaskbarVisible, setTaskbarVisible] = useState(false);
   const [wordCloudTick, setWordCloudTick] = useState(0);
   const [layoutTick, setLayoutTick] = useState(0);
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const taskbarHideTimerRef = useRef<number | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -1282,6 +1284,27 @@ export default function LiveResultsView({
     [activeInteraction, liveInteractions]
   );
 
+  const clearTaskbarHideTimer = useCallback(() => {
+    if (taskbarHideTimerRef.current) {
+      window.clearTimeout(taskbarHideTimerRef.current);
+      taskbarHideTimerRef.current = null;
+    }
+  }, []);
+
+  const showTaskbar = useCallback(() => {
+    clearTaskbarHideTimer();
+    setTaskbarVisible(true);
+  }, [clearTaskbarHideTimer]);
+
+  const scheduleTaskbarHide = useCallback(() => {
+    clearTaskbarHideTimer();
+    taskbarHideTimerRef.current = window.setTimeout(() => setTaskbarVisible(false), 1800);
+  }, [clearTaskbarHideTimer]);
+
+  useEffect(() => {
+    return () => clearTaskbarHideTimer();
+  }, [clearTaskbarHideTimer]);
+
   useEffect(() => {
     const onChange = () => {
       if (!document.fullscreenElement) setIsFullscreen(false);
@@ -1366,8 +1389,8 @@ export default function LiveResultsView({
   const shellClass = isFullscreen
     ? 'fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#0F172A] p-4 text-white transition-colors md:p-5'
     : publicMode
-      ? 'flex h-screen flex-col overflow-hidden bg-[#0F172A] p-4 text-white transition-colors md:p-5'
-      : 'flex h-full min-h-0 flex-col overflow-hidden rounded-[8px] border border-[#E2EBE6] bg-white p-3 shadow-sm';
+      ? 'relative flex h-screen flex-col overflow-hidden bg-[#0F172A] p-4 text-white transition-colors md:p-5'
+      : 'relative flex h-full min-h-0 flex-col overflow-hidden rounded-[8px] border border-[#E2EBE6] bg-white p-3 shadow-sm';
 
   if (!event && !eventCode && !loading) {
     return <EmptyState>Please select an event first.</EmptyState>;
@@ -1409,22 +1432,6 @@ export default function LiveResultsView({
               : 'Waiting for lecturer to start an interaction.'}
           </p>
         </div>
-      </div>
-    );
-  }
-
-  if (isFullscreen && activeInteraction.type === 'word_cloud') {
-    return (
-      <div className={shellClass}>
-        <FullscreenPresentation
-          event={event}
-          interaction={activeInteraction}
-          cloudWords={cloudWords}
-          onExit={exitFullscreen}
-          publicMode={publicMode}
-          theme={fullscreenTheme}
-          onToggleTheme={() => setFullscreenTheme(current => (current === 'dark' ? 'light' : 'dark'))}
-        />
       </div>
     );
   }
