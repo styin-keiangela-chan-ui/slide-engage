@@ -17,11 +17,18 @@
       .user{min-width:0;display:flex;align-items:center;gap:7px}
       .user b{max-width:128px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
       .input{width:100%;box-sizing:border-box;border:1px solid #d6e2dc;border-radius:9px;padding:8px;background:#fff;color:#17172f;font-size:13px}
-      .btn{border:0;border-radius:9px;background:#168a3a;color:#fff;font-weight:800;padding:8px 10px;font-size:13px}
+      .btn{border:0;border-radius:9px;background:#168a3a;color:#fff;font-weight:800;padding:8px 10px;font-size:13px;transition:transform .12s ease,filter .12s ease,background .15s ease,border-color .15s ease}
       .btn.secondary{background:#fff;color:#17172f;border:1px solid #d6e2dc}
       .btn.danger{background:#fff;color:#b42318;border:1px solid #f0c6c6}
       .btn.smallbtn{padding:7px 9px;font-size:12px}
+      .btn:hover:not(:disabled){filter:brightness(.96)}
+      .btn:active:not(:disabled),.btn.pressed{transform:scale(.97);filter:brightness(.92)}
       .btn:disabled{opacity:.55;cursor:not-allowed}
+      .btn.is-loading{cursor:wait;opacity:.82}
+      .btn.is-success{background:#168a3a;color:#fff;border-color:#168a3a}
+      .btn.is-error{background:#fff0f0;color:#b42318;border-color:#f0c6c6}
+      .spinner{display:inline-block;width:12px;height:12px;margin-right:6px;border:2px solid currentColor;border-right-color:transparent;border-radius:999px;vertical-align:-2px;animation:spin .75s linear infinite}
+      @keyframes spin{to{transform:rotate(360deg)}}
       .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
       .template{min-height:62px;border:1px solid #dfe9e3;border-radius:12px;padding:8px;background:#fff;text-align:center;font-weight:800;font-size:11px;display:grid;place-items:center;gap:3px;transition:background .15s ease,border-color .15s ease,transform .15s ease}
       .template:hover,.template:focus{transform:translateY(-1px)}
@@ -38,6 +45,8 @@
       .section-toggle{width:100%;border:0;background:transparent;padding:0;display:flex;justify-content:space-between;font-weight:900;color:#17172f}
       .bottom-bar{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:8px 10px;background:rgba(246,250,247,.96);border-top:1px solid #dfe9e3;z-index:5}
       .live-panel{border:1px solid #cbead4;background:linear-gradient(180deg,#ffffff,#f3fbf6)}
+      .live-flash{animation:liveFlash 2s ease}
+      @keyframes liveFlash{0%,100%{box-shadow:0 6px 18px rgba(14,63,34,.05)}25%{box-shadow:0 0 0 4px rgba(22,138,58,.18),0 10px 26px rgba(14,63,34,.12)}}
       .live-dot{width:8px;height:8px;border-radius:999px;background:#168a3a;box-shadow:0 0 0 4px rgba(22,138,58,.12)}
       .bar-row{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;margin:6px 0}
       .bar-track{height:8px;border-radius:999px;background:#e3e7e5;overflow:hidden;margin-top:3px}
@@ -57,16 +66,16 @@
           <div class="small muted">Google Slides Add-on</div>
         </div>
       </div>
-      <div id="status" class="status hidden"></div>
+      <div id="status" class="status hidden" role="status" aria-live="polite"></div>
 
       <section id="login" class="card stack">
         <b>Lecturer login</b>
         <div class="small muted">Use your SlideEngage website email/Gmail and password.</div>
         <div id="permission" class="status permission hidden"></div>
-        <button class="btn secondary" onclick="authorize()">Authorize Google Slides Add-on</button>
+        <button id="authorizeButton" class="btn secondary" onclick="authorize()" title="Authorize Google Slides Add-on" aria-label="Authorize Google Slides Add-on">Authorize Google Slides Add-on</button>
         <input id="email" class="input" placeholder="Email">
         <input id="password" class="input" type="password" placeholder="Password">
-        <button class="btn" onclick="login()">Sign in</button>
+        <button id="loginButton" class="btn" onclick="login()" title="Sign in to SlideEngage" aria-label="Sign in to SlideEngage">Sign in</button>
       </section>
 
       <section id="app" class="hidden">
@@ -75,7 +84,7 @@
             <div class="avatar" id="avatar">A</div>
             <b id="hello"></b>
           </div>
-          <button class="btn secondary smallbtn" onclick="logout()">Logout</button>
+          <button id="logoutButton" class="btn secondary smallbtn" onclick="logout()" title="Logout" aria-label="Logout">Logout</button>
         </div>
 
         <div class="card stack" id="event-card">
@@ -86,7 +95,7 @@
           <button class="btn secondary smallbtn" onclick="toggleNewEvent()" type="button">+ New Event</button>
           <div id="new-event-row" class="row hidden">
             <input id="newEventName" class="input" placeholder="New event name">
-            <button class="btn smallbtn" onclick="createEvent()">Create</button>
+            <button id="createEventButton" class="btn smallbtn" onclick="createEvent()" title="Create a new event" aria-label="Create a new event">Create</button>
           </div>
           </div>
         </div>
@@ -99,7 +108,7 @@
         <div class="card stack">
           <div class="row">
             <b>Interactions</b>
-            <button class="btn secondary smallbtn" onclick="refresh()">Refresh</button>
+            <button id="refreshButton" class="btn secondary smallbtn" onclick="refresh()" title="Reload latest data" aria-label="Reload latest data">Refresh</button>
           </div>
           <div id="interactions" class="stack"></div>
         </div>
@@ -113,20 +122,20 @@
           <div id="options" class="stack"></div>
           <button id="addOption" class="btn secondary hidden" onclick="addOption()">+ Add option</button>
           <div id="settings" class="stack"></div>
-          <button class="btn secondary" onclick="saveInteraction()">Save</button>
+          <button id="saveInteractionButton" class="btn secondary" onclick="saveInteraction()" title="Save changes without going live" aria-label="Save changes without going live">Save</button>
           <div class="row">
-            <button class="btn secondary smallbtn" onclick="goLive()">Go Live</button>
-            <button class="btn secondary smallbtn" onclick="closeLive()">Close</button>
-          <button class="btn danger smallbtn" onclick="deleteSelected()" title="Delete interaction" aria-label="Delete interaction">🗑 Delete Interaction</button>
+            <button id="goLiveButton" class="btn secondary smallbtn" onclick="goLive()" title="Start accepting responses" aria-label="Start accepting responses">Go Live</button>
+            <button id="closeLiveButton" class="btn secondary smallbtn" onclick="closeLive()" title="Stop accepting responses" aria-label="Stop accepting responses">Close</button>
+          <button id="deleteInteractionButton" class="btn danger smallbtn" onclick="deleteSelected()" title="Delete interaction" aria-label="Delete interaction">🗑 Delete Interaction</button>
           </div>
         </div>
 
         <div id="liveControls" class="card stack hidden">
           <b>Live presentation</b>
-          <button id="presentLiveButton" class="btn" onclick="presentLive()">Add to Presentation</button>
-          <button class="btn danger" onclick="resetResults()">Reset Results</button>
+          <button id="presentLiveButton" class="btn" onclick="presentLive()" title="Add interaction slide to Google Slides" aria-label="Add interaction slide to Google Slides">Add to Presentation</button>
+          <button id="resetResultsButton" class="btn danger" onclick="resetResults()" title="Clear all participant responses" aria-label="Clear all participant responses">Reset Results</button>
           <div class="divider"></div>
-          <button class="btn secondary" onclick="openPresenter()">Open Live Results</button>
+          <button id="openPresenterButton" class="btn secondary" onclick="openPresenter()" title="Open realtime live results" aria-label="Open realtime live results">Open Live Results</button>
         </div>
 
         <div id="liveResults" class="card stack live-panel hidden">
@@ -138,9 +147,9 @@
         </div>
 
         <div class="bottom-bar">
-          <button class="btn secondary smallbtn" onclick="refresh()" title="Reload latest data" aria-label="Reload latest data">Refresh</button>
+          <button id="bottomRefreshButton" class="btn secondary smallbtn" onclick="refresh()" title="Reload latest data" aria-label="Reload latest data">Refresh</button>
           <button id="bottomAddSlideButton" class="btn smallbtn" onclick="presentLive()" title="Add interaction slide to Google Slides" aria-label="Add interaction slide to Google Slides">Add Slide</button>
-          <button class="btn secondary smallbtn" onclick="openPresenter()" title="Open realtime live results" aria-label="Open realtime live results">Live Results</button>
+          <button id="bottomLiveResultsButton" class="btn secondary smallbtn" onclick="openPresenter()" title="Open realtime live results" aria-label="Open realtime live results">Live Results</button>
         </div>
       </section>
     </div>
@@ -156,6 +165,21 @@
       var pendingSlideUpdateInteractionId=null;
       var liveSlideActive=false;
       var slideCreateInFlight=false;
+      var actionStates={};
+      var actionResetTimers={};
+      var actionLabels={
+        authorize:{ids:["authorizeButton"],idle:"Authorize Google Slides Add-on",loading:"Authorizing…",success:"Authorized ✓",error:"Authorize"},
+        login:{ids:["loginButton"],idle:"Sign in",loading:"Signing in…",success:"Signed in ✓",error:"Sign in"},
+        createEvent:{ids:["createEventButton"],idle:"Create",loading:"Creating…",success:"Created ✓",error:"Create"},
+        refresh:{ids:["refreshButton","bottomRefreshButton"],idle:"Refresh",loading:"Refreshing…",success:"Updated ✓",error:"Refresh"},
+        save:{ids:["saveInteractionButton"],idle:"Save",loading:"Saving…",success:"Saved ✓",error:"Save"},
+        goLive:{ids:["goLiveButton"],idle:"Go Live",loading:"Going live…",success:"Live ✓",error:"Go Live"},
+        close:{ids:["closeLiveButton"],idle:"Close",loading:"Closing…",success:"Closed ✓",error:"Close"},
+        reset:{ids:["resetResultsButton"],idle:"Reset Results",loading:"Resetting…",success:"Reset complete ✓",error:"Reset Results"},
+        deleteInteraction:{ids:["deleteInteractionButton"],idle:"🗑 Delete Interaction",loading:"Deleting…",success:"Deleted ✓",error:"🗑 Delete Interaction"},
+        addPresentation:{ids:["presentLiveButton","bottomAddSlideButton"],idle:"Add to Presentation",bottomIdle:"Add Slide",loading:"Adding…",success:"Added ✓",error:"Add to Presentation"},
+        openPresenter:{ids:["openPresenterButton","bottomLiveResultsButton"],idle:"Open Live Results",bottomIdle:"Live Results",loading:"Opening…",success:"Opened ✓",error:"Open Live Results"}
+      };
       var templates=[
         {label:"Multiple Choice",type:"poll",options:["Option 1","Option 2"],config:{poll_kind:"multiple_choice",multiple_answers:false,results_visible:true,voting_open:true}},
         {label:"Open Text",type:"feedback",options:[],config:{poll_kind:"open_text",character_limit:280,anonymous:true,voting_open:true}},
@@ -167,8 +191,13 @@
 
       function $(id){return document.getElementById(id)}
       function show(message,isError){var s=$("status");s.textContent=message||"";s.className="status"+(isError?" error":"")+(message?"":" hidden")}
+      function buttonLabel(config,state,id,message){if(message)return message;if(state==="loading")return config.loading;if(state==="success")return config.success;if(state==="error")return config.error;return id&&id.indexOf("bottom")===0&&config.bottomIdle?config.bottomIdle:config.idle}
+      function setActionState(actionKey,state,message){var config=actionLabels[actionKey];if(!config)return;actionStates[actionKey]=state;if(actionResetTimers[actionKey]){window.clearTimeout(actionResetTimers[actionKey]);actionResetTimers[actionKey]=null}config.ids.forEach(function(id){var btn=$(id);if(!btn)return;var label=buttonLabel(config,state,id,message);btn.classList.remove("is-loading","is-success","is-error","pressed");btn.classList.toggle("is-loading",state==="loading");btn.classList.toggle("is-success",state==="success");btn.classList.toggle("is-error",state==="error");btn.classList.toggle("pressed",state==="loading");btn.disabled=state==="loading";btn.setAttribute("aria-busy",state==="loading"?"true":"false");btn.setAttribute("aria-disabled",state==="loading"?"true":"false");btn.innerHTML=(state==="loading"?"<span class=\"spinner\"></span>":"")+escapeHtml(label)});if(state==="success"||state==="error"){actionResetTimers[actionKey]=window.setTimeout(function(){setActionState(actionKey,"idle");if(actionKey==="addPresentation"&&liveSlideActive)renderLiveControls()},1800)}}
+      function isActionLoading(actionKey){return actionStates[actionKey]==="loading"}
+      function clearLoadingActionsToError(){Object.keys(actionStates).forEach(function(key){if(actionStates[key]==="loading")setActionState(key,"error")})}
+      function highlightLiveSlideStatus(){var card=$("liveControls");if(!card)return;card.scrollIntoView({block:"nearest",behavior:"smooth"});card.classList.remove("live-flash");void card.offsetWidth;card.classList.add("live-flash")}
       function call(name,args,ok,statusText){if(statusText!==null)show(statusText===undefined?"Loading...":statusText);google.script.run.withSuccessHandler(function(result){if(statusText!==null)show("");ok&&ok(result)}).withFailureHandler(function(err){handleFailure(err)})[name].apply(null,args||[])}
-      function handleFailure(err){if(slideCreateInFlight)setSlideCreating(false);var message=(err&&err.message)||String(err);if(/invalid email|invalid slideengage/i.test(message))message="Invalid SlideEngage email or password.";if(/Unable to load live results|Interaction not found|event for this slide|interaction for this slide/i.test(message))message="Unable to load live results. Please refresh and try again.";if(/UrlFetchApp|external_request|permission|authorization|not have permission|authorize|internet/i.test(message))message="Authorization required. Please click Authorize and allow Google permissions.";show(message,true);if(/authorize|permission|internet/i.test(message))checkAuthorization()}
+      function handleFailure(err){clearLoadingActionsToError();if(slideCreateInFlight)setSlideCreating(false);var message=(err&&err.message)||String(err);if(/invalid email|invalid slideengage/i.test(message))message="Invalid SlideEngage email or password.";if(/Unable to load live results|Interaction not found|event for this slide|interaction for this slide/i.test(message))message="Unable to load live results. Please refresh and try again.";if(/UrlFetchApp|external_request|permission|authorization|not have permission|authorize|internet/i.test(message))message="Authorization required. Please click Authorize and allow Google permissions.";show(message||"Unable to complete. Please try again.",true);if(/authorize|permission|internet/i.test(message))checkAuthorization()}
       function boot(){renderTemplates();checkAuthorization();call("getInitialState",[],function(result){state.session=result.session;state.events=result.events||[];state.selectedEvent=result.selectedEvent||null;state.interactions=result.interactions||[];render()})}
       function checkAuthorization(){google.script.run.withSuccessHandler(function(result){var box=$("permission");if(!result||result.authorized){box.classList.add("hidden");return}box.innerHTML="Google permission is required before SlideEngage can connect to your account. <a class=\"link\" target=\"_blank\" href=\""+result.authorizationUrl+"\">Open authorization</a>";box.classList.remove("hidden")}).withFailureHandler(function(){}).getAuthorizationStatus()}
 
@@ -188,7 +217,7 @@
       function renderEditor(){var editor=$("editor");if(!state.selectedInteraction&&!state.template){editor.classList.add("hidden");return}editor.classList.remove("hidden");$("editorTitle").textContent=state.template?state.template.label:label(state.selectedInteraction);var status=(state.selectedInteraction&&state.selectedInteraction.status)||"draft";$("interactionStatus").textContent=status;$("interactionStatus").className="pill "+status;$("question").value=(state.selectedInteraction&&state.selectedInteraction.title)||"";renderOptions();renderSettings()}
       function renderOptions(){var needs=needsOptions();$("addOption").classList.toggle("hidden",!needs);var box=$("options");box.innerHTML="";if(!needs)return;state.options.forEach(function(option,index){var row=document.createElement("div");row.className="row";row.innerHTML="<input class=\"input\" value=\""+escapeAttr(option.option_text||"")+"\" placeholder=\"Option "+(index+1)+"\"><button class=\"btn danger smallbtn\">×</button>";row.querySelector("input").oninput=function(){state.options[index].option_text=this.value};row.querySelector("button").onclick=function(){state.options.splice(index,1);renderOptions()};box.appendChild(row)})}
       function renderSettings(){var box=$("settings");box.innerHTML="";var type=currentType();if(type==="poll")box.innerHTML=checkboxSetting("multiple_answers","Multiple answers");if(type==="word_cloud")box.innerHTML=numberSetting("max_words_per_participant","Max words",1,10)+checkboxSetting("allow_duplicate_words","Allow duplicates");if(type==="feedback"&&state.config.poll_kind==="open_text")box.innerHTML=numberSetting("character_limit","Character limit",50,1000);if(type==="feedback"&&state.config.poll_kind==="rating")box.innerHTML=numberSetting("scale","Rating scale",2,10);if(type==="quiz")box.innerHTML=numberSetting("time_limit_seconds","Timer seconds",5,300);if(type==="qa")box.innerHTML=checkboxSetting("moderation","Moderation")+checkboxSetting("allow_replies","Replies")+numberSetting("character_limit","Character limit",50,500)}
-      function renderLiveControls(){var visible=!!state.selectedInteraction&&!!state.selectedEvent;$("liveControls").classList.toggle("hidden",!visible);var btn=$("presentLiveButton");if(btn)btn.textContent=liveSlideActive?"Slide added":"Add to Presentation"}
+      function renderLiveControls(){var visible=!!state.selectedInteraction&&!!state.selectedEvent;$("liveControls").classList.toggle("hidden",!visible);if(!isActionLoading("addPresentation")&&actionStates.addPresentation!=="success")setActionState("addPresentation","idle");if(liveSlideActive&&!isActionLoading("addPresentation")&&actionStates.addPresentation!=="success"){var main=$("presentLiveButton");var bottom=$("bottomAddSlideButton");if(main)main.textContent="Live slide active ✓";if(bottom)bottom.textContent="Live active ✓"}}
       function renderLiveResults(){var panel=$("liveResults");if(!state.selectedInteraction||!state.selectedEvent){panel.classList.add("hidden");return}panel.classList.remove("hidden");var body=$("liveResultsBody");var data=state.liveResults;if(!data){body.innerHTML="<div class=\"muted\">Go live to see responses here.</div>";return}var interaction=data.interaction||state.selectedInteraction;var html="<div><b>"+escapeHtml(data.question||interaction.title||"Untitled")+"</b><div class=\"small muted\">#"+escapeHtml(data.eventCode||state.selectedEvent.event_code||"")+" · "+(data.total_responses||0)+" responses</div></div>";var results=data.results||[];if(interaction.type==="poll"||interaction.type==="quiz"){html+=renderPollResultsHtml(results)}else if(interaction.type==="word_cloud"){html+=renderWordCloudHtml(results)}else if(interaction.type==="qa"){html+=renderCardsHtml(results,"question_text","No questions yet.")}else if(interaction.type==="feedback"&&interaction.config&&interaction.config.poll_kind==="rating"){html+=renderRatingHtml(results)}else{var items=Array.isArray(results)?results:(results.text_responses||[]);html+=renderCardsHtml(items,"text","No responses yet.")}body.innerHTML=html;$("liveIndicator").textContent="Live updating…"}
       function renderPollResultsHtml(results){if(!results.length)return"<div class=\"muted\">Waiting for responses…</div>";var html="";results.forEach(function(row){var percent=Number(row.percentage||0);html+="<div class=\"bar-row\"><div><b>"+escapeHtml(row.option_text||row.label||"Option")+"</b><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:"+Math.max(2,percent)+"%\"></div></div></div><b>"+percent+"% · "+(row.count||0)+"</b></div>"});return html}
       function renderWordCloudHtml(results){if(!results.length)return"<div class=\"wordbox muted\">Waiting for responses…</div>";var html="<div class=\"wordbox\">";var max=Math.max.apply(null,results.map(function(item){return Number(item.count||1)}));results.slice(0,36).forEach(function(item,index){var count=Number(item.count||1);var size=Math.max(12,Math.min(30,12+(count/max)*16+(index<3?4:0)));var colors=["#168A3A","#1A6BB5","#D46B08","#7C3AED","#0F766E","#BE185D"];html+="<span class=\"word\" style=\"font-size:"+size+"px;color:"+colors[index%colors.length]+"\">"+escapeHtml(item.word||item.text||"")+"</span>"});html+="</div>";return html}
@@ -203,12 +232,12 @@
       function escapeHtml(value){return String(value||"").replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]})}
       function escapeAttr(value){return escapeHtml(value).replace(/"/g,"&quot;")}
 
-      function authorize(){call("authorizeSlideEngage",[],function(){checkAuthorization();if($("email").value&&$("password").value){login();return}show("Google permission confirmed. Please sign in again.")})}
-      function login(){call("loginSlideEngage",[$("email").value,$("password").value],function(result){state.session=result;refresh()})}
+      function authorize(){if(isActionLoading("authorize"))return;setActionState("authorize","loading");call("authorizeSlideEngage",[],function(){setActionState("authorize","success");checkAuthorization();if($("email").value&&$("password").value){login();return}show("Google permission confirmed. Please sign in again.")})}
+      function login(){if(isActionLoading("login"))return;setActionState("login","loading");call("loginSlideEngage",[$("email").value,$("password").value],function(result){state.session=result;setActionState("login","success");refresh()})}
       function logout(){unsubscribeRealtime();call("logout",[],function(){state={session:null,events:[],selectedEvent:null,interactions:[],selectedInteraction:null,template:null,options:[],config:{},liveResults:null};render();show("Signed out.")})}
-      function refresh(){call("getInitialState",[],function(result){state.session=result.session;state.events=result.events||[];state.selectedEvent=result.selectedEvent||null;state.interactions=result.interactions||[];if(state.selectedInteraction){var found=findInteraction(state.selectedInteraction.id);state.selectedInteraction=found||null;if(!found)unsubscribeRealtime()}render()})}
+      function refresh(){if(isActionLoading("refresh"))return;setActionState("refresh","loading");call("getInitialState",[],function(result){state.session=result.session;state.events=result.events||[];state.selectedEvent=result.selectedEvent||null;state.interactions=result.interactions||[];if(state.selectedInteraction){var found=findInteraction(state.selectedInteraction.id);state.selectedInteraction=found||null;if(!found)unsubscribeRealtime()}render();setActionState("refresh","success");show("Updated ✓")})}
       function selectEvent(){unsubscribeRealtime();call("selectEvent",[$("events").value],function(result){state.selectedEvent=result.selectedEvent;state.interactions=result.interactions||[];state.selectedInteraction=null;state.template=null;state.options=[];state.config={};state.liveResults=null;render()})}
-      function createEvent(){call("createEvent",[$("newEventName").value],function(result){$("newEventName").value="";$("new-event-row").classList.add("hidden");state.events=result.events||[];state.selectedEvent=result.selectedEvent;state.interactions=[];state.selectedInteraction=null;render()})}
+      function createEvent(){if(isActionLoading("createEvent"))return;setActionState("createEvent","loading");call("createEvent",[$("newEventName").value],function(result){$("newEventName").value="";$("new-event-row").classList.add("hidden");state.events=result.events||[];state.selectedEvent=result.selectedEvent;state.interactions=[];state.selectedInteraction=null;render();setActionState("createEvent","success");show("Event created.")})}
       function openTemplate(template){unsubscribeRealtime();liveSlideActive=false;if(!state.selectedEvent){show("Select or create an event first.",true);return}state.template=template;state.selectedInteraction=null;state.liveResults=null;state.options=(template.options||[]).map(function(text,index){return{option_text:text,is_correct:index===0&&template.type==="quiz"}});state.config=copy(template.config||{});render()}
       function openInteraction(interaction){state.selectedInteraction=interaction;state.template=null;state.options=(interaction.interaction_options||[]).sort(function(a,b){return(a.position||0)-(b.position||0)}).map(function(option){return{option_text:option.option_text,is_correct:!!option.is_correct}});state.config=copy(interaction.config||{});call("getInteractionSlideState",[interaction.id],function(result){liveSlideActive=!!(result&&result.exists);renderLiveControls()},null);if(interaction.status==="live"){startLiveResults(interaction)}else{unsubscribeRealtime();state.liveResults=null}render()}
       function addOption(){state.options.push({option_text:"Option "+(state.options.length+1),is_correct:false});renderOptions()}
@@ -216,17 +245,17 @@
       function findInteraction(id){for(var i=0;i<state.interactions.length;i++){if(state.interactions[i].id===id)return state.interactions[i]}return null}
       function editorPayload(){return{id:state.selectedInteraction&&state.selectedInteraction.id,event_id:state.selectedEvent&&state.selectedEvent.id,type:currentType(),title:$("question").value.trim(),config:state.config,options:needsOptions()?state.options:[]}}
       function validatePayload(payload){if(!payload.event_id)return"Select or create an event first.";if(!payload.title)return"Question is required.";if((payload.type==="poll"||payload.type==="quiz")&&payload.options.filter(function(o){return String(o.option_text||"").trim()}).length<2)return"At least 2 options are required.";return""}
-      function saveInteraction(done){var payload=editorPayload();var error=validatePayload(payload);if(error){show(error,true);return}call("saveInteraction",[payload],function(result){state.selectedInteraction=result.interaction;state.template=null;state.interactions=result.interactions||[];openInteraction(result.interaction);show("Saved.");done&&done(result.interaction)})}
-      function setStatus(id,status){call("setInteractionStatus",[id,status],function(result){state.selectedInteraction=result.interaction;state.interactions=result.interactions||[];openInteraction(result.interaction);show(status==="live"?"Interaction is live.":"Interaction closed.")})}
-      function goLive(){if(!state.selectedInteraction){saveInteraction(function(interaction){setStatus(interaction.id,"live")});return}setStatus(state.selectedInteraction.id,"live")}
-      function closeLive(){if(!state.selectedInteraction)return;setStatus(state.selectedInteraction.id,"closed")}
+      function saveInteraction(done,actionKey){actionKey=actionKey===undefined?"save":actionKey;var payload=editorPayload();var error=validatePayload(payload);if(error){show(error,true);if(actionKey)setActionState(actionKey,"error");return}if(actionKey)setActionState(actionKey,"loading");call("saveInteraction",[payload],function(result){state.selectedInteraction=result.interaction;state.template=null;state.interactions=result.interactions||[];openInteraction(result.interaction);if(actionKey){setActionState(actionKey,"success");show(actionKey==="save"?"Saved ✓":"Interaction saved.")}else{show("Saved.")}done&&done(result.interaction)})}
+      function setStatus(id,status,actionKey){if(actionKey&&isActionLoading(actionKey))return;if(actionKey)setActionState(actionKey,"loading");call("setInteractionStatus",[id,status],function(result){state.selectedInteraction=result.interaction;state.interactions=result.interactions||[];openInteraction(result.interaction);if(actionKey)setActionState(actionKey,"success");show(status==="live"?"Live result is now active.":"Interaction closed.")})}
+      function goLive(){if(isActionLoading("goLive"))return;if(!state.selectedInteraction){saveInteraction(function(interaction){setStatus(interaction.id,"live","goLive")},"goLive");return}setStatus(state.selectedInteraction.id,"live","goLive")}
+      function closeLive(){if(!state.selectedInteraction||isActionLoading("close"))return;setStatus(state.selectedInteraction.id,"closed","close")}
       function confirmDeleteInteraction(interaction){if(!interaction)return false;if(interaction.status==="live"&&!confirm("This interaction is currently live.\n\nDeleting it will immediately stop participant submissions and remove all collected responses."))return false;return confirm("Delete Interaction?\n\nAre you sure you want to delete this interaction?\n\nThis action cannot be undone.")}
-      function deleteInteractionFromList(interaction){if(!interaction||!state.selectedEvent)return;if(!confirmDeleteInteraction(interaction))return;call("deleteInteraction",[interaction.id,state.selectedEvent.id],function(result){state.interactions=result.interactions||[];if(state.selectedInteraction&&state.selectedInteraction.id===interaction.id){state.selectedInteraction=null;state.template=null;state.options=[];state.config={};state.liveResults=null;unsubscribeRealtime()}render();show("Interaction deleted successfully.")})}
+      function deleteInteractionFromList(interaction){if(!interaction||!state.selectedEvent||isActionLoading("deleteInteraction"))return;if(!confirmDeleteInteraction(interaction))return;setActionState("deleteInteraction","loading");call("deleteInteraction",[interaction.id,state.selectedEvent.id],function(result){state.interactions=result.interactions||[];if(state.selectedInteraction&&state.selectedInteraction.id===interaction.id){state.selectedInteraction=null;state.template=null;state.options=[];state.config={};state.liveResults=null;unsubscribeRealtime()}render();setActionState("deleteInteraction","success");show("Interaction deleted.")})}
       function deleteSelected(){deleteInteractionFromList(state.selectedInteraction)}
-      function resetResults(){if(!state.selectedInteraction)return;if(!confirm("Reset all participant responses for this interaction?"))return;call("resetResults",[state.selectedInteraction.id],function(result){show((result&&result.message)||"Results cleared successfully.");fetchLiveResults(state.selectedInteraction.id)})}
-      function setSlideCreating(active,label){slideCreateInFlight=active;var main=$("presentLiveButton");var bottom=$("bottomAddSlideButton");[main,bottom].forEach(function(btn){if(!btn)return;btn.disabled=active;if(active)btn.dataset.previousLabel=btn.textContent;btn.textContent=active?(label||"Creating slide..."):(btn.dataset.previousLabel||btn.textContent)});if(!active){renderLiveControls();if(bottom)bottom.textContent="Add Slide"}}
-      function presentLive(){if(slideCreateInFlight)return;var payload=editorPayload();var validation=validatePayload(payload);if(validation){show(validation,true);return}setSlideCreating(true,"Creating slide...");saveInteraction(function(interaction){show("Creating slide...");call("getInteractionSlideState",[interaction.id],function(stateResult){var insertNew=false;if(stateResult&&stateResult.exists)insertNew=!confirm("A SlideEngage interaction slide already exists. Update existing slide? Click Cancel to insert a new one.");call("presentLiveSlide",[state.selectedEvent.id,interaction.id,insertNew],function(result){if(result&&result.interaction){state.selectedInteraction=result.interaction;state.interactions=result.interactions||state.interactions}else{state.selectedInteraction.status="live";state.interactions=state.interactions.map(function(item){return item.id===state.selectedInteraction.id?state.selectedInteraction:item})}if(state.selectedEvent)state.selectedEvent.status="live";liveSlideActive=true;show("Slide added successfully.");setLiveIndicator("Live updating…");startLiveResults(state.selectedInteraction);setSlideCreating(false);render()},"Creating slide...")},"Creating slide...")})}
-      function openPresenter(){if(!state.selectedEvent||!state.selectedInteraction){show("Select an interaction first.",true);return}console.log("[SlideEngage Google Slides] Opening live results",{eventId:state.selectedEvent.id,interactionId:state.selectedInteraction.id,interactionType:state.selectedInteraction.type});call("getLiveResultUrl",[state.selectedEvent.id,state.selectedInteraction.id],function(url){var separator=url.indexOf("?")>=0?"&":"?";var sourceUrl=url+separator+"source=google-slides";showPresenterLink(sourceUrl,"Opening live results.");window.open(sourceUrl,"_blank")})}
+      function resetResults(){if(!state.selectedInteraction||isActionLoading("reset"))return;if(!confirm("Reset all participant responses for this interaction?"))return;setActionState("reset","loading");call("resetResults",[state.selectedInteraction.id],function(result){setActionState("reset","success");show("Results reset.");fetchLiveResults(state.selectedInteraction.id)})}
+      function setSlideCreating(active,label){slideCreateInFlight=active;if(active)setActionState("addPresentation","loading",label||"Adding…");else if(!liveSlideActive&&actionStates.addPresentation!=="error")setActionState("addPresentation","idle")}
+      function presentLive(){if(slideCreateInFlight||isActionLoading("addPresentation"))return;var payload=editorPayload();var validation=validatePayload(payload);if(validation){show(validation,true);setActionState("addPresentation","error");return}setSlideCreating(true,"Preparing slide…");saveInteraction(function(interaction){setActionState("addPresentation","loading","Adding to presentation…");show("Adding to presentation...");call("getInteractionSlideState",[interaction.id],function(stateResult){var insertNew=false;if(stateResult&&stateResult.exists)insertNew=!confirm("A SlideEngage interaction slide already exists. Update existing slide? Click Cancel to insert a new one.");call("presentLiveSlide",[state.selectedEvent.id,interaction.id,insertNew],function(result){if(result&&result.interaction){state.selectedInteraction=result.interaction;state.interactions=result.interactions||state.interactions}else{state.selectedInteraction.status="live";state.interactions=state.interactions.map(function(item){return item.id===state.selectedInteraction.id?state.selectedInteraction:item})}if(state.selectedEvent)state.selectedEvent.status="live";liveSlideActive=true;setActionState("addPresentation","success");show("Slide added to presentation.");setLiveIndicator("Live updating…");startLiveResults(state.selectedInteraction);setSlideCreating(false);render();highlightLiveSlideStatus()},"Adding to presentation...")},"Preparing slide...")},"addPresentation")}
+      function openPresenter(){if(isActionLoading("openPresenter"))return;if(!state.selectedEvent||!state.selectedInteraction){show("Select an interaction first.",true);return}setActionState("openPresenter","loading");console.log("[SlideEngage Google Slides] Opening live results",{eventId:state.selectedEvent.id,interactionId:state.selectedInteraction.id,interactionType:state.selectedInteraction.type});call("getLiveResultUrl",[state.selectedEvent.id,state.selectedInteraction.id],function(url){var separator=url.indexOf("?")>=0?"&":"?";var sourceUrl=url+separator+"source=google-slides";setActionState("openPresenter","success");showPresenterLink(sourceUrl,"Opening live results.");window.open(sourceUrl,"_blank")})}
       function showPresenterLink(url,message){show(message+" If it did not open, use this link: "+url)}
       function startLiveResults(interaction){if(!interaction||!state.selectedEvent)return;fetchLiveResults(interaction.id);subscribeRealtime(interaction.id)}
       function fetchLiveResults(interactionId){if(!state.selectedEvent||!interactionId)return;setLiveIndicator("Live updating…");google.script.run.withSuccessHandler(function(result){state.liveResults=result;renderLiveResults();setLiveIndicator("Live updating…")}).withFailureHandler(function(err){setLiveIndicator("Update failed");handleFailure(err)}).getLiveResultSnapshot(state.selectedEvent.id,interactionId)}

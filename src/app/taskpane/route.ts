@@ -125,9 +125,15 @@ export function GET() {
         font-size: 13px;
         color: white;
         font-weight: 900;
+        transition: transform 120ms ease, filter 120ms ease, background 150ms ease, border-color 150ms ease;
       }
       .button:hover {
         background: var(--green-dark);
+      }
+      .button:active:not(:disabled),
+      .button.pressed {
+        transform: scale(0.97);
+        filter: brightness(0.92);
       }
       .button.secondary {
         border-color: var(--line);
@@ -151,12 +157,25 @@ export function GET() {
         cursor: not-allowed;
         opacity: 0.55;
       }
-      .button.loading::after {
-        content: "";
+      .button.is-loading {
+        cursor: wait;
+        opacity: 0.82;
+      }
+      .button.is-success {
+        border-color: var(--green);
+        background: var(--green);
+        color: white;
+      }
+      .button.is-error {
+        border-color: #f0c6c6;
+        background: #fff0f0;
+        color: #b42318;
+      }
+      .spinner {
         display: inline-block;
         width: 12px;
         height: 12px;
-        margin-left: 8px;
+        margin-right: 6px;
         border: 2px solid currentColor;
         border-right-color: transparent;
         border-radius: 999px;
@@ -319,6 +338,13 @@ export function GET() {
         background: #fbfffc;
         padding: 12px;
       }
+      .live-flash {
+        animation: liveFlash 2s ease;
+      }
+      @keyframes liveFlash {
+        0%, 100% { box-shadow: 0 1px 2px rgba(25, 26, 46, 0.04); }
+        25% { box-shadow: 0 0 0 4px rgba(22, 138, 58, 0.18), 0 10px 26px rgba(14, 63, 34, 0.12); }
+      }
       .preview-title {
         margin-bottom: 8px;
         font-size: 12px;
@@ -405,7 +431,7 @@ export function GET() {
           <input id="password" class="input" type="password" autocomplete="current-password" placeholder="Password" />
           <button id="login-button" class="button full" type="button">Sign in</button>
         </div>
-        <div id="login-status" class="status hidden"></div>
+        <div id="login-status" class="status hidden" role="status" aria-live="polite"></div>
       </section>
 
       <section id="app-view" class="hidden">
@@ -485,7 +511,7 @@ export function GET() {
           <div id="results-list" class="stack" style="margin-top:12px"></div>
         </section>
 
-        <div id="app-status" class="status hidden"></div>
+        <div id="app-status" class="status hidden" role="status" aria-live="polite"></div>
         <div class="bottom-toolbar">
           <button id="bottom-refresh-button" class="button secondary small" type="button" aria-label="Reload latest data" data-tooltip="Reload latest data">Refresh</button>
           <button id="bottom-present-button" class="button small" type="button" aria-label="Open fullscreen live results" data-tooltip="Open realtime live results in a browser tab">Live Results</button>
@@ -515,6 +541,21 @@ export function GET() {
         var liveSlideLastSignature = "";
         var liveSlideLastSnapshotAt = 0;
         var liveSlideQueuedSnapshot = null;
+        var actionStates = {};
+        var actionResetTimers = {};
+
+        var actionLabels = {
+          login: { ids: ["login-button"], idle: "Sign in", loading: "Signing in…", success: "Signed in ✓", error: "Sign in" },
+          createEvent: { ids: ["create-event-button"], idle: "Create", loading: "Creating…", success: "Created ✓", error: "Create" },
+          save: { ids: ["save-interaction-button"], idle: "Save", loading: "Saving…", success: "Saved ✓", error: "Save" },
+          goLive: { ids: ["live-toggle-button"], idle: "Go live", loading: "Going live…", success: "Live ✓", error: "Go live" },
+          close: { ids: ["live-toggle-button"], idle: "Close", loading: "Closing…", success: "Closed ✓", error: "Close" },
+          reset: { ids: ["reset-results-button"], idle: "Reset results", loading: "Resetting…", success: "Reset complete ✓", error: "Reset results" },
+          deleteInteraction: { ids: ["delete-interaction-button"], idle: "🗑 Delete Interaction", loading: "Deleting…", success: "Deleted ✓", error: "🗑 Delete Interaction" },
+          addPresentation: { ids: ["generate-slide-button"], idle: "Add to Presentation", loading: "Adding…", success: "Added ✓", error: "Add to Presentation" },
+          presentLive: { ids: ["present-live-button", "bottom-present-button"], idle: "Open Live Results", bottomIdle: "Live Results", loading: "Opening…", success: "Opened ✓", error: "Open Live Results" },
+          refresh: { ids: ["bottom-refresh-button", "bottom-results-button"], idle: "Refresh", resultsIdle: "Results", loading: "Refreshing…", success: "Updated ✓", error: "Refresh" }
+        };
 
         var performanceConfig = {
           realtimePreviewInterval: 1000,
@@ -553,14 +594,81 @@ export function GET() {
         }
 
         function setButtonLoading(id, isLoading, label) {
+          var actionKey = id === "save-interaction-button" ? "save"
+            : id === "live-toggle-button" ? (selectedInteraction && selectedInteraction.status === "live" ? "close" : "goLive")
+            : id === "reset-results-button" ? "reset"
+            : id === "delete-interaction-button" ? "deleteInteraction"
+            : id === "generate-slide-button" ? "addPresentation"
+            : id === "present-live-button" ? "presentLive"
+            : id === "bottom-refresh-button" || id === "bottom-results-button" ? "refresh"
+            : id === "create-event-button" ? "createEvent"
+            : id === "login-button" ? "login"
+            : "";
+          if (actionKey) {
+            setActionState(actionKey, isLoading ? "loading" : "idle", label);
+            return;
+          }
           var button = el(id);
           if (!button) return;
-          if (!button.getAttribute("data-label")) {
-            button.setAttribute("data-label", button.textContent);
-          }
           button.disabled = !!isLoading;
-          button.classList.toggle("loading", !!isLoading);
-          button.textContent = isLoading && label ? label : button.getAttribute("data-label");
+          button.classList.toggle("is-loading", !!isLoading);
+          button.classList.toggle("pressed", !!isLoading);
+          button.setAttribute("aria-busy", isLoading ? "true" : "false");
+          button.setAttribute("aria-disabled", isLoading ? "true" : "false");
+          if (label) button.innerHTML = (isLoading ? '<span class="spinner"></span>' : "") + escapeHtml(label);
+        }
+
+        function actionButtonLabel(config, state, id, message) {
+          if (message) return message;
+          if (state === "loading") return config.loading;
+          if (state === "success") return config.success;
+          if (state === "error") return config.error;
+          if (id === "bottom-present-button" && config.bottomIdle) return config.bottomIdle;
+          if (id === "bottom-results-button" && config.resultsIdle) return config.resultsIdle;
+          return config.idle;
+        }
+
+        function setActionState(actionKey, state, message) {
+          var config = actionLabels[actionKey];
+          if (!config) return;
+          actionStates[actionKey] = state;
+          if (actionResetTimers[actionKey]) {
+            clearTimeout(actionResetTimers[actionKey]);
+            actionResetTimers[actionKey] = null;
+          }
+          config.ids.forEach(function (id) {
+            var button = el(id);
+            if (!button) return;
+            var label = actionButtonLabel(config, state, id, message);
+            button.classList.remove("is-loading", "is-success", "is-error", "pressed");
+            button.classList.toggle("is-loading", state === "loading");
+            button.classList.toggle("is-success", state === "success");
+            button.classList.toggle("is-error", state === "error");
+            button.classList.toggle("pressed", state === "loading");
+            button.disabled = state === "loading";
+            button.setAttribute("aria-busy", state === "loading" ? "true" : "false");
+            button.setAttribute("aria-disabled", state === "loading" ? "true" : "false");
+            button.innerHTML = (state === "loading" ? '<span class="spinner"></span>' : "") + escapeHtml(label);
+          });
+          if (state === "success" || state === "error") {
+            actionResetTimers[actionKey] = setTimeout(function () {
+              setActionState(actionKey, "idle");
+              updateEditorButtons();
+            }, 1800);
+          }
+        }
+
+        function isActionLoading(actionKey) {
+          return actionStates[actionKey] === "loading";
+        }
+
+        function flashEditorCard() {
+          var card = el("interaction-editor");
+          if (!card) return;
+          card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          card.classList.remove("live-flash");
+          void card.offsetWidth;
+          card.classList.add("live-flash");
         }
 
         function showApp() {
@@ -682,7 +790,8 @@ export function GET() {
             setStatus("login-status", "Email and password required.", true);
             return;
           }
-          setButtonLoading("login-button", true, "Signing in");
+          if (isActionLoading("login")) return;
+          setActionState("login", "loading");
           setStatus("login-status", "Signing in...", false);
           request("/api/auth/login", {
             method: "POST",
@@ -691,6 +800,7 @@ export function GET() {
           }).then(function (data) {
             saveSession(data);
             setStatus("login-status", "", false);
+            setActionState("login", "success");
             addDebug("Supabase connected");
             showApp();
             loadEvents();
@@ -699,9 +809,10 @@ export function GET() {
               ? "Network error. Check your internet connection and try again."
               : error.message;
             setStatus("login-status", message, true);
+            setActionState("login", "error");
             addDebug("Login failed: " + error.message);
           }).finally(function () {
-            setButtonLoading("login-button", false);
+            setActionState("login", actionStates.login === "error" ? "error" : actionStates.login);
           });
         }
 
@@ -781,7 +892,8 @@ export function GET() {
             setStatus("app-status", "Enter an event name.", true);
             return;
           }
-          setButtonLoading("create-event-button", true, "Creating");
+          if (isActionLoading("createEvent")) return;
+          setActionState("createEvent", "loading");
           var code = Math.random().toString(36).slice(2, 8).toUpperCase();
           request("/api/events", {
             method: "POST",
@@ -791,12 +903,14 @@ export function GET() {
             selectedEvent = data.event;
             el("event-name").value = "";
             el("create-event-row").classList.add("hidden");
+            setActionState("createEvent", "success");
             setStatus("app-status", "Event created.", false);
             loadEvents();
           }).catch(function (error) {
+            setActionState("createEvent", "error");
             setStatus("app-status", error.message, true);
           }).finally(function () {
-            setButtonLoading("create-event-button", false);
+            renderEvents();
           });
         }
 
@@ -1177,7 +1291,10 @@ export function GET() {
             if (!isAuto) setStatus("app-status", validation, true);
             return;
           }
-          if (!isAuto) setButtonLoading("save-interaction-button", true, "Saving");
+          if (!isAuto) {
+            if (isActionLoading("save")) return;
+            setActionState("save", "loading");
+          }
           var body = selectedInteraction
             ? { id: selectedInteraction.id, title: payload.title, config: payload.config, options: payload.options }
             : { event_id: selectedEvent.id, type: payload.type, title: payload.title, config: payload.config, options: payload.options };
@@ -1188,13 +1305,19 @@ export function GET() {
           }).then(function (data) {
             selectedInteraction = data.interaction;
             el("editor-status").textContent = isAuto ? "Draft saved" : "Saved";
-            setStatus("app-status", isAuto ? "" : "Interaction saved.", false);
+            if (!isAuto) {
+              setActionState("save", "success");
+              setStatus("app-status", "Saved ✓", false);
+            }
             loadInteractions();
             if (callback) callback(data.interaction);
           }).catch(function (error) {
-            if (!isAuto) setStatus("app-status", error.message, true);
+            if (!isAuto) {
+              setActionState("save", "error");
+              setStatus("app-status", error.message || "Unable to complete. Please try again.", true);
+            }
           }).finally(function () {
-            if (!isAuto) setButtonLoading("save-interaction-button", false);
+            if (!isAuto) updateEditorButtons();
           });
         }
 
@@ -1209,18 +1332,20 @@ export function GET() {
 
         function updateEditorButtons() {
           var hasSelected = !!selectedInteraction;
-          el("present-live-button").disabled = !hasSelected;
-          el("generate-slide-button").disabled = !hasSelected;
-          el("live-toggle-button").disabled = !hasSelected;
-          el("reset-results-button").disabled = !hasSelected;
-          el("delete-interaction-button").disabled = !hasSelected;
+          el("present-live-button").disabled = !hasSelected || isActionLoading("presentLive");
+          el("generate-slide-button").disabled = !hasSelected || isActionLoading("addPresentation");
+          el("live-toggle-button").disabled = !hasSelected || isActionLoading("goLive") || isActionLoading("close");
+          el("reset-results-button").disabled = !hasSelected || isActionLoading("reset");
+          el("delete-interaction-button").disabled = !hasSelected || isActionLoading("deleteInteraction");
           if (hasSelected) {
-            el("live-toggle-button").textContent = selectedInteraction.status === "live" ? "Close" : "Go live";
+            if (!isActionLoading("goLive") && !isActionLoading("close") && actionStates.goLive !== "success" && actionStates.close !== "success") {
+              el("live-toggle-button").textContent = selectedInteraction.status === "live" ? "Close" : "Go live";
+            }
             el("live-toggle-button").className = selectedInteraction.status === "live" ? "button secondary small" : "button secondary small";
             el("live-toggle-button").setAttribute("aria-label", selectedInteraction.status === "live" ? "Stop accepting responses" : "Start accepting responses");
             el("live-toggle-button").setAttribute("data-tooltip", selectedInteraction.status === "live" ? "Stop accepting responses" : "Start accepting responses");
           } else {
-            el("live-toggle-button").textContent = "Go live";
+            if (!isActionLoading("goLive") && !isActionLoading("close")) el("live-toggle-button").textContent = "Go live";
             el("live-toggle-button").setAttribute("aria-label", "Start accepting responses");
             el("live-toggle-button").setAttribute("data-tooltip", "Start accepting responses");
           }
@@ -1283,15 +1408,18 @@ export function GET() {
 
         function setInteractionStatus(status) {
           if (!selectedInteraction) return;
-          setButtonLoading("live-toggle-button", true, status === "live" ? "Starting" : "Closing");
+          var actionKey = status === "live" ? "goLive" : "close";
+          if (isActionLoading(actionKey)) return;
+          setActionState(actionKey, "loading");
           patchInteractionStatus(status).then(function (data) {
               applyInteractionStatusResult(data, status);
               selectedInteraction = data.interaction;
-              setStatus("app-status", status === "live" ? "Interaction is live." : "Interaction closed.", false);
+              setActionState(actionKey, "success");
+              setStatus("app-status", status === "live" ? "Live result is now active." : "Interaction closed.", false);
             }).catch(function (error) {
-              setStatus("app-status", error.message, true);
+              setActionState(actionKey, "error");
+              setStatus("app-status", error.message || "Unable to complete. Please try again.", true);
             }).finally(function () {
-              setButtonLoading("live-toggle-button", false);
               updateEditorButtons();
             });
         }
@@ -1304,17 +1432,20 @@ export function GET() {
         function resetResults() {
           if (!selectedInteraction) return;
           if (!confirm("Reset all participant responses for this interaction? This keeps the question, options, settings, and event.")) return;
-          setButtonLoading("reset-results-button", true, "Resetting");
+          if (isActionLoading("reset")) return;
+          setActionState("reset", "loading");
           request("/api/responses?interaction_id=" + encodeURIComponent(selectedInteraction.id), {
             method: "DELETE"
           }).then(function (data) {
             addDebug("Reset results: interaction_id=" + (data.interaction_id || selectedInteraction.id) + ", responses_deleted=" + (data.responses_deleted || 0) + ", timestamp=" + (data.timestamp || new Date().toISOString()));
-            setStatus("app-status", data.message || "Results cleared successfully.", false);
+            setActionState("reset", "success");
+            setStatus("app-status", "Results reset.", false);
             loadResults(selectedInteraction.id);
           }).catch(function (error) {
-            setStatus("app-status", error.message, true);
+            setActionState("reset", "error");
+            setStatus("app-status", error.message || "Unable to complete. Please try again.", true);
           }).finally(function () {
-            setButtonLoading("reset-results-button", false);
+            updateEditorButtons();
           });
         }
 
@@ -1327,7 +1458,8 @@ export function GET() {
           if (!confirm("Delete Interaction?\\n\\nAre you sure you want to delete this interaction?\\n\\nThis action cannot be undone.")) {
             return;
           }
-          setButtonLoading("delete-interaction-button", true, "Deleting");
+          if (isActionLoading("deleteInteraction")) return;
+          setActionState("deleteInteraction", "loading");
           request("/api/interactions?id=" + encodeURIComponent(target.id) + "&confirm_live=true", {
             method: "DELETE"
           }).then(function (data) {
@@ -1341,11 +1473,12 @@ export function GET() {
             }
             renderInteractions();
             updateEditorButtons();
-            setStatus("app-status", data.message || "Interaction deleted successfully.", false);
+            setActionState("deleteInteraction", "success");
+            setStatus("app-status", "Interaction deleted.", false);
           }).catch(function (error) {
-            setStatus("app-status", error.message, true);
+            setActionState("deleteInteraction", "error");
+            setStatus("app-status", error.message || "Unable to complete. Please try again.", true);
           }).finally(function () {
-            setButtonLoading("delete-interaction-button", false);
             updateEditorButtons();
           });
         }
@@ -1356,11 +1489,21 @@ export function GET() {
         }
 
         function presentLive() {
+          if (isActionLoading("presentLive")) return;
+          if (selectedEvent && editorTemplate) {
+            var validation = validateEditor(collectEditorPayload());
+            if (validation) {
+              setStatus("app-status", validation, true);
+              return;
+            }
+          }
+          setActionState("presentLive", "loading");
           saveEditor(false, function () {
             ensureInteractionLive(selectedInteraction).then(function () {
               openPresenterWindow();
             }).catch(function (error) {
-              setStatus("app-status", error.message, true);
+              setActionState("presentLive", "error");
+              setStatus("app-status", error.message || "Unable to complete. Please try again.", true);
             });
           });
         }
@@ -1386,8 +1529,10 @@ export function GET() {
             } else {
               window.open(url, "_blank", "noopener,noreferrer");
             }
+            setActionState("presentLive", "success");
             setStatus("app-status", "Live presenter opened.", false);
           } catch (error) {
+            setActionState("presentLive", "error");
             setStatus("app-status", "Unable to open live presenter: " + (error && error.message ? error.message : "unknown error"), true);
           }
         }
@@ -1396,7 +1541,7 @@ export function GET() {
           if (!selectedEvent || !interaction) return;
           presentOptions = presentOptions || {};
           if (!presentOptions.silent) {
-            setButtonLoading("generate-slide-button", true, "Creating slide");
+            setActionState("addPresentation", "loading", "Preparing slide…");
             setStatus("app-status", "Creating PowerPoint slide...", false);
           }
           if (!presentOptions.silent) {
@@ -1410,9 +1555,25 @@ export function GET() {
             return !!option.option_text;
           });
           if (!presentOptions.silent) addDebug("Options: " + slideOptions.length);
+          if (!presentOptions.silent) setActionState("addPresentation", "loading", "Adding to presentation…");
           return insertInteractionSlide(interaction, slideOptions, { results: [], total_responses: 0 }, false)
-            .finally(function () {
-              if (!presentOptions.silent) setButtonLoading("generate-slide-button", false);
+            .then(function (inserted) {
+              if (!presentOptions.silent && inserted !== false) {
+                setActionState("addPresentation", "success");
+                setStatus("app-status", "Slide added to presentation.", false);
+                flashEditorCard();
+              } else if (!presentOptions.silent) {
+                setActionState("addPresentation", "error");
+              }
+              return inserted;
+            }).catch(function (error) {
+              if (!presentOptions.silent) {
+                setActionState("addPresentation", "error");
+                setStatus("app-status", error.message || "Unable to complete. Please try again.", true);
+              }
+              throw error;
+            }).finally(function () {
+              if (!presentOptions.silent) updateEditorButtons();
             });
         }
 
@@ -1939,6 +2100,19 @@ export function GET() {
             });
         }
 
+        function refreshTaskpaneData(loadResultToo) {
+          if (isActionLoading("refresh")) return;
+          setActionState("refresh", "loading");
+          setStatus("app-status", "Refreshing...", false);
+          loadEvents();
+          if (selectedEvent) loadInteractions();
+          if (loadResultToo && selectedInteraction) loadResults(selectedInteraction.id);
+          setTimeout(function () {
+            setActionState("refresh", "success");
+            setStatus("app-status", "Updated ✓", false);
+          }, 350);
+        }
+
         function loadQaResults(interactionId, archived) {
           var url = "/api/qa?interaction_id=" + encodeURIComponent(interactionId) + "&sort=popular&archived=" + (archived ? "true" : "false");
           request(url, { cache: "no-store" })
@@ -2092,10 +2266,20 @@ export function GET() {
           };
           el("save-interaction-button").onclick = function () { saveEditor(false); };
           el("generate-slide-button").onclick = function () {
+            if (isActionLoading("addPresentation")) return;
+            if (selectedEvent && editorTemplate) {
+              var validation = validateEditor(collectEditorPayload());
+              if (validation) {
+                setStatus("app-status", validation, true);
+                return;
+              }
+            }
+            setActionState("addPresentation", "loading", "Preparing slide…");
             saveEditor(false, function (interaction) {
               ensureInteractionLive(interaction).then(function (liveInteraction) {
                 presentInteraction(liveInteraction);
               }).catch(function (error) {
+                setActionState("addPresentation", "error");
                 setStatus("app-status", error.message, true);
               });
             });
@@ -2104,11 +2288,10 @@ export function GET() {
           el("live-toggle-button").onclick = toggleLiveStatus;
           el("reset-results-button").onclick = resetResults;
           el("delete-interaction-button").onclick = function () { deleteInteraction(selectedInteraction); };
-          el("bottom-refresh-button").onclick = loadEvents;
+          el("bottom-refresh-button").onclick = function () { refreshTaskpaneData(false); };
           el("bottom-present-button").onclick = presentLive;
           el("bottom-results-button").onclick = function () {
-            if (selectedEvent) loadInteractions();
-            if (selectedInteraction) loadResults(selectedInteraction.id);
+            refreshTaskpaneData(true);
           };
         }
 
