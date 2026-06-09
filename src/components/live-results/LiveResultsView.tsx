@@ -65,6 +65,70 @@ type CloudWord = {
   isNewest: boolean;
 };
 
+function stableNormalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableNormalize);
+  if (value && typeof value === 'object') {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = stableNormalize((value as Record<string, unknown>)[key]);
+        return acc;
+      }, {});
+  }
+  return value;
+}
+
+function stableSignature(value: unknown) {
+  return JSON.stringify(stableNormalize(value));
+}
+
+function responseSignature(rows: JoinedResponse[]) {
+  return stableSignature(
+    rows
+      .map(response => ({
+        id: response.id,
+        option_id: response.option_id || null,
+        text_value: response.text_value || null,
+        rating_value: response.rating_value || null,
+        submitted_at: response.submitted_at,
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id))
+  );
+}
+
+function questionSignature(rows: JoinedQuestion[]) {
+  return stableSignature(
+    rows
+      .map(question => ({
+        id: question.id,
+        text: question.question_text,
+        pinned: !!question.is_pinned,
+        hidden: !!question.is_hidden,
+        created_at: question.created_at,
+        upvotes: (question.qa_upvotes || [])
+          .map(upvote => `${upvote.id}:${upvote.participant_id || ''}`)
+          .sort(),
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id))
+  );
+}
+
+function resultPayloadSignature(payload: ResultPayload | null) {
+  if (!payload) return 'null';
+  return stableSignature({
+    interaction_id: payload.interaction?.id || null,
+    hidden: !!payload.hidden,
+    total_responses: payload.total_responses || 0,
+    results: payload.results || null,
+    interaction_options: payload.interaction?.interaction_options?.map(option => ({
+      id: option.id,
+      option_text: option.option_text,
+      is_correct: option.is_correct,
+      position: option.position,
+    })) || [],
+  });
+}
+
 type PlacedCloudWord = CloudWord & {
   x: number;
   y: number;
@@ -99,6 +163,10 @@ function normalizeInteractionType(type?: string | null) {
 
 function isQaInteraction(interaction?: LiveInteraction | null) {
   return normalizeInteractionType(interaction?.type) === 'qa';
+}
+
+function isWordCloudInteraction(interaction?: LiveInteraction | null) {
+  return normalizeInteractionType(interaction?.type) === 'word_cloud';
 }
 
 function interactionLabel(interaction?: LiveInteraction | null) {
@@ -600,7 +668,7 @@ function LiveResultFrame({
         <div className="min-h-0 animate-[qrSlideIn_500ms_ease-out] overflow-hidden">
           <EventQRCode event={event} variant={presentationMode ? 'dark' : 'light'} compact={!presentationMode} presentation={presentationMode} />
         </div>
-        <div key={layoutKey} className="flex min-w-0 min-h-0 flex-col overflow-hidden">
+        <div className="flex min-w-0 min-h-0 flex-col overflow-hidden">
           <div className="min-h-0 flex-1 overflow-hidden">
             {children}
           </div>
@@ -767,6 +835,8 @@ function FullscreenPresentation({
   const [fullscreenResponses, setFullscreenResponses] = useState<JoinedResponse[]>([]);
   const [fullscreenFallbackWords, setFullscreenFallbackWords] = useState<any[]>([]);
   const [fullscreenTick, setFullscreenTick] = useState(0);
+  const fullscreenResponsesSignatureRef = useRef('');
+  const fullscreenFallbackSignatureRef = useRef('');
   const isDark = theme === 'dark';
 
   const loadFullscreenData = useCallback(async () => {
@@ -783,10 +853,21 @@ function FullscreenPresentation({
     const nextFallbackWords = Array.isArray(resultData?.results) ? resultData.results : [];
 
     if (resultResponse.ok) {
-      setFullscreenFallbackWords(nextFallbackWords);
+      const nextFallbackSignature = stableSignature(nextFallbackWords);
+      if (nextFallbackSignature !== fullscreenFallbackSignatureRef.current) {
+        fullscreenFallbackSignatureRef.current = nextFallbackSignature;
+        setFullscreenFallbackWords(nextFallbackWords);
+        setFullscreenTick(value => value + 1);
+      }
     }
 
-    setFullscreenResponses((responseResult.data || []) as JoinedResponse[]);
+    const nextResponses = (responseResult.data || []) as JoinedResponse[];
+    const nextResponseSignature = responseSignature(nextResponses);
+    if (nextResponseSignature !== fullscreenResponsesSignatureRef.current) {
+      fullscreenResponsesSignatureRef.current = nextResponseSignature;
+      setFullscreenResponses(nextResponses);
+      setFullscreenTick(value => value + 1);
+    }
 
     if (responseResult.error) {
       console.error('[SlideEngage] Unable to load fullscreen responses', responseResult.error.message);
@@ -796,11 +877,6 @@ function FullscreenPresentation({
   useEffect(() => {
     loadFullscreenData();
   }, [loadFullscreenData]);
-
-  useEffect(() => {
-    const interval = window.setInterval(() => setFullscreenTick(value => value + 1), 3000);
-    return () => window.clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     const channel = supabase
@@ -827,7 +903,6 @@ function FullscreenPresentation({
     [fullscreenFallbackWords, fullscreenResponses, fullscreenTick]
   );
   const fullscreenCloudWords = cloudWords.length ? cloudWords : fetchedCloudWords;
-  const wordCloudKey = `${interaction.id}-${fullscreenCloudWords.map(word => `${word.id}:${word.count}`).join('|')}-${theme}`;
 
   useEffect(() => {
     console.log('[SlideEngage] Fullscreen word cloud data', {
@@ -919,7 +994,6 @@ function FullscreenPresentation({
             <EventQRCode event={event} variant={theme} presentation />
           </div>
           <AnimatedWordCloud
-            key={wordCloudKey}
             cloudWords={fullscreenCloudWords}
             presentationMode
             theme={theme}
@@ -973,6 +1047,10 @@ export default function LiveResultsView({
   const [layoutTick, setLayoutTick] = useState(0);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const taskbarHideTimerRef = useRef<number | null>(null);
+  const payloadSignatureRef = useRef('');
+  const responsesSignatureRef = useRef('');
+  const questionsSignatureRef = useRef('');
+  const resultsRefreshTimerRef = useRef<number | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -1053,7 +1131,13 @@ export default function LiveResultsView({
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
-      setQuestions((data || []) as JoinedQuestion[]);
+      const nextQuestions = (data || []) as JoinedQuestion[];
+      const nextSignature = questionSignature(nextQuestions);
+      if (nextSignature !== questionsSignatureRef.current) {
+        questionsSignatureRef.current = nextSignature;
+        setQuestions(nextQuestions);
+      }
+      return nextQuestions;
     },
     [supabase]
   );
@@ -1071,7 +1155,14 @@ export default function LiveResultsView({
         .eq('interaction_id', interactionId)
         .order('submitted_at', { ascending: true });
 
-      setResponses((data || []) as JoinedResponse[]);
+      const nextResponses = (data || []) as JoinedResponse[];
+      const nextSignature = responseSignature(nextResponses);
+      if (nextSignature !== responsesSignatureRef.current) {
+        responsesSignatureRef.current = nextSignature;
+        setResponses(nextResponses);
+        setWordCloudTick(value => value + 1);
+      }
+      return nextResponses;
     },
     [supabase]
   );
@@ -1080,13 +1171,22 @@ export default function LiveResultsView({
     async (interaction: LiveInteraction | null) => {
       if (!interaction) {
         setResultsLoading(false);
-        setPayload(null);
-        setResponses([]);
-        setQuestions([]);
+        if (payloadSignatureRef.current !== 'null') {
+          payloadSignatureRef.current = 'null';
+          setPayload(null);
+        }
+        if (responsesSignatureRef.current !== '[]') {
+          responsesSignatureRef.current = '[]';
+          setResponses([]);
+        }
+        if (questionsSignatureRef.current !== '[]') {
+          questionsSignatureRef.current = '[]';
+          setQuestions([]);
+        }
         return;
       }
 
-      setResultsLoading(true);
+      if (!payloadSignatureRef.current) setResultsLoading(true);
       try {
         const [resultResponse] = await Promise.all([
           fetch(`/api/results?interaction_id=${interaction.id}`, { cache: 'no-store' }),
@@ -1097,11 +1197,20 @@ export default function LiveResultsView({
         if (!resultResponse.ok) {
           const data = await resultResponse.json().catch(() => ({}));
           setError(data.error || 'Unable to load live results.');
-          setPayload(null);
+          if (payloadSignatureRef.current !== 'null') {
+            payloadSignatureRef.current = 'null';
+            setPayload(null);
+          }
           return;
         }
 
-        setPayload(await resultResponse.json());
+        const nextPayload = (await resultResponse.json()) as ResultPayload;
+        const nextSignature = resultPayloadSignature(nextPayload);
+        if (nextSignature !== payloadSignatureRef.current) {
+          payloadSignatureRef.current = nextSignature;
+          setPayload(nextPayload);
+          if (isWordCloudInteraction(interaction)) setWordCloudTick(value => value + 1);
+        }
       } finally {
         setResultsLoading(false);
       }
@@ -1203,6 +1312,20 @@ export default function LiveResultsView({
     [activeInteraction, event?.id, loadResults, qaVoterId]
   );
 
+  const queueResultsRefresh = useCallback(
+    (interaction: LiveInteraction | null = activeInteraction) => {
+      if (!interaction) return;
+      if (resultsRefreshTimerRef.current) {
+        window.clearTimeout(resultsRefreshTimerRef.current);
+      }
+      resultsRefreshTimerRef.current = window.setTimeout(() => {
+        resultsRefreshTimerRef.current = null;
+        loadResults(interaction);
+      }, 650);
+    },
+    [activeInteraction, loadResults]
+  );
+
   useEffect(() => {
     resolveEvent();
   }, [resolveEvent]);
@@ -1242,12 +1365,12 @@ export default function LiveResultsView({
       )
       .on('broadcast', { event: 'response_inserted' }, payload => {
         if (!activeInteraction || payload.payload?.interaction_id === activeInteraction.id) {
-          loadResults(activeInteraction);
+          queueResultsRefresh(activeInteraction);
         }
       })
       .on('broadcast', { event: 'qa_changed' }, payload => {
         if (!activeInteraction || payload.payload?.interaction_id === activeInteraction.id) {
-          loadResults(activeInteraction);
+          queueResultsRefresh(activeInteraction);
         }
       })
       .subscribe();
@@ -1255,7 +1378,7 @@ export default function LiveResultsView({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activeInteraction, event?.id, loadLiveInteractions, loadResults, supabase]);
+  }, [activeInteraction, event?.id, loadLiveInteractions, queueResultsRefresh, supabase]);
 
   useEffect(() => {
     if (!activeInteraction?.id) return;
@@ -1265,24 +1388,24 @@ export default function LiveResultsView({
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'responses', filter: `interaction_id=eq.${activeInteraction.id}` },
-        () => loadResults(activeInteraction)
+        () => queueResultsRefresh(activeInteraction)
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'qa_questions', filter: `interaction_id=eq.${activeInteraction.id}` },
-        () => loadResults(activeInteraction)
+        () => queueResultsRefresh(activeInteraction)
       )
       .on('postgres_changes', { event: '*', schema: 'public', table: 'qa_upvotes' }, () =>
-        isQaInteraction(activeInteraction) ? loadResults(activeInteraction) : undefined
+        isQaInteraction(activeInteraction) ? queueResultsRefresh(activeInteraction) : undefined
       )
       .on('broadcast', { event: 'response_inserted' }, payload => {
         if (payload.payload?.interaction_id === activeInteraction.id) {
-          loadResults(activeInteraction);
+          queueResultsRefresh(activeInteraction);
         }
       })
       .on('broadcast', { event: 'qa_changed' }, payload => {
         if (payload.payload?.interaction_id === activeInteraction.id) {
-          loadResults(activeInteraction);
+          queueResultsRefresh(activeInteraction);
         }
       })
       .subscribe();
@@ -1290,17 +1413,20 @@ export default function LiveResultsView({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activeInteraction, loadResults, supabase]);
+  }, [activeInteraction, queueResultsRefresh, supabase]);
 
   useEffect(() => {
     if (!activeInteraction?.id) return;
-    const interval = window.setInterval(() => loadResults(activeInteraction), 2500);
+    const interval = window.setInterval(() => loadResults(activeInteraction), 15000);
     return () => window.clearInterval(interval);
   }, [activeInteraction, loadResults]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => setWordCloudTick(value => value + 1), 3000);
-    return () => window.clearInterval(interval);
+    return () => {
+      if (resultsRefreshTimerRef.current) {
+        window.clearTimeout(resultsRefreshTimerRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -1743,6 +1869,7 @@ function renderResultContent({
           })
       : apiResults;
     const correct = chartData.find((option: any) => option.is_correct);
+    const maxVoteCount = Math.max(1, ...chartData.map((option: any) => Number(option.count || 0)));
 
     return (
       <LiveResultFrame event={event} presentationMode={presentationMode} layoutKey={layoutKey}>
@@ -1762,7 +1889,7 @@ function renderResultContent({
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 24, top: 6, bottom: 6 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+                  <XAxis type="number" allowDecimals={false} domain={[0, maxVoteCount]} tick={{ fontSize: 12 }} />
                   <YAxis
                     dataKey="option_text"
                     type="category"
@@ -1771,7 +1898,7 @@ function renderResultContent({
                     tickFormatter={(value: string) => compactTitle(value, 'Option').slice(0, 20)}
                   />
                   <Tooltip />
-                  <Bar dataKey="count" radius={[0, 8, 8, 0]}>
+                  <Bar dataKey="count" radius={[0, 8, 8, 0]} isAnimationActive={false}>
                     {chartData.map((entry: any, index: number) => (
                       <Cell key={entry.option_id || index} fill={entry.is_correct ? '#16833A' : chartColors[index % chartColors.length]} />
                     ))}
