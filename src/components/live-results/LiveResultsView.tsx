@@ -39,8 +39,10 @@ type JoinedResponse = {
 type JoinedQuestion = {
   id: string;
   question_text: string;
+  status?: 'active' | 'answered' | string | null;
   is_pinned: boolean;
   is_hidden?: boolean;
+  answered_at?: string | null;
   deleted_at?: string | null;
   deleted_by?: string | null;
   created_at: string;
@@ -106,6 +108,9 @@ function questionSignature(rows: JoinedQuestion[]) {
         text: question.question_text,
         pinned: !!question.is_pinned,
         hidden: !!question.is_hidden,
+        status: question.status || 'active',
+        answered_at: question.answered_at || null,
+        deleted_at: question.deleted_at || null,
         created_at: question.created_at,
         upvotes: (question.qa_upvotes || [])
           .map(upvote => `${upvote.id}:${upvote.participant_id || ''}`)
@@ -1136,12 +1141,15 @@ export default function LiveResultsView({
         .order('created_at', { ascending: false });
 
       const nextQuestions = (data || []) as JoinedQuestion[];
-      const nextSignature = questionSignature(nextQuestions);
+      const activeQuestions = nextQuestions.filter(question => {
+        return question.status !== 'answered' && !question.answered_at && !question.deleted_at && !question.is_hidden;
+      });
+      const nextSignature = questionSignature(activeQuestions);
       if (nextSignature !== questionsSignatureRef.current) {
         questionsSignatureRef.current = nextSignature;
-        setQuestions(nextQuestions);
+        setQuestions(activeQuestions);
       }
-      return nextQuestions;
+      return activeQuestions;
     },
     [supabase]
   );
@@ -1150,9 +1158,10 @@ export default function LiveResultsView({
     async (interactionId: string) => {
       const { data } = await supabase
         .from('qa_questions')
-        .select('id, deleted_at, created_at')
+        .select('id, status, answered_at, deleted_at, created_at')
         .eq('interaction_id', interactionId)
-        .eq('is_hidden', true)
+        .or('status.eq.answered,answered_at.not.is.null,is_hidden.eq.true')
+        .order('answered_at', { ascending: false, nullsFirst: false })
         .order('deleted_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .limit(1);
@@ -1264,12 +1273,13 @@ export default function LiveResultsView({
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setError(data.error || 'Unable to update question.');
-        return;
+        return false;
       }
 
       if (activeInteraction) {
         await loadResults(activeInteraction);
       }
+      return true;
     },
     [activeInteraction, loadResults]
   );
@@ -1287,17 +1297,28 @@ export default function LiveResultsView({
 
   const handleMarkQuestionAnswered = useCallback(
     async (question: JoinedQuestion) => {
+      const answeredAt = new Date().toISOString();
       setQuestions(current => current.filter(item => item.id !== question.id));
       setHasRestorableQuestion(true);
       restorableSignatureRef.current = stableSignature({
         id: question.id,
-        deleted_at: new Date().toISOString(),
+        status: 'answered',
+        answered_at: answeredAt,
+        deleted_at: answeredAt,
         created_at: question.created_at,
       });
       setQaRestoreMessage('Question marked as answered.');
-      await updateQuestion(question.id, { is_hidden: true, deleted_by: 'answered' });
+      const updated = await updateQuestion(question.id, {
+        status: 'answered',
+        answered_at: answeredAt,
+        is_hidden: true,
+        deleted_by: 'answered',
+      });
+      if (!updated && activeInteraction) {
+        await loadResults(activeInteraction);
+      }
     },
-    [updateQuestion]
+    [activeInteraction, loadResults, updateQuestion]
   );
 
   const handleRestoreLastQuestion = useCallback(async () => {
@@ -2020,7 +2041,9 @@ function renderResultContent({
   }
 
   if (isQaInteraction(interaction)) {
-    const visibleQuestions = questions.filter(question => !question.is_hidden);
+    const visibleQuestions = questions.filter(question => {
+      return !question.is_hidden && !question.deleted_at && !question.answered_at && question.status !== 'answered';
+    });
     const sortedQuestions = [...visibleQuestions].sort((a, b) => {
       if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
       if (qaSort === 'popular') {

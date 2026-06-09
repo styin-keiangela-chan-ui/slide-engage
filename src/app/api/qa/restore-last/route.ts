@@ -33,7 +33,8 @@ export async function POST(req: NextRequest) {
       .from('qa_questions')
       .select('*')
       .eq('interaction_id', interaction_id)
-      .eq('is_hidden', true)
+      .or('status.eq.answered,answered_at.not.is.null,is_hidden.eq.true')
+      .order('answered_at', { ascending: false, nullsFirst: false })
       .order('deleted_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(1);
@@ -50,12 +51,14 @@ export async function POST(req: NextRequest) {
     const { data: restored, error: restoreError } = await supabase
       .from('qa_questions')
       .update({
+        status: 'active',
+        answered_at: null,
         is_hidden: false,
         deleted_at: null,
         deleted_by: null,
       })
       .eq('id', question.id)
-      .select('*, participants(display_name), qa_upvotes(id)')
+      .select('*, participants(display_name), qa_upvotes(id, participant_id)')
       .single();
 
     if (restoreError) {
@@ -63,7 +66,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      message: 'Question restored successfully.',
+      message: 'Question restored.',
       question: restored,
     });
   } catch (error: any) {

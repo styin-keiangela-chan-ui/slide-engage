@@ -68,7 +68,11 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const enriched = (questions || []).map(q => ({
+  const filteredQuestions = archived
+    ? (questions || []).filter(q => q.status === 'answered' || q.answered_at || q.is_hidden)
+    : (questions || []).filter(q => q.status !== 'answered' && !q.answered_at && !q.deleted_at && !q.is_hidden);
+
+  const enriched = filteredQuestions.map(q => ({
     ...q,
     upvote_count: upvoteCounts[q.id] || 0,
     has_upvoted: userUpvotes.has(q.id),
@@ -134,7 +138,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, participant_id, deleted_by, question_text, is_pinned, is_hidden, ai_answer } = body;
+    const { id, participant_id, deleted_by, question_text, is_pinned, is_hidden, ai_answer, status, answered_at } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Question id required' }, { status: 400 });
@@ -147,10 +151,31 @@ export async function PATCH(req: NextRequest) {
       updates.question_text = text;
     }
     if (typeof is_pinned === 'boolean') updates.is_pinned = is_pinned;
+    if (status === 'answered') {
+      updates.status = 'answered';
+      updates.answered_at = answered_at || new Date().toISOString();
+      updates.is_hidden = true;
+      updates.deleted_at = updates.answered_at;
+      updates.deleted_by = String(deleted_by || participant_id || 'answered');
+      updates.is_pinned = false;
+    } else if (status === 'active') {
+      updates.status = 'active';
+      updates.answered_at = null;
+      updates.is_hidden = false;
+      updates.deleted_at = null;
+      updates.deleted_by = null;
+    }
     if (typeof is_hidden === 'boolean') {
       updates.is_hidden = is_hidden;
       updates.deleted_at = is_hidden ? new Date().toISOString() : null;
       updates.deleted_by = is_hidden ? String(deleted_by || participant_id || 'lecturer') : null;
+      if (is_hidden && !updates.status) {
+        updates.status = deleted_by === 'answered' ? 'answered' : 'active';
+        if (deleted_by === 'answered') updates.answered_at = updates.deleted_at;
+      } else if (!is_hidden && !updates.status) {
+        updates.status = 'active';
+        updates.answered_at = null;
+      }
     }
     if (typeof ai_answer === 'string' || ai_answer === null) updates.ai_answer = ai_answer;
 
