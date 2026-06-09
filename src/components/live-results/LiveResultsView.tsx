@@ -41,6 +41,8 @@ type JoinedQuestion = {
   question_text: string;
   is_pinned: boolean;
   is_hidden?: boolean;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
   created_at: string;
   participants?: { display_name?: string | null } | null;
   qa_upvotes?: { id: string; participant_id?: string | null }[];
@@ -1037,6 +1039,7 @@ export default function LiveResultsView({
   const [questions, setQuestions] = useState<JoinedQuestion[]>([]);
   const [qaSort, setQaSort] = useState<'recent' | 'popular'>('recent');
   const [qaRestoreMessage, setQaRestoreMessage] = useState('');
+  const [hasRestorableQuestion, setHasRestorableQuestion] = useState(false);
   const [restoredQuestionId, setRestoredQuestionId] = useState<string | null>(null);
   const [qaVoterId, setQaVoterId] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(eventCode && !initialEvent));
@@ -1050,6 +1053,7 @@ export default function LiveResultsView({
   const payloadSignatureRef = useRef('');
   const responsesSignatureRef = useRef('');
   const questionsSignatureRef = useRef('');
+  const restorableSignatureRef = useRef('');
   const resultsRefreshTimerRef = useRef<number | null>(null);
   const [error, setError] = useState('');
 
@@ -1142,6 +1146,28 @@ export default function LiveResultsView({
     [supabase]
   );
 
+  const loadRestorableQuestionState = useCallback(
+    async (interactionId: string) => {
+      const { data } = await supabase
+        .from('qa_questions')
+        .select('id, deleted_at, created_at')
+        .eq('interaction_id', interactionId)
+        .eq('is_hidden', true)
+        .order('deleted_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const latest = data?.[0] || null;
+      const nextSignature = stableSignature(latest || null);
+      if (nextSignature !== restorableSignatureRef.current) {
+        restorableSignatureRef.current = nextSignature;
+        setHasRestorableQuestion(Boolean(latest));
+      }
+      return Boolean(latest);
+    },
+    [supabase]
+  );
+
   useEffect(() => {
     if (!event?.id || typeof window === 'undefined') return;
     setQaVoterId(window.localStorage.getItem(`slideengage_qa_voter_${event.id}`));
@@ -1183,15 +1209,24 @@ export default function LiveResultsView({
           questionsSignatureRef.current = '[]';
           setQuestions([]);
         }
+        if (restorableSignatureRef.current !== 'null') {
+          restorableSignatureRef.current = 'null';
+          setHasRestorableQuestion(false);
+        }
         return;
       }
 
       if (!payloadSignatureRef.current) setResultsLoading(true);
       try {
+        if (!isQaInteraction(interaction) && hasRestorableQuestion) {
+          restorableSignatureRef.current = 'null';
+          setHasRestorableQuestion(false);
+        }
         const [resultResponse] = await Promise.all([
           fetch(`/api/results?interaction_id=${interaction.id}`, { cache: 'no-store' }),
           loadResponses(interaction.id),
           isQaInteraction(interaction) ? loadQuestions(interaction.id) : Promise.resolve(),
+          isQaInteraction(interaction) ? loadRestorableQuestionState(interaction.id) : Promise.resolve(),
         ]);
 
         if (!resultResponse.ok) {
@@ -1215,7 +1250,7 @@ export default function LiveResultsView({
         setResultsLoading(false);
       }
     },
-    [loadQuestions, loadResponses]
+    [hasRestorableQuestion, loadQuestions, loadResponses, loadRestorableQuestionState]
   );
 
   const updateQuestion = useCallback(
@@ -1253,6 +1288,12 @@ export default function LiveResultsView({
   const handleMarkQuestionAnswered = useCallback(
     async (question: JoinedQuestion) => {
       setQuestions(current => current.filter(item => item.id !== question.id));
+      setHasRestorableQuestion(true);
+      restorableSignatureRef.current = stableSignature({
+        id: question.id,
+        deleted_at: new Date().toISOString(),
+        created_at: question.created_at,
+      });
       setQaRestoreMessage('Question marked as answered.');
       await updateQuestion(question.id, { is_hidden: true, deleted_by: 'answered' });
     },
@@ -1270,15 +1311,18 @@ export default function LiveResultsView({
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
+      setHasRestorableQuestion(false);
+      restorableSignatureRef.current = 'null';
       setQaRestoreMessage(data.error || 'No question available to restore.');
       return;
     }
 
-    setQaRestoreMessage(data.message || 'Question restored successfully.');
+    setQaRestoreMessage('Question restored.');
     setRestoredQuestionId(data.question?.id || null);
     await loadResults(activeInteraction);
+    await loadRestorableQuestionState(activeInteraction.id);
     window.setTimeout(() => setRestoredQuestionId(null), 2200);
-  }, [activeInteraction, loadResults]);
+  }, [activeInteraction, loadResults, loadRestorableQuestionState]);
 
   const handleToggleQuestionLike = useCallback(
     async (question: JoinedQuestion) => {
@@ -1582,6 +1626,7 @@ export default function LiveResultsView({
     layoutKey: `${activeInteraction?.id || 'none'}-${layoutTick}`,
     qaSort,
     qaRestoreMessage,
+    hasRestorableQuestion,
     restoredQuestionId,
     onQaSortChange: setQaSort,
     onToggleQuestionHighlight: handleToggleQuestionHighlight,
@@ -1787,6 +1832,7 @@ function renderResultContent({
   layoutKey,
   qaSort,
   qaRestoreMessage,
+  hasRestorableQuestion,
   restoredQuestionId,
   onQaSortChange,
   onToggleQuestionHighlight,
@@ -1806,6 +1852,7 @@ function renderResultContent({
   layoutKey: string;
   qaSort: 'recent' | 'popular';
   qaRestoreMessage: string;
+  hasRestorableQuestion: boolean;
   restoredQuestionId: string | null;
   onQaSortChange: (sort: 'recent' | 'popular') => void;
   onToggleQuestionHighlight: (question: JoinedQuestion) => void;
@@ -2017,15 +2064,17 @@ function renderResultContent({
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={onRestoreLastQuestion}
-                title="Restore last removed question"
-                aria-label="Restore last removed question"
-                className="rounded-full border border-[#BFE5CB] bg-white px-3 py-1.5 text-xs font-black text-[#16833A] shadow-sm transition hover:bg-[#F0FFF6]"
-              >
-                ↺ Restore Last Question
-              </button>
+              {hasRestorableQuestion && (
+                <button
+                  type="button"
+                  onClick={onRestoreLastQuestion}
+                  title="Restore last removed question"
+                  aria-label="Restore last removed question"
+                  className="rounded-full border border-[#BFE5CB] bg-white px-3 py-1.5 text-xs font-black text-[#16833A] shadow-sm transition hover:bg-[#F0FFF6]"
+                >
+                  ↺ Restore Last Question
+                </button>
+              )}
             </div>
             {qaRestoreMessage && (
               <div className="basis-full rounded-[10px] border border-[#DCE7E1] bg-[#F6F8F7] px-3 py-2 text-xs font-bold text-[#526173]">
