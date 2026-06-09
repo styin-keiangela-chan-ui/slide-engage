@@ -43,7 +43,7 @@ type JoinedQuestion = {
   is_hidden?: boolean;
   created_at: string;
   participants?: { display_name?: string | null } | null;
-  qa_upvotes?: { id: string }[];
+  qa_upvotes?: { id: string; participant_id?: string | null }[];
 };
 
 type Props = {
@@ -964,6 +964,7 @@ export default function LiveResultsView({
   const [qaSort, setQaSort] = useState<'recent' | 'popular'>('recent');
   const [qaRestoreMessage, setQaRestoreMessage] = useState('');
   const [restoredQuestionId, setRestoredQuestionId] = useState<string | null>(null);
+  const [qaVoterId, setQaVoterId] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(eventCode && !initialEvent));
   const [resultsLoading, setResultsLoading] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1046,7 +1047,7 @@ export default function LiveResultsView({
     async (interactionId: string) => {
       const { data } = await supabase
         .from('qa_questions')
-        .select('*, participants(display_name), qa_upvotes(id)')
+        .select('*, participants(display_name), qa_upvotes(id, participant_id)')
         .eq('interaction_id', interactionId)
         .eq('is_hidden', false)
         .order('is_pinned', { ascending: false })
@@ -1056,6 +1057,11 @@ export default function LiveResultsView({
     },
     [supabase]
   );
+
+  useEffect(() => {
+    if (!event?.id || typeof window === 'undefined') return;
+    setQaVoterId(window.localStorage.getItem(`slideengage_qa_voter_${event.id}`));
+  }, [event?.id]);
 
   const loadResponses = useCallback(
     async (interactionId: string) => {
@@ -1162,6 +1168,38 @@ export default function LiveResultsView({
     await loadResults(activeInteraction);
     window.setTimeout(() => setRestoredQuestionId(null), 2200);
   }, [activeInteraction, loadResults]);
+
+  const handleToggleQuestionLike = useCallback(
+    async (question: JoinedQuestion) => {
+      if (!activeInteraction) return;
+
+      const res = await fetch('/api/qa/upvote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question_id: question.id,
+          participant_id: qaVoterId || undefined,
+          voter_role: 'lecturer',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError(data.error || 'Unable to like question.');
+        return;
+      }
+
+      if (data.participant_id) {
+        setQaVoterId(data.participant_id);
+        if (event?.id && typeof window !== 'undefined') {
+          window.localStorage.setItem(`slideengage_qa_voter_${event.id}`, data.participant_id);
+        }
+      }
+
+      await loadResults(activeInteraction);
+    },
+    [activeInteraction, event?.id, loadResults, qaVoterId]
+  );
 
   useEffect(() => {
     resolveEvent();
@@ -1420,7 +1458,9 @@ export default function LiveResultsView({
     onQaSortChange: setQaSort,
     onToggleQuestionHighlight: handleToggleQuestionHighlight,
     onMarkQuestionAnswered: handleMarkQuestionAnswered,
+    onToggleQuestionLike: handleToggleQuestionLike,
     onRestoreLastQuestion: handleRestoreLastQuestion,
+    qaVoterId,
   });
 
   const shellClass = isFullscreen
@@ -1623,7 +1663,9 @@ function renderResultContent({
   onQaSortChange,
   onToggleQuestionHighlight,
   onMarkQuestionAnswered,
+  onToggleQuestionLike,
   onRestoreLastQuestion,
+  qaVoterId,
 }: {
   event: Event | null;
   interaction: LiveInteraction | null;
@@ -1640,7 +1682,9 @@ function renderResultContent({
   onQaSortChange: (sort: 'recent' | 'popular') => void;
   onToggleQuestionHighlight: (question: JoinedQuestion) => void;
   onMarkQuestionAnswered: (question: JoinedQuestion) => void;
+  onToggleQuestionLike: (question: JoinedQuestion) => void;
   onRestoreLastQuestion: () => void;
+  qaVoterId: string | null;
 }) {
   if (!interaction) return null;
 
@@ -1811,6 +1855,15 @@ function renderResultContent({
     });
     const highlightedQuestion = sortedQuestions.find(question => question.is_pinned);
     const listQuestions = sortedQuestions.filter(question => question.id !== highlightedQuestion?.id).slice(0, highlightedQuestion ? 5 : 7);
+    const hasLiked = (question: JoinedQuestion) => Boolean(qaVoterId && question.qa_upvotes?.some(upvote => upvote.participant_id === qaVoterId));
+    const likeButtonClass = (liked: boolean, elevated = false) =>
+      `shrink-0 rounded-full border px-3 py-1 text-sm font-black transition hover:scale-105 ${
+        liked
+          ? 'border-[#16833A] bg-[#EAF7EF] text-[#16833A] shadow-sm'
+          : elevated
+            ? 'border-[#DCE7E1] bg-white text-[#17172F] shadow-sm hover:border-[#16833A] hover:bg-[#EAF7EF] hover:text-[#16833A]'
+            : 'border-[#BFE5CB] bg-[#EAF7EF] text-[#16833A] hover:border-[#16833A] hover:bg-white'
+      }`;
 
     return (
       <LiveResultFrame event={event} presentationMode={presentationMode} layoutKey={layoutKey}>
@@ -1881,9 +1934,15 @@ function renderResultContent({
                         {highlightedQuestion.question_text}
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-white px-3 py-1 text-sm font-black text-[#16833A] shadow-sm">
-                      {highlightedQuestion.qa_upvotes?.length || 0} ▲
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onToggleQuestionLike(highlightedQuestion)}
+                      title={hasLiked(highlightedQuestion) ? 'Remove like' : 'Like question'}
+                      aria-label={hasLiked(highlightedQuestion) ? 'Remove like from question' : 'Like question'}
+                      className={likeButtonClass(hasLiked(highlightedQuestion), true)}
+                    >
+                      👍 <span className="inline-block min-w-[1.25ch] transition-transform">{highlightedQuestion.qa_upvotes?.length || 0}</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -1912,9 +1971,15 @@ function renderResultContent({
                         </div>
                         <p className="mt-1 line-clamp-2 text-[17px] font-bold text-[#17172F]">{question.question_text}</p>
                       </div>
-                      <span className="shrink-0 rounded-full bg-[#EAF7EF] px-3 py-1 text-sm font-black text-[#16833A]">
-                        {question.qa_upvotes?.length || 0} ▲
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onToggleQuestionLike(question)}
+                        title={hasLiked(question) ? 'Remove like' : 'Like question'}
+                        aria-label={hasLiked(question) ? 'Remove like from question' : 'Like question'}
+                        className={likeButtonClass(hasLiked(question))}
+                      >
+                        👍 <span className="inline-block min-w-[1.25ch] transition-transform">{question.qa_upvotes?.length || 0}</span>
+                      </button>
                     </div>
                   </div>
                 ))}

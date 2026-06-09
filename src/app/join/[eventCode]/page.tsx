@@ -704,19 +704,18 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
             <div className="flex flex-col gap-2.5">
               {questions.map(q => (
                 <div key={q.id} className="relative flex items-start gap-3.5 rounded-[14px] border border-[#E2EBE6] bg-white p-3.5">
-                  <div className="flex flex-col items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => handleUpvote(q.id)}
-                      className={`w-9 h-7 border-[1.5px] rounded-[7px] text-sm transition ${
-                        q.has_upvoted
-                          ? 'bg-[#EAF7EF] border-[#2D8A4E] text-[#2D8A4E]'
-                          : 'border-[#E2EBE6] hover:bg-[#EAF7EF] hover:border-[#2D8A4E]'
-                      }`}
-                    >
-                      ▲
-                    </button>
-                    <span className="text-[13px] font-bold">{q.upvote_count || 0}</span>
-                  </div>
+                  <button
+                    onClick={() => handleUpvote(q.id)}
+                    aria-label={`${q.has_upvoted ? 'Remove like from' : 'Like'} question`}
+                    title={`${q.has_upvoted ? 'Remove like' : 'Like question'}`}
+                    className={`shrink-0 rounded-full border-[1.5px] px-3 py-1.5 text-sm font-black transition hover:scale-105 ${
+                      q.has_upvoted
+                        ? 'border-[#2D8A4E] bg-[#EAF7EF] text-[#168A3A] shadow-sm'
+                        : 'border-[#E2EBE6] bg-white text-[#1A1A2E] hover:border-[#2D8A4E] hover:bg-[#EAF7EF] hover:text-[#168A3A]'
+                    }`}
+                  >
+                    👍 <span className="inline-block min-w-[1.25ch] transition-transform">{q.upvote_count || 0}</span>
+                  </button>
                   <div className="flex-1">
                     {editingQuestionId === q.id ? (
                       <div className="space-y-2">
