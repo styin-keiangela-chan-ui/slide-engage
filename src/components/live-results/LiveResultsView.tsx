@@ -165,7 +165,7 @@ function QaModerationControls({
         aria-label={isHighlighted ? 'Unhighlight question' : 'Highlight question'}
         className={`${baseClass} ${isHighlighted ? activeClass : inactiveClass}`}
       >
-        ⏫
+        ⬆️
       </button>
       <button
         type="button"
@@ -174,7 +174,7 @@ function QaModerationControls({
         aria-label="Mark as answered"
         className={`${baseClass} ${inactiveClass}`}
       >
-        ✓
+        ✔️
       </button>
     </div>
   );
@@ -1143,7 +1143,9 @@ export default function LiveResultsView({
 
   const handleMarkQuestionAnswered = useCallback(
     async (question: JoinedQuestion) => {
-      await updateQuestion(question.id, { is_hidden: true, deleted_by: 'lecturer' });
+      setQuestions(current => current.filter(item => item.id !== question.id));
+      setQaRestoreMessage('Question marked as answered.');
+      await updateQuestion(question.id, { is_hidden: true, deleted_by: 'answered' });
     },
     [updateQuestion]
   );
@@ -1937,7 +1939,7 @@ function renderResultContent({
                     <button
                       type="button"
                       onClick={() => onToggleQuestionLike(highlightedQuestion)}
-                      title={hasLiked(highlightedQuestion) ? 'Remove like' : 'Like question'}
+                      title={hasLiked(highlightedQuestion) ? 'Remove like / upvote' : 'Like / upvote question'}
                       aria-label={hasLiked(highlightedQuestion) ? 'Remove like from question' : 'Like question'}
                       className={likeButtonClass(hasLiked(highlightedQuestion), true)}
                     >
@@ -1974,7 +1976,7 @@ function renderResultContent({
                       <button
                         type="button"
                         onClick={() => onToggleQuestionLike(question)}
-                        title={hasLiked(question) ? 'Remove like' : 'Like question'}
+                        title={hasLiked(question) ? 'Remove like / upvote' : 'Like / upvote question'}
                         aria-label={hasLiked(question) ? 'Remove like from question' : 'Like question'}
                         className={likeButtonClass(hasLiked(question))}
                       >

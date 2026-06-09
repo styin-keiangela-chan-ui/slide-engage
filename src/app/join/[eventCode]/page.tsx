@@ -707,7 +707,7 @@ function InteractionCard({ interaction, participantId, eventId }: { interaction:
                   <button
                     onClick={() => handleUpvote(q.id)}
                     aria-label={`${q.has_upvoted ? 'Remove like from' : 'Like'} question`}
-                    title={`${q.has_upvoted ? 'Remove like' : 'Like question'}`}
+                    title={`${q.has_upvoted ? 'Remove like / upvote' : 'Like / upvote question'}`}
                     className={`shrink-0 rounded-full border-[1.5px] px-3 py-1.5 text-sm font-black transition hover:scale-105 ${
                       q.has_upvoted
                         ? 'border-[#2D8A4E] bg-[#EAF7EF] text-[#168A3A] shadow-sm'
