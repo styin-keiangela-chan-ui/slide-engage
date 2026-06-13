@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       .from('qa_questions')
       .select('*')
       .eq('interaction_id', interaction_id)
-      .or('status.eq.answered,answered_at.not.is.null,is_hidden.eq.true')
+      .or('answered.eq.true,answered_at.not.is.null,is_hidden.eq.true')
       .order('answered_at', { ascending: false, nullsFirst: false })
       .order('deleted_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     const { data: restored, error: restoreError } = await supabase
       .from('qa_questions')
       .update({
-        status: 'active',
+        answered: false,
         answered_at: null,
         is_hidden: false,
         deleted_at: null,

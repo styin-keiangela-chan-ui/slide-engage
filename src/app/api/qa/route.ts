@@ -35,8 +35,17 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('qa_questions')
     .select('*, participants(display_name)')
-    .eq('interaction_id', interactionId)
-    .eq('is_hidden', archived);
+    .eq('interaction_id', interactionId);
+
+  if (archived) {
+    query = query.or('answered.eq.true,answered_at.not.is.null,is_hidden.eq.true');
+  } else {
+    query = query
+      .eq('answered', false)
+      .eq('is_hidden', false)
+      .is('answered_at', null)
+      .is('deleted_at', null);
+  }
 
   if (search) {
     query = query.ilike('question_text', `%${search}%`);
@@ -69,8 +78,8 @@ export async function GET(req: NextRequest) {
   }
 
   const filteredQuestions = archived
-    ? (questions || []).filter(q => q.status === 'answered' || q.answered_at || q.is_hidden)
-    : (questions || []).filter(q => q.status !== 'answered' && !q.answered_at && !q.deleted_at && !q.is_hidden);
+    ? (questions || []).filter(q => q.answered || q.answered_at || q.is_hidden)
+    : (questions || []).filter(q => !q.answered && !q.answered_at && !q.deleted_at && !q.is_hidden);
 
   const enriched = filteredQuestions.map(q => ({
     ...q,
@@ -123,7 +132,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabase
       .from('qa_questions')
-      .insert({ interaction_id, participant_id, question_text: question_text.trim() })
+      .insert({ interaction_id, participant_id, question_text: question_text.trim(), answered: false })
       .select()
       .single();
 
@@ -138,7 +147,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, participant_id, deleted_by, question_text, is_pinned, is_hidden, ai_answer, status, answered_at } = body;
+    const { id, participant_id, deleted_by, question_text, is_pinned, is_hidden, ai_answer, status, answered, answered_at } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Question id required' }, { status: 400 });
@@ -151,15 +160,15 @@ export async function PATCH(req: NextRequest) {
       updates.question_text = text;
     }
     if (typeof is_pinned === 'boolean') updates.is_pinned = is_pinned;
-    if (status === 'answered') {
-      updates.status = 'answered';
+    if (answered === true || status === 'answered') {
+      updates.answered = true;
       updates.answered_at = answered_at || new Date().toISOString();
       updates.is_hidden = true;
       updates.deleted_at = updates.answered_at;
       updates.deleted_by = String(deleted_by || participant_id || 'answered');
       updates.is_pinned = false;
-    } else if (status === 'active') {
-      updates.status = 'active';
+    } else if (answered === false || status === 'active') {
+      updates.answered = false;
       updates.answered_at = null;
       updates.is_hidden = false;
       updates.deleted_at = null;
@@ -169,11 +178,11 @@ export async function PATCH(req: NextRequest) {
       updates.is_hidden = is_hidden;
       updates.deleted_at = is_hidden ? new Date().toISOString() : null;
       updates.deleted_by = is_hidden ? String(deleted_by || participant_id || 'lecturer') : null;
-      if (is_hidden && !updates.status) {
-        updates.status = deleted_by === 'answered' ? 'answered' : 'active';
+      if (is_hidden && updates.answered === undefined) {
+        updates.answered = deleted_by === 'answered';
         if (deleted_by === 'answered') updates.answered_at = updates.deleted_at;
-      } else if (!is_hidden && !updates.status) {
-        updates.status = 'active';
+      } else if (!is_hidden && updates.answered === undefined) {
+        updates.answered = false;
         updates.answered_at = null;
       }
     }

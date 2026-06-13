@@ -115,7 +115,10 @@ export async function GET(req: NextRequest) {
       .from('qa_questions')
       .select('*, participants(display_name), qa_upvotes(id)')
       .eq('interaction_id', interactionId)
+      .eq('answered', false)
       .eq('is_hidden', false)
+      .is('answered_at', null)
+      .is('deleted_at', null)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false });
 

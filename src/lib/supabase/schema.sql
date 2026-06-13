@@ -108,7 +108,7 @@ create table public.qa_questions (
   interaction_id uuid references public.interactions(id) on delete cascade not null,
   participant_id uuid references public.participants(id) on delete cascade not null,
   question_text text not null,
-  status text default 'active' check (status in ('active', 'answered')),
+  answered boolean default false,
   is_pinned boolean default false,
   is_hidden boolean default false,
   answered_at timestamptz,
@@ -138,6 +138,7 @@ create index idx_event_collaborators_user on public.event_collaborators(user_id)
 create index idx_responses_interaction on public.responses(interaction_id);
 create index idx_qa_questions_interaction on public.qa_questions(interaction_id);
 create index idx_qa_questions_deleted_at on public.qa_questions(interaction_id, deleted_at desc) where deleted_at is not null;
+create index idx_qa_answered on public.qa_questions(answered);
 create index idx_qa_upvotes_question on public.qa_upvotes(question_id);
 
 -- ─── ENABLE REALTIME ─────────────────────────
