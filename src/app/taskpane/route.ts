@@ -288,6 +288,38 @@ export function GET() {
         grid-template-columns: 1fr 1fr;
         gap: 6px;
       }
+      .main-actions {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+      .compact-controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .advanced {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fbfffc;
+        padding: 8px;
+      }
+      .advanced summary {
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 900;
+      }
+      .interaction-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: center;
+      }
+      .row-actions {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
       .option-row {
         display: grid;
         grid-template-columns: 1fr auto;
@@ -486,18 +518,23 @@ export function GET() {
             <textarea id="interaction-question" class="input" rows="3" placeholder="Question or prompt"></textarea>
             <div id="option-fields" class="stack"></div>
             <button id="add-option-button" class="button secondary full hidden" type="button">Add option</button>
-            <div id="interaction-settings" class="stack"></div>
-            <div class="preview">
+            <details class="advanced">
+              <summary>Advanced settings</summary>
+              <div id="interaction-settings" class="stack" style="margin-top:8px"></div>
+            </details>
+            <div class="preview hidden">
               <div class="preview-title">Live editor preview</div>
               <div id="editor-preview" class="small muted">Choose an interaction type to start.</div>
             </div>
-            <div class="toolbar">
-              <button id="save-interaction-button" class="button secondary small" type="button" aria-label="Save changes without going live" data-tooltip="Save changes without going live">Save</button>
-              <button id="live-toggle-button" class="button secondary small" type="button" aria-label="Start accepting responses" data-tooltip="Start accepting responses">Go live</button>
-              <button id="reset-results-button" class="button danger small" type="button" aria-label="Clear all participant responses" data-tooltip="Clear all participant responses">Reset results</button>
-              <button id="delete-interaction-button" class="button danger small" type="button" aria-label="Delete interaction" data-tooltip="Delete interaction">🗑 Delete Interaction</button>
-              <button id="generate-slide-button" class="button secondary small" type="button" aria-label="Add interaction slide to PowerPoint" data-tooltip="Add question, QR code, event code and live results link to PowerPoint">Add to Presentation</button>
-              <button id="present-live-button" class="button small" type="button" aria-label="Open fullscreen live results" data-tooltip="Open realtime live results in a browser tab">Open Live Results</button>
+            <div class="main-actions">
+              <button id="generate-slide-button" class="button small" type="button" aria-label="Present this interaction" data-tooltip="Present this interaction">Present</button>
+              <button id="save-interaction-button" class="button secondary small" type="button" aria-label="Save interaction" data-tooltip="Save interaction">Save</button>
+              <button id="reset-results-button" class="button danger small" type="button" aria-label="Reset participant responses" data-tooltip="Reset participant responses">Reset</button>
+            </div>
+            <div id="post-present-controls" class="compact-controls hidden">
+              <button id="present-live-button" class="button secondary small" type="button" aria-label="View live results" data-tooltip="View live results">Live Results</button>
+              <button id="live-toggle-button" class="button secondary small" type="button" aria-label="Stop accepting responses" data-tooltip="Stop accepting responses">Stop</button>
+              <button id="delete-interaction-button" class="button danger small hidden" type="button" aria-label="Delete interaction" data-tooltip="Delete interaction">Delete</button>
             </div>
           </div>
         </section>
@@ -514,8 +551,8 @@ export function GET() {
         <div id="app-status" class="status hidden" role="status" aria-live="polite"></div>
         <div class="bottom-toolbar">
           <button id="bottom-refresh-button" class="button secondary small" type="button" aria-label="Reload latest data" data-tooltip="Reload latest data">Refresh</button>
-          <button id="bottom-present-button" class="button small" type="button" aria-label="Open fullscreen live results" data-tooltip="Open realtime live results in a browser tab">Live Results</button>
-          <button id="bottom-results-button" class="button secondary small" type="button" aria-label="Reload latest results" data-tooltip="Reload latest results">Results</button>
+          <button id="bottom-present-button" class="button small" type="button" aria-label="Present this interaction" data-tooltip="Present this interaction">Present</button>
+          <button id="bottom-results-button" class="button secondary small" type="button" aria-label="View live results" data-tooltip="View live results">Results</button>
         </div>
       </section>
     </main>
@@ -548,13 +585,13 @@ export function GET() {
           login: { ids: ["login-button"], idle: "Sign in", loading: "Signing in…", success: "Signed in ✓", error: "Sign in" },
           createEvent: { ids: ["create-event-button"], idle: "Create", loading: "Creating…", success: "Created ✓", error: "Create" },
           save: { ids: ["save-interaction-button"], idle: "Save", loading: "Saving…", success: "Saved ✓", error: "Save" },
-          goLive: { ids: ["live-toggle-button"], idle: "Go live", loading: "Going live…", success: "Live ✓", error: "Go live" },
-          close: { ids: ["live-toggle-button"], idle: "Close", loading: "Closing…", success: "Closed ✓", error: "Close" },
-          reset: { ids: ["reset-results-button"], idle: "Reset results", loading: "Resetting…", success: "Reset complete ✓", error: "Reset results" },
+          goLive: { ids: [], idle: "Present", loading: "Preparing…", success: "Presenting ✓", error: "Present" },
+          close: { ids: ["live-toggle-button"], idle: "Stop", loading: "Stopping…", success: "Stopped ✓", error: "Stop" },
+          reset: { ids: ["reset-results-button"], idle: "Reset", loading: "Resetting…", success: "Reset complete ✓", error: "Reset" },
           deleteInteraction: { ids: ["delete-interaction-button"], idle: "🗑 Delete Interaction", loading: "Deleting…", success: "Deleted ✓", error: "🗑 Delete Interaction" },
-          addPresentation: { ids: ["generate-slide-button"], idle: "Add to Presentation", loading: "Adding…", success: "Added ✓", error: "Add to Presentation" },
-          presentLive: { ids: ["present-live-button", "bottom-present-button"], idle: "Open Live Results", bottomIdle: "Live Results", loading: "Opening…", success: "Opened ✓", error: "Open Live Results" },
-          refresh: { ids: ["bottom-refresh-button", "bottom-results-button"], idle: "Refresh", resultsIdle: "Results", loading: "Refreshing…", success: "Updated ✓", error: "Refresh" }
+          addPresentation: { ids: ["generate-slide-button", "bottom-present-button"], idle: "Present", bottomIdle: "Present", loading: "Preparing…", success: "Presenting ✓", error: "Present" },
+          presentLive: { ids: ["present-live-button", "bottom-results-button"], idle: "Live Results", resultsIdle: "Results", loading: "Opening…", success: "Opened ✓", error: "Live Results" },
+          refresh: { ids: ["bottom-refresh-button"], idle: "Refresh", loading: "Refreshing…", success: "Updated ✓", error: "Refresh" }
         };
 
         var performanceConfig = {
@@ -600,7 +637,7 @@ export function GET() {
             : id === "delete-interaction-button" ? "deleteInteraction"
             : id === "generate-slide-button" ? "addPresentation"
             : id === "present-live-button" ? "presentLive"
-            : id === "bottom-refresh-button" || id === "bottom-results-button" ? "refresh"
+            : id === "bottom-refresh-button" ? "refresh"
             : id === "create-event-button" ? "createEvent"
             : id === "login-button" ? "login"
             : "";
@@ -997,18 +1034,11 @@ export function GET() {
               item.className = "interaction-item";
               item.setAttribute("role", "button");
               item.setAttribute("tabindex", "0");
-              item.innerHTML = '<div class="row"><div><div class="event-name"></div><div class="small muted"></div></div><span class="status-pill"></span></div>';
+              item.innerHTML = '<div class="interaction-row"><div style="min-width:0"><div class="event-name"></div><div class="small muted"></div></div><div class="row-actions"><button class="button secondary small" type="button" aria-label="Edit interaction" data-tooltip="Edit interaction">Edit</button><button class="button small" type="button" aria-label="Present this interaction" data-tooltip="Present this interaction">Present</button></div></div>';
               var titleEl = item.querySelector(".event-name");
               var typeEl = item.querySelector(".small.muted");
-              var statusEl = item.querySelector(".status-pill");
               if (titleEl) titleEl.textContent = interaction.title || "Untitled";
-              if (typeEl) typeEl.textContent = labelForInteraction(interaction);
-              if (statusEl) {
-                statusEl.className = "status-pill pill " + (interaction.status || "draft");
-                statusEl.textContent = interaction.status || "draft";
-                statusEl.setAttribute("aria-label", tooltipForStatus(interaction.status || "draft"));
-                statusEl.setAttribute("data-tooltip", tooltipForStatus(interaction.status || "draft"));
-              }
+              if (typeEl) typeEl.textContent = labelForInteraction(interaction) + " · " + (interaction.status || "draft");
               item.setAttribute("aria-label", "Edit question and settings");
               item.setAttribute("data-tooltip", "Edit question and settings");
               item.onclick = function () {
@@ -1025,6 +1055,25 @@ export function GET() {
                   item.click();
                 }
               };
+              var buttons = item.querySelectorAll("button");
+              if (buttons[0]) {
+                buttons[0].onclick = function (event) {
+                  event.stopPropagation();
+                  openInteractionEditor(interaction, templateForInteraction(interaction));
+                };
+              }
+              if (buttons[1]) {
+                buttons[1].onclick = function (event) {
+                  event.stopPropagation();
+                  openInteractionEditor(interaction, templateForInteraction(interaction));
+                  ensureInteractionLive(interaction).then(function (liveInteraction) {
+                    presentInteraction(liveInteraction);
+                  }).catch(function (error) {
+                    setActionState("addPresentation", "error");
+                    setStatus("app-status", error.message, true);
+                  });
+                };
+              }
               list.appendChild(item);
             } catch (error) {
               addDebug("Interaction card skipped: " + (error && error.message ? error.message : "unknown error"));
@@ -1332,22 +1381,24 @@ export function GET() {
 
         function updateEditorButtons() {
           var hasSelected = !!selectedInteraction;
+          var canPresent = hasSelected || !!editorTemplate;
           el("present-live-button").disabled = !hasSelected || isActionLoading("presentLive");
-          el("generate-slide-button").disabled = !hasSelected || isActionLoading("addPresentation");
+          el("generate-slide-button").disabled = !canPresent || isActionLoading("addPresentation");
           el("live-toggle-button").disabled = !hasSelected || isActionLoading("goLive") || isActionLoading("close");
           el("reset-results-button").disabled = !hasSelected || isActionLoading("reset");
           el("delete-interaction-button").disabled = !hasSelected || isActionLoading("deleteInteraction");
+          el("post-present-controls").classList.toggle("hidden", !hasSelected || selectedInteraction.status !== "live");
           if (hasSelected) {
             if (!isActionLoading("goLive") && !isActionLoading("close") && actionStates.goLive !== "success" && actionStates.close !== "success") {
-              el("live-toggle-button").textContent = selectedInteraction.status === "live" ? "Close" : "Go live";
+              el("live-toggle-button").textContent = "Stop";
             }
             el("live-toggle-button").className = selectedInteraction.status === "live" ? "button secondary small" : "button secondary small";
-            el("live-toggle-button").setAttribute("aria-label", selectedInteraction.status === "live" ? "Stop accepting responses" : "Start accepting responses");
-            el("live-toggle-button").setAttribute("data-tooltip", selectedInteraction.status === "live" ? "Stop accepting responses" : "Start accepting responses");
+            el("live-toggle-button").setAttribute("aria-label", "Stop accepting responses");
+            el("live-toggle-button").setAttribute("data-tooltip", "Stop accepting responses");
           } else {
-            if (!isActionLoading("goLive") && !isActionLoading("close")) el("live-toggle-button").textContent = "Go live";
-            el("live-toggle-button").setAttribute("aria-label", "Start accepting responses");
-            el("live-toggle-button").setAttribute("data-tooltip", "Start accepting responses");
+            if (!isActionLoading("goLive") && !isActionLoading("close")) el("live-toggle-button").textContent = "Stop";
+            el("live-toggle-button").setAttribute("aria-label", "Stop accepting responses");
+            el("live-toggle-button").setAttribute("data-tooltip", "Stop accepting responses");
           }
         }
 
@@ -1508,6 +1559,26 @@ export function GET() {
           });
         }
 
+        function presentSelectedInteraction() {
+          if (isActionLoading("addPresentation")) return;
+          if (selectedEvent && editorTemplate) {
+            var validation = validateEditor(collectEditorPayload());
+            if (validation) {
+              setStatus("app-status", validation, true);
+              return;
+            }
+          }
+          setActionState("addPresentation", "loading", "Preparing…");
+          saveEditor(false, function (interaction) {
+            ensureInteractionLive(interaction).then(function (liveInteraction) {
+              presentInteraction(liveInteraction);
+            }).catch(function (error) {
+              setActionState("addPresentation", "error");
+              setStatus("app-status", error.message, true);
+            });
+          });
+        }
+
         function openPresenterWindow() {
           if (!selectedEvent) {
             setStatus("app-status", "Select an event before presenting live.", true);
@@ -1530,7 +1601,7 @@ export function GET() {
               window.open(url, "_blank", "noopener,noreferrer");
             }
             setActionState("presentLive", "success");
-            setStatus("app-status", "Live presenter opened.", false);
+            setStatus("app-status", "Live Results opened.", false);
           } catch (error) {
             setActionState("presentLive", "error");
             setStatus("app-status", "Unable to open live presenter: " + (error && error.message ? error.message : "unknown error"), true);
@@ -1541,7 +1612,7 @@ export function GET() {
           if (!selectedEvent || !interaction) return;
           presentOptions = presentOptions || {};
           if (!presentOptions.silent) {
-            setActionState("addPresentation", "loading", "Preparing slide…");
+            setActionState("addPresentation", "loading", "Preparing…");
             setStatus("app-status", "Creating PowerPoint slide...", false);
           }
           if (!presentOptions.silent) {
@@ -1555,12 +1626,12 @@ export function GET() {
             return !!option.option_text;
           });
           if (!presentOptions.silent) addDebug("Options: " + slideOptions.length);
-          if (!presentOptions.silent) setActionState("addPresentation", "loading", "Adding to presentation…");
+          if (!presentOptions.silent) setActionState("addPresentation", "loading", "Presenting…");
           return insertInteractionSlide(interaction, slideOptions, { results: [], total_responses: 0 }, false)
             .then(function (inserted) {
               if (!presentOptions.silent && inserted !== false) {
                 setActionState("addPresentation", "success");
-                setStatus("app-status", "Slide added to presentation.", false);
+                setStatus("app-status", "Presenting ✓", false);
                 flashEditorCard();
               } else if (!presentOptions.silent) {
                 setActionState("addPresentation", "error");
@@ -2265,34 +2336,14 @@ export function GET() {
             scheduleAutosave();
           };
           el("save-interaction-button").onclick = function () { saveEditor(false); };
-          el("generate-slide-button").onclick = function () {
-            if (isActionLoading("addPresentation")) return;
-            if (selectedEvent && editorTemplate) {
-              var validation = validateEditor(collectEditorPayload());
-              if (validation) {
-                setStatus("app-status", validation, true);
-                return;
-              }
-            }
-            setActionState("addPresentation", "loading", "Preparing slide…");
-            saveEditor(false, function (interaction) {
-              ensureInteractionLive(interaction).then(function (liveInteraction) {
-                presentInteraction(liveInteraction);
-              }).catch(function (error) {
-                setActionState("addPresentation", "error");
-                setStatus("app-status", error.message, true);
-              });
-            });
-          };
+          el("generate-slide-button").onclick = presentSelectedInteraction;
           el("present-live-button").onclick = presentLive;
           el("live-toggle-button").onclick = toggleLiveStatus;
           el("reset-results-button").onclick = resetResults;
           el("delete-interaction-button").onclick = function () { deleteInteraction(selectedInteraction); };
           el("bottom-refresh-button").onclick = function () { refreshTaskpaneData(false); };
-          el("bottom-present-button").onclick = presentLive;
-          el("bottom-results-button").onclick = function () {
-            refreshTaskpaneData(true);
-          };
+          el("bottom-present-button").onclick = presentSelectedInteraction;
+          el("bottom-results-button").onclick = presentLive;
         }
 
         window.addEventListener("error", function (event) {
