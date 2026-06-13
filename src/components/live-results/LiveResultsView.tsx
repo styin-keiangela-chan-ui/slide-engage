@@ -1046,7 +1046,7 @@ export default function LiveResultsView({
   const [questions, setQuestions] = useState<JoinedQuestion[]>([]);
   const [qaSort, setQaSort] = useState<'recent' | 'popular'>('recent');
   const [qaRestoreMessage, setQaRestoreMessage] = useState('');
-  const [hasRestorableQuestion, setHasRestorableQuestion] = useState(false);
+  const [restorableQuestion, setRestorableQuestion] = useState<JoinedQuestion | null>(null);
   const [restoredQuestionId, setRestoredQuestionId] = useState<string | null>(null);
   const [qaVoterId, setQaVoterId] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(eventCode && !initialEvent));
@@ -1063,6 +1063,7 @@ export default function LiveResultsView({
   const restorableSignatureRef = useRef('');
   const resultsRefreshTimerRef = useRef<number | null>(null);
   const [error, setError] = useState('');
+  const hasRestorableQuestion = Boolean(restorableQuestion);
 
   useEffect(() => {
     setEvent(initialEvent);
@@ -1161,25 +1162,26 @@ export default function LiveResultsView({
 
   const loadRestorableQuestionState = useCallback(
     async (interactionId: string) => {
-      const { data } = await supabase
-        .from('qa_questions')
-        .select('id, answered, answered_at, deleted_at, created_at')
-        .eq('interaction_id', interactionId)
-        .or('answered.eq.true,answered_at.not.is.null,is_hidden.eq.true')
-        .order('answered_at', { ascending: false, nullsFirst: false })
-        .order('deleted_at', { ascending: false, nullsFirst: false })
-        .order('created_at', { ascending: false })
-        .limit(1);
+      const res = await fetch(`/api/qa/restore-last?interaction_id=${encodeURIComponent(interactionId)}`, { cache: 'no-store' });
+      if (!res.ok) {
+        const nextSignature = 'null';
+        if (nextSignature !== restorableSignatureRef.current) {
+          restorableSignatureRef.current = nextSignature;
+          setRestorableQuestion(null);
+        }
+        return false;
+      }
 
-      const latest = data?.[0] || null;
+      const data = (await res.json().catch(() => ({}))) as { question?: JoinedQuestion | null };
+      const latest = data.question || null;
       const nextSignature = stableSignature(latest || null);
       if (nextSignature !== restorableSignatureRef.current) {
         restorableSignatureRef.current = nextSignature;
-        setHasRestorableQuestion(Boolean(latest));
+        setRestorableQuestion(latest);
       }
       return Boolean(latest);
     },
-    [supabase]
+    []
   );
 
   useEffect(() => {
@@ -1225,7 +1227,7 @@ export default function LiveResultsView({
         }
         if (restorableSignatureRef.current !== 'null') {
           restorableSignatureRef.current = 'null';
-          setHasRestorableQuestion(false);
+          setRestorableQuestion(null);
         }
         return;
       }
@@ -1234,7 +1236,7 @@ export default function LiveResultsView({
       try {
         if (!isQaInteraction(interaction) && hasRestorableQuestion) {
           restorableSignatureRef.current = 'null';
-          setHasRestorableQuestion(false);
+          setRestorableQuestion(null);
         }
         const [resultResponse] = await Promise.all([
           fetch(`/api/results?interaction_id=${interaction.id}`, { cache: 'no-store' }),
@@ -1303,15 +1305,18 @@ export default function LiveResultsView({
   const handleMarkQuestionAnswered = useCallback(
     async (question: JoinedQuestion) => {
       const answeredAt = new Date().toISOString();
-      setQuestions(current => current.filter(item => item.id !== question.id));
-      setHasRestorableQuestion(true);
-      restorableSignatureRef.current = stableSignature({
-        id: question.id,
+      const nextRestorableQuestion = {
+        ...question,
         answered: true,
         answered_at: answeredAt,
         deleted_at: answeredAt,
-        created_at: question.created_at,
-      });
+        deleted_by: 'answered',
+        is_hidden: true,
+        is_pinned: false,
+      };
+      setQuestions(current => current.filter(item => item.id !== question.id));
+      setRestorableQuestion(nextRestorableQuestion);
+      restorableSignatureRef.current = stableSignature(nextRestorableQuestion);
       setQaRestoreMessage('Question marked as answered.');
       const updated = await updateQuestion(question.id, {
         answered: true,
@@ -1337,7 +1342,7 @@ export default function LiveResultsView({
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      setHasRestorableQuestion(false);
+      setRestorableQuestion(null);
       restorableSignatureRef.current = 'null';
       setQaRestoreMessage(data.error || 'No question available to restore.');
       return;

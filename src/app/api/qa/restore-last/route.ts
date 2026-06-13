@@ -6,6 +6,34 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// GET /api/qa/restore-last?interaction_id=xxx — find the latest restorable Q&A question
+export async function GET(req: NextRequest) {
+  try {
+    const interactionId = req.nextUrl.searchParams.get('interaction_id');
+
+    if (!interactionId) {
+      return NextResponse.json({ error: 'interaction_id required' }, { status: 400 });
+    }
+
+    const { data: question, error } = await supabase
+      .from('qa_questions')
+      .select('*, participants(display_name), qa_upvotes(id, participant_id)')
+      .eq('interaction_id', interactionId)
+      .eq('answered', true)
+      .order('answered_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ question: question || null });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Unable to load restorable question.' }, { status: 500 });
+  }
+}
+
 // POST /api/qa/restore-last — restore the most recently removed Q&A question
 export async function POST(req: NextRequest) {
   try {
