@@ -309,10 +309,8 @@ function drawInteractionSlide_(eventId, interactionId, updateExisting) {
   var snapshot = buildInteractionSnapshot_(event, interaction);
   var slide = updateExisting ? findSlideForInteraction_(interactionId) : null;
   var createdWithBatch = false;
-  if (!slide && !updateExisting) {
-    slide = tryDrawInteractionSlideBatch_(event, interaction, snapshot);
-    createdWithBatch = !!slide;
-  }
+  // Use the SlidesApp renderer for user-facing inserts because it fetches the QR
+  // code as a blob first. Batch image URLs can silently produce blank QR boxes.
   if (!slide) slide = SlidesApp.getActivePresentation().appendSlide(SlidesApp.PredefinedLayout.BLANK);
 
   if (!createdWithBatch) {
@@ -368,8 +366,8 @@ function tryDrawInteractionSlideBatch_(event, interaction, snapshot) {
     batchText_(requests, objectId_('type'), slideId, label_(interaction).toUpperCase(), 280, 16, 320, 24, 11, true, '#6B7B8D');
 
     batchShape_(requests, objectId_('join'), 'ROUND_RECTANGLE', slideId, 30, 60, 165, 405, '#FFFFFF', '#DDEBE3');
-    batchText_(requests, objectId_('joinAt'), slideId, 'Join at', 48, 82, 130, 24, 15, true, '#17172F');
-    batchText_(requests, objectId_('host'), slideId, host_(), 48, 110, 134, 24, 13, true, '#168A3A');
+    batchText_(requests, objectId_('joinAt'), slideId, 'Join at', 52, 82, 122, 22, 13, true, '#17172F');
+    batchText_(requests, objectId_('host'), slideId, host_(), 48, 110, 134, 22, 12, true, '#168A3A');
     requests.push({
       createImage: {
         url: qrUrl,
@@ -378,11 +376,11 @@ function tryDrawInteractionSlideBatch_(event, interaction, snapshot) {
     });
     batchText_(requests, objectId_('scan'), slideId, 'Scan QR code to join', 40, 296, 148, 24, 10, true, '#17172F', 'CENTER');
     batchShape_(requests, objectId_('codeBox'), 'ROUND_RECTANGLE', slideId, 45, 328, 135, 48, '#EAF7EF', '#CBEAD4');
-    batchText_(requests, objectId_('eventCode'), slideId, '#' + code, 45, 338, 135, 30, 23, true, '#168A3A', 'CENTER');
-    batchText_(requests, objectId_('joinUrl'), slideId, truncate_(joinUrl, 34), 40, 396, 148, 36, 7, false, '#6B7B8D', 'CENTER');
+    batchText_(requests, objectId_('eventCode'), slideId, '#' + code, 49, 338, 127, 30, code.length > 8 ? 17 : 22, true, '#168A3A', 'CENTER');
+    batchText_(requests, objectId_('joinUrl'), slideId, 'Join link: ' + host_() + '/join', 42, 396, 144, 30, 7, false, '#6B7B8D', 'CENTER');
 
     batchShape_(requests, objectId_('main'), 'ROUND_RECTANGLE', slideId, 220, 60, 470, 405, '#FFFFFF', '#DDEBE3');
-    batchText_(requests, objectId_('question'), slideId, interaction.title || 'Untitled interaction', 248, 88, 415, 78, 29, true, '#17172F');
+    batchText_(requests, objectId_('question'), slideId, truncate_(interaction.title || 'Untitled interaction', 92), 248, 88, 415, 78, 27, true, '#17172F');
     batchText_(requests, objectId_('instruction'), slideId, 'Scan the QR code or enter the event code to join.', 248, 170, 415, 24, 11, true, '#6B7B8D');
 
     if (interaction.type === 'poll' || interaction.type === 'quiz') {
@@ -393,10 +391,10 @@ function tryDrawInteractionSlideBatch_(event, interaction, snapshot) {
       }
     } else if (interaction.type === 'qa') {
       batchText_(requests, objectId_('qaTitle'), slideId, 'Ask your question', 270, 230, 360, 34, 24, true, '#17172F', 'CENTER');
-      batchText_(requests, objectId_('qaHelp'), slideId, 'Questions will appear in SlideEngage live results.', 270, 272, 360, 28, 14, false, '#6B7B8D', 'CENTER');
+      batchText_(requests, objectId_('qaHelp'), slideId, 'Scan the QR code or enter the event code to join.', 270, 272, 360, 34, 13, false, '#6B7B8D', 'CENTER');
     } else {
       batchText_(requests, objectId_('waiting'), slideId, 'Answer from your phone', 270, 235, 360, 34, 24, true, '#17172F', 'CENTER');
-      batchText_(requests, objectId_('waitingHelp'), slideId, 'Responses will appear in SlideEngage live results.', 270, 278, 360, 28, 14, false, '#6B7B8D', 'CENTER');
+      batchText_(requests, objectId_('waitingHelp'), slideId, 'Scan the QR code or enter the event code to join.', 270, 278, 360, 34, 13, false, '#6B7B8D', 'CENTER');
     }
 
     Slides.Presentations.batchUpdate({ requests: requests }, presentationId);
@@ -590,8 +588,8 @@ function renderSlide_(slide, event, interaction, snapshot) {
   text_(slide, snapshot.interactionType.toUpperCase(), result.x + 30, 15, Math.min(300, result.w - 60), 24, 11, true, '#6B7B8D');
 
   rounded_(slide, join.x, join.y, join.w, join.h, '#FFFFFF', '#DDEBE3');
-  text_(slide, 'Join at', join.x + 18, join.y + 18, join.w - 36, 22, 14, true, '#17172F');
-  text_(slide, truncate_(host_(), 22), join.x + 18, join.y + 45, join.w - 36, 24, 13, true, '#168A3A');
+  text_(slide, 'Join at', join.x + 18, join.y + 18, join.w - 36, 22, 12, true, '#17172F');
+  text_(slide, truncate_(host_(), 22), join.x + 18, join.y + 44, join.w - 36, 24, 12, true, '#168A3A');
   var qrSize = Math.min(join.w - 30, join.h * 0.42, 170);
   var qrTop = join.y + 82;
   try {
@@ -604,11 +602,11 @@ function renderSlide_(slide, event, interaction, snapshot) {
   text_(slide, 'Scan QR code to join', join.x + 12, belowQr, join.w - 24, 24, 10, true, '#17172F', SlidesApp.ParagraphAlignment.CENTER);
   var codeTop = Math.min(belowQr + 32, join.y + join.h - 104);
   rounded_(slide, join.x + 14, codeTop, join.w - 28, 46, '#EAF7EF', '#CBEAD4');
-  text_(slide, '#' + code, join.x + 14, codeTop + 8, join.w - 28, 30, 21, true, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
-  text_(slide, truncate_(joinUrl, Math.max(28, Math.floor(join.w / 3.8))), join.x + 12, codeTop + 56, join.w - 24, 30, 8, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, '#' + code, join.x + 14, codeTop + 8, join.w - 28, 30, code.length > 8 ? 16 : 21, true, '#168A3A', SlidesApp.ParagraphAlignment.CENTER);
+  text_(slide, 'Join link: ' + host_() + '/join', join.x + 12, codeTop + 56, join.w - 24, 30, 8, false, '#6B7B8D', SlidesApp.ParagraphAlignment.CENTER);
 
   rounded_(slide, result.x, result.y, result.w, result.h, '#FFFFFF', '#DDEBE3');
-  text_(slide, truncate_(snapshot.question, 96), result.x + 28, result.y + 28, result.w - 56, 74, 28, true, '#17172F');
+  text_(slide, truncate_(snapshot.question, 92), result.x + 28, result.y + 28, result.w - 56, 74, 26, true, '#17172F');
   text_(slide, 'Scan the QR code or enter the event code to join.', result.x + 28, result.y + 108, result.w - 56, 22, 11, true, '#6B7B8D');
   renderQuestionSlideContent_(slide, interaction, content);
 }

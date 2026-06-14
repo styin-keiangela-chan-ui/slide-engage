@@ -55,17 +55,29 @@ type Box = {
 const colors = ['168A3A', '1A6BB5', 'D46B08', '8B1A4A', '7C3AED', '0F766E'];
 const qrCache = new Map<string, string>();
 
-async function getQrDataUri(joinUrl: string) {
-  const cached = qrCache.get(joinUrl);
+async function getQrDataUri(joinUrl: string, eventCode: string) {
+  const cleanCode = eventCode.replace(/^#/, '');
+  const cached = qrCache.get(cleanCode);
   if (cached) return cached;
-  const dataUri = await QRCode.toDataURL(joinUrl, {
-    errorCorrectionLevel: 'M',
-    margin: 3,
-    width: 520,
-    color: { dark: '#000000', light: '#FFFFFF' },
-  });
+  let dataUri = '';
+  try {
+    const origin = new URL(joinUrl).origin;
+    const response = await fetch(`${origin}/api/qrcode?code=${encodeURIComponent(cleanCode)}&format=png`, { cache: 'no-store' });
+    if (response.ok) {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      dataUri = `data:image/png;base64,${buffer.toString('base64')}`;
+    }
+  } catch {}
+  if (!dataUri) {
+    dataUri = await QRCode.toDataURL(joinUrl, {
+      errorCorrectionLevel: 'M',
+      margin: 3,
+      width: 520,
+      color: { dark: '#000000', light: '#FFFFFF' },
+    });
+  }
   if (qrCache.size > 50) qrCache.clear();
-  qrCache.set(joinUrl, dataUri);
+  qrCache.set(cleanCode, dataUri);
   return dataUri;
 }
 
@@ -81,6 +93,23 @@ function xmlEscape(value: unknown) {
 function truncate(value: unknown, max = 92) {
   const text = String(value ?? '').trim();
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function joinHost(joinUrl: string) {
+  try {
+    return new URL(joinUrl).host;
+  } catch {
+    return joinUrl.replace(/^https?:\/\//, '').split('/')[0];
+  }
+}
+
+function joinShortPath(joinUrl: string) {
+  return `${joinHost(joinUrl)}/join`;
+}
+
+function eventCodeFontSize(eventCode: string, base: number, min = 34) {
+  const length = eventCode.replace(/^#/, '').length;
+  return Math.max(min, Math.min(base, base - Math.max(0, length - 7) * 3));
 }
 
 function svgText(value: unknown, x: number, y: number, options: {
@@ -263,13 +292,9 @@ function buildPreviewSvg(body: InteractionSlideRequest, qrDataUri: string) {
   const height = 1080;
   const label = body.interactionLabel || body.interactionType;
   const eventCode = body.eventCode.replace(/^#/, '');
-  const joinHost = (() => {
-    try {
-      return new URL(body.joinUrl).host;
-    } catch {
-      return body.joinUrl.replace(/^https?:\/\//, '').split('/')[0];
-    }
-  })();
+  const host = joinHost(body.joinUrl);
+  const shortJoinLink = joinShortPath(body.joinUrl);
+  const codeFontSize = eventCodeFontSize(eventCode, 54, 40);
 
   const optionRows = (body.interactionType === 'poll' || body.interactionType === 'quiz')
     ? (body.options || []).slice(0, 6)
@@ -292,18 +317,18 @@ function buildPreviewSvg(body: InteractionSlideRequest, qrDataUri: string) {
       ].join('');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="${width}" height="${height}" fill="#F4F7F4"/>
   ${svgText('SlideEngage', 70, 68, { size: 28, weight: 900, color: '168A3A' })}
   ${svgText('INTERACTION SLIDE', 620, 68, { size: 24, weight: 900, color: '6B7B8D' })}
   ${svgRoundRect(72, 120, 460, 840, 'FFFFFF', 'DDEBE3', 28)}
-  ${svgText('Join at', 132, 184, { size: 34, weight: 700, color: '1A1A2E' })}
-  ${svgText(joinHost, 132, 234, { size: 37, weight: 900, color: '168A3A' })}
-  <image href="${qrDataUri}" x="122" y="292" width="360" height="360"/>
+  ${svgText('Join at', 132, 184, { size: 30, weight: 700, color: '1A1A2E' })}
+  ${svgText(host, 132, 230, { size: 34, weight: 900, color: '168A3A' })}
+  <image href="${qrDataUri}" xlink:href="${qrDataUri}" x="122" y="292" width="360" height="360"/>
   ${svgText('Scan QR code to join', 302, 705, { size: 30, weight: 800, color: '1A1A2E', anchor: 'middle' })}
   ${svgRoundRect(122, 755, 360, 92, 'EAF7EF', 'CBEAD4', 20)}
-  ${svgText(`#${eventCode}`, 302, 818, { size: 54, weight: 900, color: '168A3A', anchor: 'middle' })}
-  ${svgText(truncate(body.joinUrl, 42), 302, 897, { size: 22, weight: 700, color: '6B7B8D', anchor: 'middle' })}
+  ${svgText(`#${eventCode}`, 302, 818, { size: codeFontSize, weight: 900, color: '168A3A', anchor: 'middle' })}
+  ${svgText(`Join link: ${shortJoinLink}`, 302, 897, { size: 20, weight: 700, color: '6B7B8D', anchor: 'middle' })}
   ${svgRoundRect(560, 120, 1288, 840, 'FFFFFF', 'DDEBE3', 28)}
   ${svgText(label.toUpperCase(), 620, 190, { size: 22, weight: 900, color: '6B7B8D' })}
   ${svgText('Scan the QR code or enter the event code to join.', 1745, 190, { size: 24, weight: 700, color: '6B7B8D', anchor: 'end' })}
@@ -314,6 +339,8 @@ function buildPreviewSvg(body: InteractionSlideRequest, qrDataUri: string) {
 }
 
 function addJoinPanel(slide: any, pptx: any, qrDataUri: string, eventCode: string, joinUrl: string) {
+  const host = joinHost(joinUrl);
+  const shortJoinLink = joinShortPath(joinUrl);
   slide.addShape(pptx.ShapeType.roundRect, {
     x: 0.45,
     y: 0.65,
@@ -323,12 +350,22 @@ function addJoinPanel(slide: any, pptx: any, qrDataUri: string, eventCode: strin
     fill: { color: 'FFFFFF' },
     line: { color: 'DDEBE3', width: 1 },
   });
-  slide.addText('Join live', { x: 0.68, y: 0.9, w: 2.35, h: 0.28, fontSize: 12, bold: true, color: '2D8A4E', margin: 0 });
-  slide.addImage({ data: qrDataUri, x: 0.68, y: 1.28, w: 2.35, h: 2.35 });
-  slide.addText('Scan QR code to join', { x: 0.64, y: 3.9, w: 2.42, h: 0.3, fontSize: 12, bold: true, align: 'center', color: '1A1A2E', margin: 0 });
-  slide.addText(`#${eventCode}`, { x: 0.62, y: 4.42, w: 2.5, h: 0.62, fontSize: 27, bold: true, align: 'center', color: '168A3A', margin: 0 });
-  slide.addText(joinUrl, { x: 0.62, y: 5.22, w: 2.5, h: 0.58, fontSize: 8, align: 'center', color: '6B7B8D', fit: 'shrink', margin: 0 });
-  slide.addText('Join at SlideEngage', { x: 0.64, y: 6.0, w: 2.42, h: 0.28, fontSize: 12, bold: true, align: 'center', color: '1A1A2E', margin: 0 });
+  slide.addText('Join at', { x: 0.68, y: 0.88, w: 2.35, h: 0.28, fontSize: 12, bold: true, color: '1A1A2E', margin: 0.02 });
+  slide.addText(host, { x: 0.68, y: 1.16, w: 2.35, h: 0.28, fontSize: 13, bold: true, color: '168A3A', fit: 'shrink', margin: 0.02 });
+  slide.addImage({ data: qrDataUri, x: 0.73, y: 1.58, w: 2.25, h: 2.25 });
+  slide.addText('Scan QR code to join', { x: 0.64, y: 4.02, w: 2.42, h: 0.28, fontSize: 11, bold: true, align: 'center', color: '1A1A2E', margin: 0 });
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x: 0.62,
+    y: 4.44,
+    w: 2.5,
+    h: 0.62,
+    rectRadius: 0.06,
+    fill: { color: 'EAF7EF' },
+    line: { color: 'CBEAD4', width: 1 },
+  });
+  slide.addText(`#${eventCode}`, { x: 0.72, y: 4.55, w: 2.3, h: 0.38, fontSize: eventCodeFontSize(eventCode, 27, 18), bold: true, align: 'center', color: '168A3A', fit: 'shrink', margin: 0 });
+  slide.addText(`Join link: ${shortJoinLink}`, { x: 0.64, y: 5.28, w: 2.42, h: 0.28, fontSize: 8.5, align: 'center', color: '6B7B8D', fit: 'shrink', margin: 0.01 });
+  slide.addText('Enter the event code if scanning is unavailable.', { x: 0.68, y: 5.78, w: 2.35, h: 0.38, fontSize: 8.5, align: 'center', color: '6B7B8D', fit: 'shrink', margin: 0.01 });
 }
 
 function addFrame(slide: any, pptx: any, label: string, question: string) {
@@ -343,7 +380,7 @@ function addFrame(slide: any, pptx: any, label: string, question: string) {
   });
   slide.addText(label.toUpperCase(), { x: 3.78, y: 0.92, w: 3.3, h: 0.25, fontSize: 10, bold: true, color: '6B7B8D', margin: 0 });
   slide.addText('Scan the QR code or enter the event code to join.', { x: 8.0, y: 0.92, w: 4.05, h: 0.25, fontSize: 9, align: 'right', color: '6B7B8D', fit: 'shrink', margin: 0 });
-  slide.addText(question, { x: 3.78, y: 1.25, w: 8.55, h: 0.9, fontSize: 30, bold: true, color: '1A1A2E', fit: 'shrink', margin: 0.02 });
+  slide.addText(question, { x: 3.78, y: 1.25, w: 8.55, h: 0.82, fontSize: 28, bold: true, color: '1A1A2E', fit: 'shrink', margin: 0.02, breakLine: false });
   slide.addShape(pptx.ShapeType.line, { x: 3.45, y: 2.25, w: 9.35, h: 0, line: { color: 'E2EBE6', width: 1 } });
 }
 
@@ -507,7 +544,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'question, interactionType, eventCode, and joinUrl required' }, { status: 400 });
     }
 
-    const qrDataUri = await getQrDataUri(joinUrl);
+    const qrDataUri = await getQrDataUri(joinUrl, eventCode);
     const previewSvg = buildPreviewSvg(body, qrDataUri);
     const svgBase64 = Buffer.from(previewSvg).toString('base64');
 

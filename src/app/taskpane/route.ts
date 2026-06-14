@@ -2023,10 +2023,8 @@ export function GET() {
                     resolve(true);
                     return;
                   }
-                  focusNewestPowerPointSlide().then(function () {
-                    setStatus("app-status", "Slide inserted successfully and brought into view.", false);
-                    resolve(true);
-                  });
+                  setStatus("app-status", "Slide inserted successfully.", false);
+                  resolve(true);
                 } else {
                   var message = result.error && result.error.message ? result.error.message : "PowerPoint rejected the generated slide image.";
                   reject(new Error(message));
@@ -2048,10 +2046,8 @@ export function GET() {
               Office.context.document.insertFileFromBase64Async(base64, function (result) {
                 if (result.status === Office.AsyncResultStatus.Succeeded) {
                   addDebug("PowerPoint slide inserted successfully");
-                  focusNewestPowerPointSlide().then(function () {
-                    setStatus("app-status", "Slide created successfully and brought into view.", false);
-                    resolve();
-                  });
+                  setStatus("app-status", "Slide created successfully.", false);
+                  resolve();
                   return;
                 } else {
                   var message = result.error && result.error.message ? result.error.message : "PowerPoint rejected the generated slide.";
@@ -2072,6 +2068,7 @@ export function GET() {
         function buildFallbackText(interaction, liveUrlOverride) {
           var joinUrl = APP_URL + "/join?code=" + encodeURIComponent(selectedEvent.event_code);
           var liveUrl = liveUrlOverride || interactionLiveUrl(interaction);
+          var host = APP_URL.replace(/^https?:\/\//, "");
           var label = labelForInteraction(interaction);
           var options = normalizeOptions(interaction.interaction_options || optionDrafts)
             .map(function (option, index) {
@@ -2084,9 +2081,9 @@ export function GET() {
             "Question:\\n" + (interaction.title || "Untitled interaction") + "\\n\\n" +
             (options ? "Answer options:\\n" + options + "\\n\\n" : "") +
             "Event code: #" + selectedEvent.event_code + "\\n" +
-            "Join URL: " + joinUrl + "\\n" +
-            "QR link: " + joinUrl + "\\n" +
-            "Live result link: " + liveUrl + "\\n\\n" +
+            "Join at: " + host + "/join\\n" +
+            "If QR is unavailable, enter code #" + selectedEvent.event_code + "\\n" +
+            "Live results: " + liveUrl + "\\n\\n" +
             "Live result area:\\n" +
             (interaction.type === "word_cloud" ? "Live responses will appear here." :
               interaction.type === "qa" ? "Live questions will appear here." :
@@ -2184,11 +2181,11 @@ export function GET() {
           }, 350);
         }
 
-        function loadQaResults(interactionId, archived) {
-          var url = "/api/qa?interaction_id=" + encodeURIComponent(interactionId) + "&sort=popular&archived=" + (archived ? "true" : "false");
+        function loadQaResults(interactionId) {
+          var url = "/api/qa?interaction_id=" + encodeURIComponent(interactionId) + "&sort=popular&archived=false";
           request(url, { cache: "no-store" })
             .then(function (data) {
-              renderQaResults(data.questions || [], !!archived);
+              renderQaResults(data.questions || []);
               startResultsPolling(interactionId);
             })
             .catch(function (error) {
@@ -2196,18 +2193,26 @@ export function GET() {
             });
         }
 
-        function renderQaResults(questions, archived) {
+        function renderQaResults(questions) {
           var list = el("results-list");
           list.innerHTML = "";
           var header = document.createElement("div");
           header.className = "interaction-item";
-          header.innerHTML = '<div class="row"><strong></strong><button class="button secondary small" type="button"></button></div><div class="small muted" style="margin-top:6px"></div>';
-          header.querySelector("strong").textContent = archived ? "Archive" : "Audience Q&A";
-          header.querySelector("button").textContent = archived ? "Show live questions" : "Archive";
-          header.querySelector("button").onclick = function () { loadQaResults(selectedInteraction.id, !archived); };
-          header.querySelector(".small.muted").textContent = archived
-            ? (questions.length ? questions.length + " archived questions" : "Your archive is empty. You do not have any questions in your archive.")
-            : (questions.length ? questions.length + " live questions" : "Your Q&A is ready. Your participants can ask new questions.");
+          header.innerHTML = '<div class="row"><strong>Audience Q&A</strong><button class="button secondary small" type="button">Restore question</button></div><div class="small muted" style="margin-top:6px"></div>';
+          header.querySelector("button").onclick = function () {
+            if (!selectedInteraction) return;
+            request("/api/qa/restore-last", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ interaction_id: selectedInteraction.id })
+            }).then(function () {
+              loadQaResults(selectedInteraction.id, false);
+              setStatus("app-status", "Question restored.", false);
+            }).catch(function (error) {
+              setStatus("app-status", error.message || "No question available to restore.", true);
+            });
+          };
+          header.querySelector(".small.muted").textContent = questions.length ? questions.length + " live questions" : "Your Q&A is ready. Your participants can ask new questions.";
           list.appendChild(header);
           questions.forEach(function (question) {
             var row = document.createElement("div");
@@ -2216,14 +2221,15 @@ export function GET() {
             row.querySelector("strong").textContent = question.question_text;
             row.querySelector(".pill").textContent = (question.upvote_count || 0) + " upvotes";
             row.querySelector(".small.muted").textContent = question.display_name || "Anonymous";
-            row.querySelector("button").textContent = archived ? "Restore" : "Archive";
+            row.querySelector("button").textContent = "Mark as answered";
             row.querySelector("button").onclick = function () {
               request("/api/qa", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: question.id, is_hidden: !archived })
+                body: JSON.stringify({ id: question.id, answered: true, answered_at: new Date().toISOString(), is_hidden: true, deleted_by: "answered" })
               }).then(function () {
-                loadQaResults(selectedInteraction.id, archived);
+                loadQaResults(selectedInteraction.id, false);
+                setStatus("app-status", "Question marked as answered.", false);
               });
             };
             list.appendChild(row);
