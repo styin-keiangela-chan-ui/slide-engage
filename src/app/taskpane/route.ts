@@ -586,6 +586,8 @@ Message:</div>
         var SESSION_KEY = "slideengage_lecturer";
         var lecturer = null;
         var authClient = null;
+        var loginEmail = "";
+        var loginPassword = "";
         var events = [];
         var selectedEvent = null;
         var interactions = [];
@@ -732,6 +734,40 @@ Message:</div>
           card.classList.add("live-flash");
         }
 
+        function saveLoginDraft() {
+          try {
+            sessionStorage.setItem("slideengage_login_email", loginEmail);
+            sessionStorage.setItem("slideengage_login_password", loginPassword);
+          } catch (error) {
+            addDebug("Login draft storage skipped: " + (error && error.message ? error.message : "unknown error"));
+          }
+        }
+
+        function restoreLoginDraft() {
+          try {
+            loginEmail = loginEmail || sessionStorage.getItem("slideengage_login_email") || "";
+            loginPassword = loginPassword || sessionStorage.getItem("slideengage_login_password") || "";
+          } catch (error) {
+            addDebug("Login draft restore skipped: " + (error && error.message ? error.message : "unknown error"));
+          }
+        }
+
+        function clearLoginDraft() {
+          loginEmail = "";
+          loginPassword = "";
+          try {
+            sessionStorage.removeItem("slideengage_login_email");
+            sessionStorage.removeItem("slideengage_login_password");
+          } catch {}
+        }
+
+        function syncLoginInputs() {
+          var emailInput = el("email");
+          var passwordInput = el("password");
+          if (emailInput && emailInput.value !== loginEmail) emailInput.value = loginEmail;
+          if (passwordInput && passwordInput.value !== loginPassword) passwordInput.value = loginPassword;
+        }
+
         function showApp() {
           el("login-view").classList.add("hidden");
           el("app-view").classList.remove("hidden");
@@ -740,13 +776,17 @@ Message:</div>
           el("user-email").textContent = lecturer && lecturer.email ? lecturer.email : "";
           el("user-avatar").textContent = (lecturer && (lecturer.name || lecturer.email) ? (lecturer.name || lecturer.email).charAt(0) : "A").toUpperCase();
           el("user-name").title = lecturer && lecturer.email ? lecturer.email : "";
+          console.log("[SlideEngage taskpane] taskpane render: dashboard");
           addDebug("Dashboard rendered");
         }
 
         function showLogin() {
+          restoreLoginDraft();
+          syncLoginInputs();
           el("login-view").classList.remove("hidden");
           el("app-view").classList.add("hidden");
           el("logout-button").classList.add("hidden");
+          console.log("[SlideEngage taskpane] taskpane render: login");
         }
 
         function parseStoredSession(raw) {
@@ -921,9 +961,13 @@ Message:</div>
 
         function login(event) {
           if (event && event.preventDefault) event.preventDefault();
-          console.log("[SlideEngage taskpane] Sign in clicked");
-          var email = el("email").value.trim();
-          var password = el("password").value;
+          console.log("[SlideEngage taskpane] login submit clicked");
+          console.log("[SlideEngage taskpane] preventDefault called");
+          loginEmail = el("email").value;
+          loginPassword = el("password").value;
+          saveLoginDraft();
+          var email = loginEmail.trim();
+          var password = loginPassword;
           console.log("[SlideEngage taskpane] Login email:", email);
           updateLoginDebug({
             email: email,
@@ -1023,6 +1067,8 @@ Message:</div>
               });
             }).then(function (data) {
               saveSession(data, supabaseSession);
+              clearLoginDraft();
+              syncLoginInputs();
               setStatus("login-status", "", false);
               setActionState("login", "success");
               addDebug("Supabase connected");
@@ -1043,7 +1089,7 @@ Message:</div>
               });
             }
             console.error("[SlideEngage taskpane] Login failed:", message);
-            setStatus("login-status", message, true);
+            setStatus("login-status", "Login failed. Please check your email and password. " + message, true);
             setActionState("login", "error");
             addDebug("Login failed: " + error.message);
           }).finally(function () {
@@ -2511,9 +2557,27 @@ Message:</div>
 
         function bind() {
           el("login-form").addEventListener("submit", login);
-          el("login-button").addEventListener("click", login);
+          el("email").addEventListener("input", function (event) {
+            loginEmail = event.target.value;
+            saveLoginDraft();
+            console.log("[SlideEngage taskpane] email input changed");
+            updateLoginDebug({
+              email: loginEmail,
+              supabase: actionStates.login === "loading" ? "PENDING" : "NOT STARTED",
+              api: "NOT STARTED",
+              status: "",
+              message: ""
+            });
+          });
+          el("password").addEventListener("input", function (event) {
+            loginPassword = event.target.value;
+            saveLoginDraft();
+            console.log("[SlideEngage taskpane] password input changed");
+          });
           el("logout-button").onclick = function () {
             clearSession();
+            clearLoginDraft();
+            syncLoginInputs();
             setStatus("login-status", "Signed out.", false);
             showLogin();
           };
@@ -2563,6 +2627,8 @@ Message:</div>
 
         try {
           bind();
+          restoreLoginDraft();
+          syncLoginInputs();
           addDebug("Handlers bound");
           initializeOffice();
           restoreSession();
