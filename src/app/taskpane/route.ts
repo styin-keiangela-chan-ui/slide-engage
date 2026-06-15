@@ -1,6 +1,8 @@
 export const dynamic = 'force-static';
 
 const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://slide-engage.vercel.app').replace(/\/$/, '');
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 export function GET() {
   const html = `<!doctype html>
@@ -10,6 +12,7 @@ export function GET() {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SlideEngage PowerPoint Add-in</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
     <style>
       :root {
         color-scheme: light;
@@ -458,11 +461,11 @@ export function GET() {
     <main class="shell">
       <section id="login-view" class="card">
         <h1 class="title">Lecturer login</h1>
-        <div class="stack">
+        <form id="login-form" class="stack">
           <input id="email" class="input" autocomplete="email" placeholder="Email" />
           <input id="password" class="input" type="password" autocomplete="current-password" placeholder="Password" />
-          <button id="login-button" class="button full" type="button">Sign in</button>
-        </div>
+          <button id="login-button" class="button full" type="submit">Sign in</button>
+        </form>
         <div id="login-status" class="status hidden" role="status" aria-live="polite"></div>
       </section>
 
@@ -560,8 +563,11 @@ export function GET() {
     <script>
       (function () {
         var APP_URL = "${appUrl}";
+        var SUPABASE_URL = ${JSON.stringify(supabaseUrl)};
+        var SUPABASE_ANON_KEY = ${JSON.stringify(supabaseAnonKey)};
         var SESSION_KEY = "slideengage_lecturer";
         var lecturer = null;
+        var authClient = null;
         var events = [];
         var selectedEvent = null;
         var interactions = [];
@@ -743,12 +749,38 @@ export function GET() {
           return Date.now() > new Date(session.expires_at).getTime();
         }
 
-        function saveSession(data) {
+        function getAuthClient() {
+          if (authClient) return authClient;
+          if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+            console.error("[SlideEngage taskpane] Missing Supabase public credentials");
+            return null;
+          }
+          if (!window.supabase || !window.supabase.createClient) {
+            console.error("[SlideEngage taskpane] Supabase client script unavailable");
+            return null;
+          }
+          authClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: {
+              persistSession: true,
+              autoRefreshToken: true,
+              detectSessionInUrl: false,
+              storageKey: "slideengage_office_auth",
+            },
+          });
+          return authClient;
+        }
+
+        function saveSession(data, supabaseSession) {
           lecturer = data.lecturer;
-          localStorage.setItem(SESSION_KEY, JSON.stringify({
-            lecturer: data.lecturer,
-            expires_at: data.expires_at || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()
-          }));
+          try {
+            localStorage.setItem(SESSION_KEY, JSON.stringify({
+              lecturer: data.lecturer,
+              supabase_session: supabaseSession || data.supabase_session || null,
+              expires_at: data.expires_at || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()
+            }));
+          } catch (error) {
+            addDebug("Unable to persist Office session: " + (error && error.message ? error.message : "unknown error"));
+          }
         }
 
         function clearSession() {
@@ -760,6 +792,12 @@ export function GET() {
           selectedInteraction = null;
           clearInterval(resultsTimer);
           stopLiveSlideRefresh();
+          try {
+            var client = getAuthClient();
+            if (client && client.auth) client.auth.signOut();
+          } catch (error) {
+            addDebug("Supabase sign out skipped: " + (error && error.message ? error.message : "unknown error"));
+          }
         }
 
         function safeJson(response) {
@@ -820,9 +858,12 @@ export function GET() {
           }
         }
 
-        function login() {
+        function login(event) {
+          if (event && event.preventDefault) event.preventDefault();
+          console.log("[SlideEngage taskpane] Sign in clicked");
           var email = el("email").value.trim();
           var password = el("password").value;
+          console.log("[SlideEngage taskpane] Login email:", email);
           if (!email || !password) {
             setStatus("login-status", "Email and password required.", true);
             return;
@@ -830,21 +871,35 @@ export function GET() {
           if (isActionLoading("login")) return;
           setActionState("login", "loading");
           setStatus("login-status", "Signing in...", false);
-          request("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: email, password: password })
-          }).then(function (data) {
-            saveSession(data);
-            setStatus("login-status", "", false);
-            setActionState("login", "success");
-            addDebug("Supabase connected");
-            showApp();
-            loadEvents();
+          var client = getAuthClient();
+          var authPromise = client && client.auth
+            ? client.auth.signInWithPassword({ email: email, password: password })
+            : Promise.reject(new Error("Supabase Auth is unavailable in this Office WebView."));
+
+          authPromise.then(function (authResponse) {
+            console.log("[SlideEngage taskpane] Supabase response:", {
+              user: authResponse && authResponse.data && authResponse.data.user ? authResponse.data.user.email : null,
+              hasSession: !!(authResponse && authResponse.data && authResponse.data.session),
+              error: authResponse && authResponse.error ? authResponse.error.message : null
+            });
+            if (authResponse && authResponse.error) throw authResponse.error;
+            return request(APP_URL + "/api/auth/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: email, password: password })
+            }).then(function (data) {
+              saveSession(data, authResponse && authResponse.data ? authResponse.data.session : null);
+              setStatus("login-status", "", false);
+              setActionState("login", "success");
+              addDebug("Supabase connected");
+              showApp();
+              loadEvents();
+            });
           }).catch(function (error) {
             var message = /Failed to fetch|NetworkError|Load failed/i.test(error.message)
               ? "Network error. Check your internet connection and try again."
               : error.message;
+            console.error("[SlideEngage taskpane] Login failed:", message);
             setStatus("login-status", message, true);
             setActionState("login", "error");
             addDebug("Login failed: " + error.message);
@@ -2312,7 +2367,8 @@ export function GET() {
         }
 
         function bind() {
-          el("login-button").onclick = login;
+          el("login-form").addEventListener("submit", login);
+          el("login-button").addEventListener("click", login);
           el("logout-button").onclick = function () {
             clearSession();
             setStatus("login-status", "Signed out.", false);
