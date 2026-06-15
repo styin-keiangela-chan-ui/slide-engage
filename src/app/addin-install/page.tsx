@@ -88,7 +88,7 @@ const powerPointUseSteps = [
   {
     title: 'Create events, add interactions, and present live results.',
     caption: 'After login, manage SlideEngage directly inside PowerPoint.',
-    image: '/guides/mac-install/step-11-taskpane.png',
+    image: '/guides/mac-install/step-12-powerpoint-dashboard.png',
   },
 ];
 
