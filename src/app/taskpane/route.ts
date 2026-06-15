@@ -477,10 +477,115 @@ export function GET() {
         <form id="login-form" class="stack" action="javascript:void(0)" onsubmit="return window.slideEngageLoginSubmit ? window.slideEngageLoginSubmit(event) : false">
           <input id="email" class="input" autocomplete="email" placeholder="Email" oninput="window.slideEngageEmailChanged && window.slideEngageEmailChanged(this.value)" />
           <input id="password" class="input" type="password" autocomplete="current-password" placeholder="Password" oninput="window.slideEngagePasswordChanged && window.slideEngagePasswordChanged(this.value)" />
-          <button id="login-button" class="button full" type="button" onclick="return window.slideEngageLoginSubmit ? window.slideEngageLoginSubmit(event) : false">Sign in</button>
+          <button id="login-button" class="button full" type="button" onclick="return window.slideEngageLoginSubmit(event)">Sign in</button>
         </form>
         <div id="login-status" class="status hidden" role="status" aria-live="polite"></div>
       </section>
+
+      <script>
+        window.slideEngageBootstrap = {
+          appUrl: ${JSON.stringify(appUrl)},
+          supabaseUrl: ${JSON.stringify(supabaseUrl)},
+          supabaseAnonKey: ${JSON.stringify(supabaseAnonKey)}
+        };
+        window.slideEngageSetLoginStatus = function (message, isError) {
+          var status = document.getElementById("login-status");
+          if (!status) return;
+          status.classList.toggle("hidden", !message);
+          status.style.color = isError ? "#b42318" : "";
+          status.textContent = message || "";
+        };
+        window.slideEngageBootstrapLogin = function (event) {
+          if (event && event.preventDefault) event.preventDefault();
+          if (event && event.stopPropagation) event.stopPropagation();
+          console.log("LOGIN BUTTON CLICKED");
+          console.log("Starting login...");
+          var emailInput = document.getElementById("email");
+          var passwordInput = document.getElementById("password");
+          var button = document.getElementById("login-button");
+          var email = emailInput ? String(emailInput.value || "").trim() : "";
+          var password = passwordInput ? String(passwordInput.value || "") : "";
+          console.log(email);
+          if (typeof window.slideEngageMainLogin === "function") {
+            return window.slideEngageMainLogin(event);
+          }
+          if (!email || !password) {
+            window.slideEngageSetLoginStatus("Email and password required.", true);
+            return false;
+          }
+          if (!window.slideEngageBootstrap.supabaseUrl || !window.slideEngageBootstrap.supabaseAnonKey) {
+            window.slideEngageSetLoginStatus("Login is not configured. Please check Supabase environment variables.", true);
+            return false;
+          }
+          window.slideEngageSetLoginStatus("Loading...", false);
+          if (button) {
+            button.disabled = true;
+            button.textContent = "Signing in...";
+          }
+          console.log("Supabase initialized", {
+            hasUrl: !!window.slideEngageBootstrap.supabaseUrl,
+            hasAnonKey: !!window.slideEngageBootstrap.supabaseAnonKey
+          });
+          fetch(window.slideEngageBootstrap.supabaseUrl.replace(/\\/$/, "") + "/auth/v1/token?grant_type=password", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": window.slideEngageBootstrap.supabaseAnonKey,
+              "Authorization": "Bearer " + window.slideEngageBootstrap.supabaseAnonKey
+            },
+            body: JSON.stringify({ email: email, password: password })
+          }).then(function (response) {
+            return response.json().catch(function () { return {}; }).then(function (data) {
+              if (!response.ok || !data.access_token) throw new Error(data.error_description || data.msg || "Invalid email or password.");
+              console.log("Login success");
+              try {
+                localStorage.setItem("slideengage_access_token", data.access_token);
+                if (data.refresh_token) localStorage.setItem("slideengage_refresh_token", data.refresh_token);
+              } catch (error) {
+                console.log("Token storage skipped");
+              }
+              return fetch(window.slideEngageBootstrap.appUrl + "/api/auth/login", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": "Bearer " + data.access_token
+                },
+                body: JSON.stringify({ email: email, password: password })
+              }).then(function (apiResponse) {
+                return apiResponse.json().catch(function () { return {}; }).then(function (apiData) {
+                  if (!apiResponse.ok || !apiData.lecturer) throw new Error(apiData.error || "Invalid email or password.");
+                  var sessionPayload = JSON.stringify({
+                    lecturer: apiData.lecturer,
+                    supabase_session: data,
+                    expires_at: apiData.expires_at || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()
+                  });
+                  try {
+                    localStorage.setItem("slideengage_lecturer", sessionPayload);
+                  } catch (error) {
+                    console.log("Session storage skipped");
+                  }
+                  return apiData;
+                });
+              });
+            });
+          }).then(function () {
+            console.log("Redirect start");
+            window.slideEngageSetLoginStatus("Login successful", false);
+            window.location.href = window.slideEngageBootstrap.appUrl + "/taskpane?login=success&v=" + Date.now();
+          }).catch(function (error) {
+            console.log("Login failure");
+            console.error("[SlideEngage taskpane] Login failed:", error && error.message ? error.message : error);
+            window.slideEngageSetLoginStatus("Invalid email or password.", true);
+            if (button) {
+              button.disabled = false;
+              button.textContent = "Sign in";
+            }
+          });
+          return false;
+        };
+        window.slideEngageLoginSubmit = window.slideEngageBootstrapLogin;
+      </script>
 
       <section id="app-view" class="hidden">
         <section class="card user-row">
@@ -778,6 +883,7 @@ export function GET() {
         }
 
         function exposeLoginHandlers() {
+          window.slideEngageMainLogin = login;
           window.slideEngageLoginSubmit = function (event) {
             console.log("LOGIN BUTTON CLICKED");
             return login(event);
