@@ -499,6 +499,7 @@ export function GET() {
           if (event && event.preventDefault) event.preventDefault();
           if (event && event.stopPropagation) event.stopPropagation();
           console.log("LOGIN BUTTON CLICKED");
+          console.log("PowerPoint login clicked");
           console.log("Starting login...");
           var emailInput = document.getElementById("email");
           var passwordInput = document.getElementById("password");
@@ -506,9 +507,6 @@ export function GET() {
           var email = emailInput ? String(emailInput.value || "").trim().toLowerCase() : "";
           var password = passwordInput ? String(passwordInput.value || "") : "";
           console.log(email);
-          if (typeof window.slideEngageMainLogin === "function") {
-            return window.slideEngageMainLogin(event);
-          }
           if (!email || !password) {
             window.slideEngageSetLoginStatus("Email and password required.", true);
             return false;
@@ -537,6 +535,7 @@ export function GET() {
               });
               try {
                 localStorage.setItem("slideengage_lecturer", sessionPayload);
+                console.log("session saved");
               } catch (error) {
                 console.log("Session storage skipped");
               }
@@ -545,7 +544,11 @@ export function GET() {
           }).then(function () {
             console.log("Redirect start");
             window.slideEngageSetLoginStatus("Login successful", false);
-            window.location.href = window.slideEngageBootstrap.appUrl + "/taskpane?login=success&v=" + Date.now();
+            if (typeof window.slideEngageOpenPanelWithSession === "function") {
+              window.slideEngageOpenPanelWithSession();
+            } else {
+              window.location.href = window.slideEngageBootstrap.appUrl + "/taskpane?login=success&v=" + Date.now();
+            }
           }).catch(function (error) {
             console.log("Login failure");
             console.error("[SlideEngage taskpane] Login failed:", error && error.message ? error.message : error);
@@ -856,10 +859,17 @@ export function GET() {
         }
 
         function exposeLoginHandlers() {
-          window.slideEngageMainLogin = login;
-          window.slideEngageLoginSubmit = function (event) {
-            console.log("LOGIN BUTTON CLICKED");
-            return login(event);
+          window.slideEngageOpenPanelWithSession = function () {
+            try {
+              var session = parseStoredSession(localStorage.getItem(SESSION_KEY));
+              if (session && !isSessionExpired(session)) {
+                completeLogin({ lecturer: session.lecturer, expires_at: session.expires_at }, session.supabase_session || null);
+                return true;
+              }
+            } catch (error) {
+              addDebug("Open panel from session failed: " + (error && error.message ? error.message : "unknown error"));
+            }
+            return false;
           };
           window.slideEngageEmailChanged = handleEmailInput;
           window.slideEngagePasswordChanged = handlePasswordInput;
@@ -1095,11 +1105,13 @@ export function GET() {
 
         function completeLogin(data, supabaseSession) {
           saveSession(data, supabaseSession);
+          console.log("session saved");
           clearLoginDraft();
           syncLoginInputs();
           setStatus("login-status", "", false);
           setActionState("login", "success");
           addDebug("SlideEngage signed in");
+          console.log("switching to interaction page");
           showApp();
           loadEvents();
         }
@@ -2634,20 +2646,12 @@ export function GET() {
         }
 
         function bind() {
-          el("login-form").addEventListener("submit", login);
-          el("login-button").addEventListener("click", login);
           el("email").addEventListener("input", function (event) {
             handleEmailInput(event.target.value);
           });
           el("password").addEventListener("input", function (event) {
             handlePasswordInput(event.target.value);
           });
-          document.addEventListener("submit", function (event) {
-            if (event.target && event.target.id === "login-form") login(event);
-          }, true);
-          document.addEventListener("click", function (event) {
-            if (event.target && event.target.id === "login-button") login(event);
-          }, true);
           el("logout-button").onclick = function () {
             clearSession();
             clearLoginDraft();
