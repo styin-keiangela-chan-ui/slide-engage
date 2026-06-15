@@ -231,7 +231,7 @@ export default function AddinInstallPage() {
                 The Windows installer verifies the manifest copy, PowerPoint WEF manifest, and trusted catalog registration. It opens a success page after installation.
               </div>
               <div className="mt-3 rounded-lg border border-[#FFD7A8] bg-[#FFF8E6] p-4 text-sm leading-relaxed text-[#7A4B00]">
-                If PowerPoint does not show Add-ins, open the troubleshooting page created by the installer at <strong>%LOCALAPPDATA%\SlideEngage\OfficeAddin</strong>.
+                If PowerPoint does not show SlideEngage, open the troubleshooting page created by the installer at <strong>%LOCALAPPDATA%\SlideEngage\OfficeAddin</strong>. Also confirm the trusted catalog appears in <strong>File</strong> {'->'} <strong>Options</strong> {'->'} <strong>Trust Center</strong> {'->'} <strong>Trusted Add-in Catalogs</strong>.
               </div>
             </section>
 
@@ -272,6 +272,7 @@ export default function AddinInstallPage() {
             <div className="space-y-3 text-sm text-[#6B7B8D]">
               <p><strong className="text-[#1A1A2E]">Windows Add-ins button is missing:</strong> Look for the <strong>SlideEngage</strong> ribbon tab first. If it is still missing, confirm you are using desktop PowerPoint 2016 or newer, Microsoft 365 PowerPoint, or a managed Office install with Office Web Add-ins enabled.</p>
               <p><strong className="text-[#1A1A2E]">WebView2 is missing:</strong> Install Microsoft Edge WebView2 Runtime, then rerun the SlideEngage Windows installer.</p>
+              <p><strong className="text-[#1A1A2E]">Trusted catalog not listed:</strong> In PowerPoint, open <strong>File</strong> {'->'} <strong>Options</strong> {'->'} <strong>Trust Center</strong> {'->'} <strong>Trust Center Settings</strong> {'->'} <strong>Trusted Add-in Catalogs</strong>. The SlideEngage catalog should point to <strong>%LOCALAPPDATA%\SlideEngage\OfficeAddin</strong> and show in the menu.</p>
               <p><strong className="text-[#1A1A2E]">Upload My Add-in is missing:</strong> Make sure you are using desktop PowerPoint with add-ins enabled by your organization.</p>
               <p><strong className="text-[#1A1A2E]">PowerPoint blocks the add-in:</strong> Confirm the manifest URL and task pane use HTTPS, not localhost.</p>
               <p><strong className="text-[#1A1A2E]">SlideEngage tab does not appear:</strong> Remove the old sideloaded add-in if present, restart PowerPoint, then reinstall or upload the latest manifest.</p>

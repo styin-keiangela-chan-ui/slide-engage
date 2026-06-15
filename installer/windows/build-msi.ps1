@@ -44,6 +44,14 @@ SlideEngage PowerPoint Add-in for Windows
 The installer registers a current-user Office trusted catalog and copies manifest.xml to:
 %LOCALAPPDATA%\SlideEngage\OfficeAddin\manifest.xml
 %LOCALAPPDATA%\Microsoft\Office\16.0\Wef\SlideEngage\manifest.xml
+%LOCALAPPDATA%\Microsoft\Office\16.0\Wef\SlideEngage\SlideEngage.xml
+%LOCALAPPDATA%\Microsoft\Office\16.0\Wef\SlideEngage.xml
+
+The trusted catalog is registered at:
+HKCU\Software\Microsoft\Office\16.0\WEF\TrustedCatalogs\{3A58A707-8F47-4B13-A3AC-99D9F7238A41}
+
+If PowerPoint still does not show SlideEngage, confirm the catalog is listed in:
+File > Options > Trust Center > Trust Center Settings > Trusted Add-in Catalogs
 
 After installation, the installer opens:
 %LOCALAPPDATA%\SlideEngage\OfficeAddin\SlideEngage-Windows-Success.html

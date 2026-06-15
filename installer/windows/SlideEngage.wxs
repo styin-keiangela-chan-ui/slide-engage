@@ -35,7 +35,7 @@
         <File Id="ManifestXml" Source="$(var.SourceDir)\manifest.xml" KeyPath="yes"/>
         <RegistryKey Root="HKCU" Key="Software\Microsoft\Office\16.0\WEF\TrustedCatalogs\{3A58A707-8F47-4B13-A3AC-99D9F7238A41}">
           <RegistryValue Name="Id" Value="{3A58A707-8F47-4B13-A3AC-99D9F7238A41}" Type="string"/>
-          <RegistryValue Name="Url" Value="file:///[LocalAppDataFolder]SlideEngage/OfficeAddin/" Type="string"/>
+          <RegistryValue Name="Url" Value="[LocalAppDataFolder]SlideEngage\OfficeAddin" Type="string"/>
           <RegistryValue Name="Flags" Value="1" Type="integer"/>
         </RegistryKey>
         <RemoveFolder Id="RemoveOfficeAddinDir" Directory="OfficeAddinDir" On="uninstall"/>
@@ -43,6 +43,12 @@
       <Component Id="PowerPointWefManifestComponent" Directory="SlideEngageWefDir" Guid="25CF6A5B-DF70-4C62-9AF5-92C79E5306EB">
         <File Id="PowerPointWefManifestXml" Source="$(var.SourceDir)\manifest.xml" Name="manifest.xml" KeyPath="yes"/>
         <RemoveFolder Id="RemovePowerPointWefDir" Directory="SlideEngageWefDir" On="uninstall"/>
+      </Component>
+      <Component Id="PowerPointLegacyWefManifestComponent" Directory="SlideEngageWefDir" Guid="C6381C29-D29A-464D-8E8B-7F3BE26855B0">
+        <File Id="PowerPointLegacyWefManifestXml" Source="$(var.SourceDir)\manifest.xml" Name="SlideEngage.xml" KeyPath="yes"/>
+      </Component>
+      <Component Id="PowerPointRootWefManifestComponent" Directory="WefDir" Guid="D6E6F805-006B-412C-94BA-64DF55E6162D">
+        <File Id="PowerPointRootWefManifestXml" Source="$(var.SourceDir)\manifest.xml" Name="SlideEngage.xml" KeyPath="yes"/>
       </Component>
     </ComponentGroup>
   </Fragment>
