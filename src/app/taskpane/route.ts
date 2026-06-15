@@ -474,10 +474,10 @@ export function GET() {
     <main class="shell">
       <section id="login-view" class="card">
         <h1 class="title">Lecturer login</h1>
-        <form id="login-form" class="stack">
-          <input id="email" class="input" autocomplete="email" placeholder="Email" />
-          <input id="password" class="input" type="password" autocomplete="current-password" placeholder="Password" />
-          <button id="login-button" class="button full" type="submit">Sign in</button>
+        <form id="login-form" class="stack" onsubmit="return window.slideEngageLoginSubmit ? window.slideEngageLoginSubmit(event) : false">
+          <input id="email" class="input" autocomplete="email" placeholder="Email" oninput="window.slideEngageEmailChanged && window.slideEngageEmailChanged(this.value)" />
+          <input id="password" class="input" type="password" autocomplete="current-password" placeholder="Password" oninput="window.slideEngagePasswordChanged && window.slideEngagePasswordChanged(this.value)" />
+          <button id="login-button" class="button full" type="submit" onclick="return window.slideEngageLoginSubmit ? window.slideEngageLoginSubmit(event) : false">Sign in</button>
         </form>
         <div id="login-debug" class="debug-panel" aria-live="polite">Email entered:
 Supabase: NOT STARTED
@@ -768,6 +768,33 @@ Message:</div>
           if (passwordInput && passwordInput.value !== loginPassword) passwordInput.value = loginPassword;
         }
 
+        function handleEmailInput(value) {
+          loginEmail = value || "";
+          saveLoginDraft();
+          console.log("[SlideEngage taskpane] email input changed");
+          updateLoginDebug({
+            email: loginEmail,
+            supabase: actionStates.login === "loading" ? "PENDING" : "NOT STARTED",
+            api: "NOT STARTED",
+            status: "",
+            message: ""
+          });
+        }
+
+        function handlePasswordInput(value) {
+          loginPassword = value || "";
+          saveLoginDraft();
+          console.log("[SlideEngage taskpane] password input changed");
+        }
+
+        function exposeLoginHandlers() {
+          window.slideEngageLoginSubmit = function (event) {
+            return login(event);
+          };
+          window.slideEngageEmailChanged = handleEmailInput;
+          window.slideEngagePasswordChanged = handlePasswordInput;
+        }
+
         function showApp() {
           el("login-view").classList.add("hidden");
           el("app-view").classList.remove("hidden");
@@ -985,9 +1012,9 @@ Message:</div>
               message: "Email and password required."
             });
             setStatus("login-status", "Email and password required.", true);
-            return;
+            return false;
           }
-          if (isActionLoading("login")) return;
+          if (isActionLoading("login")) return false;
           setActionState("login", "loading");
           setStatus("login-status", "Signing in...", false);
           updateLoginDebug({
@@ -1095,6 +1122,7 @@ Message:</div>
           }).finally(function () {
             setActionState("login", actionStates.login === "error" ? "error" : actionStates.login);
           });
+          return false;
         }
 
         function loadEvents() {
@@ -2557,23 +2585,19 @@ Message:</div>
 
         function bind() {
           el("login-form").addEventListener("submit", login);
+          el("login-button").addEventListener("click", login);
           el("email").addEventListener("input", function (event) {
-            loginEmail = event.target.value;
-            saveLoginDraft();
-            console.log("[SlideEngage taskpane] email input changed");
-            updateLoginDebug({
-              email: loginEmail,
-              supabase: actionStates.login === "loading" ? "PENDING" : "NOT STARTED",
-              api: "NOT STARTED",
-              status: "",
-              message: ""
-            });
+            handleEmailInput(event.target.value);
           });
           el("password").addEventListener("input", function (event) {
-            loginPassword = event.target.value;
-            saveLoginDraft();
-            console.log("[SlideEngage taskpane] password input changed");
+            handlePasswordInput(event.target.value);
           });
+          document.addEventListener("submit", function (event) {
+            if (event.target && event.target.id === "login-form") login(event);
+          }, true);
+          document.addEventListener("click", function (event) {
+            if (event.target && event.target.id === "login-button") login(event);
+          }, true);
           el("logout-button").onclick = function () {
             clearSession();
             clearLoginDraft();
@@ -2626,6 +2650,7 @@ Message:</div>
         });
 
         try {
+          exposeLoginHandlers();
           bind();
           restoreLoginDraft();
           syncLoginInputs();
