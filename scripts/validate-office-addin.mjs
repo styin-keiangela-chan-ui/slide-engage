@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 
 const requiredUrl = 'https://slide-engage.vercel.app';
 const requiredTaskpane = `${requiredUrl}/taskpane`;
+const requiredCommands = `${requiredUrl}/commands.html`;
 const manifestFiles = [
   'public/manifest.xml',
   'public/office-addin/manifest.xml',
@@ -20,10 +21,20 @@ for (const file of manifestFiles) {
 
   const manifest = readFileSync(file, 'utf8');
   const checks = [
+    [manifest.includes('xsi:type="TaskPaneApp"'), 'manifest must be an Office.js TaskPaneApp'],
+    [manifest.includes('<Host Name="Presentation"/>'), 'base Hosts must target PowerPoint Presentation'],
+    [manifest.includes('<VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">'), 'manifest must include VersionOverridesV1_0'],
+    [manifest.includes('<Host xsi:type="Presentation">'), 'VersionOverrides must target PowerPoint Presentation'],
+    [manifest.includes('<ExtensionPoint xsi:type="PrimaryCommandSurface">'), 'manifest must define a PowerPoint command surface'],
+    [manifest.includes('<OfficeTab id="TabHome">'), 'manifest must add the SlideEngage command to the Home tab'],
+    [manifest.includes('<Action xsi:type="ShowTaskpane">'), 'manifest command must open the task pane'],
     [manifest.includes(requiredTaskpane), `SourceLocation must use ${requiredTaskpane}`],
+    [manifest.includes(requiredCommands), `FunctionFile must use ${requiredCommands}`],
     [manifest.includes(`<AppDomain>${requiredUrl}</AppDomain>`), `AppDomain must include ${requiredUrl}`],
+    [manifest.includes(`${requiredUrl}/assets/icons/icon-16.png`), '16px icon must use production HTTPS URL'],
     [manifest.includes(`${requiredUrl}/assets/icons/icon-32.png`), '32px icon must use production HTTPS URL'],
     [manifest.includes(`${requiredUrl}/assets/icons/icon-80.png`), '80px icon must use production HTTPS URL'],
+    [manifest.includes('<Permissions>ReadWriteDocument</Permissions>'), 'permissions must be ReadWriteDocument for slide insertion'],
     [!manifest.includes('localhost'), 'manifest must not contain localhost'],
     [!manifest.includes('your-real-vercel-domain'), 'manifest must not contain placeholder domain'],
   ];

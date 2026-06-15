@@ -3,14 +3,17 @@
   xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
   xsi:type="TaskPaneApp">
 
   <Id>7fb5ad7a-78bf-4713-bec5-b70ed0a3209d</Id>
   <Version>1.0.0.0</Version>
   <ProviderName>SlideEngage</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
+
   <DisplayName DefaultValue="SlideEngage"/>
   <Description DefaultValue="SlideEngage PowerPoint task pane for live polls, Q&amp;A, QR joining, and audience interactions."/>
+
   <IconUrl DefaultValue="https://slide-engage.vercel.app/assets/icons/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://slide-engage.vercel.app/assets/icons/icon-80.png"/>
   <SupportUrl DefaultValue="https://slide-engage.vercel.app/support"/>
@@ -28,4 +31,71 @@
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Presentation">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+
+          <FunctionFile resid="Commands.Url"/>
+
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="SlideEngage.CommandsGroup">
+                <Label resid="CommandsGroup.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16"/>
+                  <bt:Image size="32" resid="Icon.32"/>
+                  <bt:Image size="80" resid="Icon.80"/>
+                </Icon>
+                <Control xsi:type="Button" id="SlideEngage.OpenTaskpaneButton">
+                  <Label resid="TaskpaneButton.Label"/>
+                  <Supertip>
+                    <Title resid="TaskpaneButton.Label"/>
+                    <Description resid="TaskpaneButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16"/>
+                    <bt:Image size="32" resid="Icon.32"/>
+                    <bt:Image size="80" resid="Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>SlideEngage.Taskpane</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="https://slide-engage.vercel.app/assets/icons/icon-16.png"/>
+        <bt:Image id="Icon.32" DefaultValue="https://slide-engage.vercel.app/assets/icons/icon-32.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://slide-engage.vercel.app/assets/icons/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://slide-engage.vercel.app/taskpane"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://slide-engage.vercel.app/commands.html"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://slide-engage.vercel.app/addin-install"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="CommandsGroup.Label" DefaultValue="SlideEngage"/>
+        <bt:String id="TaskpaneButton.Label" DefaultValue="Open SlideEngage"/>
+        <bt:String id="GetStarted.Title" DefaultValue="Welcome to SlideEngage"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Open SlideEngage to create live polls, Q&amp;A, word clouds, quizzes, and audience interactions."/>
+        <bt:String id="GetStarted.Description" DefaultValue="Use SlideEngage inside PowerPoint to add audience interactions and present live results."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
 </OfficeApp>
