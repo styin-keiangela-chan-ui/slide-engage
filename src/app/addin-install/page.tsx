@@ -18,8 +18,8 @@ function getAppBaseUrl() {
 
 const macInstallSteps = [
   {
-    title: 'Click Download macOS.',
-    caption: 'Download the SlideEngage macOS installer from the PowerPoint integration page.',
+    title: 'Click Download PowerPoint Add-in.',
+    caption: 'Download the SlideEngage PowerPoint add-in from the PowerPoint integration page.',
     image: '/guides/mac-install/step-1-download.png',
   },
   {
