@@ -495,6 +495,166 @@ export function GET() {
           status.style.color = isError ? "#b42318" : "";
           status.textContent = message || "";
         };
+        window.slideEngageBootstrapEscapeHtml = function (value) {
+          return String(value == null ? "" : value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+        };
+        window.slideEngageRenderInteractionFallback = function (data) {
+          var lecturer = data && data.lecturer ? data.lecturer : null;
+          if (!lecturer) return false;
+          console.log("set current page interactions");
+          console.log("interaction component mounted");
+          var loginView = document.getElementById("login-view");
+          var appView = document.getElementById("app-view");
+          var logoutButton = document.getElementById("logout-button");
+          var userName = document.getElementById("user-name");
+          var userEmail = document.getElementById("user-email");
+          var userAvatar = document.getElementById("user-avatar");
+          var appStatus = document.getElementById("app-status");
+          var eventSelect = document.getElementById("event-select");
+          var eventCount = document.getElementById("event-count");
+          var eventSummary = document.getElementById("event-summary");
+          var selectedEventCard = document.getElementById("selected-event-card");
+          var selectedEventName = document.getElementById("selected-event-name");
+          var selectedEventCode = document.getElementById("selected-event-code");
+          var selectedEventStatus = document.getElementById("selected-event-status");
+          var interactionCard = document.getElementById("interaction-card");
+          var resultsCard = document.getElementById("results-card");
+          var interactionList = document.getElementById("interaction-list");
+          var interactionCount = document.getElementById("interaction-count");
+          var templates = document.getElementById("templates");
+          if (loginView) loginView.classList.add("hidden");
+          if (appView) appView.classList.remove("hidden");
+          if (logoutButton) {
+            logoutButton.classList.remove("hidden");
+            logoutButton.onclick = function () {
+              try {
+                localStorage.removeItem("slideengage_lecturer");
+                localStorage.removeItem("slideengage_session");
+              } catch (error) {}
+              if (appView) appView.classList.add("hidden");
+              if (loginView) loginView.classList.remove("hidden");
+            };
+          }
+          var displayName = lecturer.name || lecturer.email || "Lecturer";
+          if (userName) {
+            userName.textContent = displayName;
+            userName.title = lecturer.email || "";
+          }
+          if (userEmail) userEmail.textContent = lecturer.email || "";
+          if (userAvatar) userAvatar.textContent = displayName.charAt(0).toUpperCase();
+          if (appStatus) {
+            appStatus.classList.remove("hidden");
+            appStatus.style.color = "";
+            appStatus.textContent = "Loading events...";
+          }
+          if (templates && !templates.children.length) {
+            [
+              ["📊", "Poll"],
+              ["📝", "Text"],
+              ["☁️", "Word Cloud"],
+              ["⭐", "Rating"],
+              ["🎯", "Quiz"],
+              ["💬", "Q&A"]
+            ].forEach(function (item) {
+              var button = document.createElement("button");
+              button.className = "template-button";
+              button.type = "button";
+              button.innerHTML = '<span>' + item[0] + '</span><span>' + item[1] + '</span>';
+              templates.appendChild(button);
+            });
+          }
+          function renderEvent(event) {
+            if (!event) {
+              if (selectedEventCard) selectedEventCard.classList.add("hidden");
+              if (interactionCard) interactionCard.classList.add("hidden");
+              if (resultsCard) resultsCard.classList.add("hidden");
+              if (eventSummary) eventSummary.textContent = "Please select an event.";
+              return;
+            }
+            if (selectedEventCard) selectedEventCard.classList.remove("hidden");
+            if (interactionCard) interactionCard.classList.remove("hidden");
+            if (resultsCard) resultsCard.classList.remove("hidden");
+            if (selectedEventName) selectedEventName.textContent = event.event_name || "Untitled event";
+            if (selectedEventCode) selectedEventCode.textContent = "#" + event.event_code;
+            if (selectedEventStatus) selectedEventStatus.textContent = event.status || "closed";
+            if (eventSummary) eventSummary.textContent = "Code: #" + event.event_code + " | " + (event.status || "closed");
+          }
+          function renderInteractions(interactions) {
+            console.log("fetch interactions success");
+            if (interactionCount) interactionCount.textContent = String(interactions.length);
+            if (!interactionList) return;
+            interactionList.innerHTML = "";
+            if (!interactions.length) {
+              interactionList.innerHTML = '<div class="muted small">Interactions will appear here.</div>';
+              return;
+            }
+            interactions.forEach(function (interaction) {
+              var row = document.createElement("div");
+              row.className = "interaction-item";
+              row.innerHTML = '<div class="event-name">' + window.slideEngageBootstrapEscapeHtml(interaction.title || "Untitled") + '</div><div class="small muted">' + window.slideEngageBootstrapEscapeHtml(interaction.type || "interaction") + ' · ' + window.slideEngageBootstrapEscapeHtml(interaction.status || "draft") + '</div>';
+              interactionList.appendChild(row);
+            });
+          }
+          function loadInteractions(event) {
+            renderEvent(event);
+            if (!event) return;
+            fetch(window.slideEngageBootstrap.appUrl + "/api/interactions?event_id=" + encodeURIComponent(event.id), { cache: "no-store" })
+              .then(function (response) { return response.json().catch(function () { return {}; }); })
+              .then(function (payload) { renderInteractions((payload.interactions || []).filter(function (interaction) { return interaction && !interaction.deleted_at && !interaction.archived_at; })); })
+              .catch(function (error) {
+                console.log("fetch events fail");
+                if (appStatus) {
+                  appStatus.classList.remove("hidden");
+                  appStatus.style.color = "#b42318";
+                  appStatus.textContent = error && error.message ? error.message : "Unable to load interactions.";
+                }
+              });
+          }
+          console.log("fetch events started");
+          fetch(window.slideEngageBootstrap.appUrl + "/api/events?lecturer_id=" + encodeURIComponent(lecturer.id), { cache: "no-store" })
+            .then(function (response) { return response.json().catch(function () { return {}; }); })
+            .then(function (payload) {
+              console.log("fetch events success");
+              var events = (payload.events || []).filter(function (event) {
+                return event && event.status !== "archived" && !event.deleted_at && !event.archived_at;
+              });
+              if (eventCount) eventCount.textContent = events.length + " total";
+              if (eventSelect) {
+                eventSelect.innerHTML = "";
+                var placeholder = document.createElement("option");
+                placeholder.value = "";
+                placeholder.textContent = events.length ? "Select event" : "No events yet";
+                eventSelect.appendChild(placeholder);
+                events.forEach(function (event, index) {
+                  var option = document.createElement("option");
+                  option.value = event.id;
+                  option.textContent = (event.event_name || "Untitled event") + " (#" + event.event_code + ")";
+                  if (index === 0) option.selected = true;
+                  eventSelect.appendChild(option);
+                });
+                eventSelect.onchange = function () {
+                  var selected = events.find(function (event) { return event.id === eventSelect.value; }) || null;
+                  loadInteractions(selected);
+                };
+              }
+              if (appStatus) appStatus.classList.add("hidden");
+              loadInteractions(events[0] || null);
+            })
+            .catch(function (error) {
+              console.log("fetch events fail");
+              if (appStatus) {
+                appStatus.classList.remove("hidden");
+                appStatus.style.color = "#b42318";
+                appStatus.textContent = error && error.message ? error.message : "Unable to load events.";
+              }
+            });
+          return true;
+        };
         window.slideEngageOpenInteractionsAfterLogin = function (data, attempt) {
           attempt = attempt || 0;
           window.slideEngagePendingLoginData = data;
@@ -520,8 +680,7 @@ export function GET() {
             console.log("switching to interaction page");
             return true;
           }
-          window.slideEngageSetLoginStatus("Login successful, but the interaction page did not load. Please close and reopen the add-in.", true);
-          return false;
+          return window.slideEngageRenderInteractionFallback(data);
         };
         window.slideEngageBootstrapLogin = function (event) {
           if (event && event.preventDefault) event.preventDefault();
@@ -563,6 +722,7 @@ export function GET() {
               });
               try {
                 localStorage.setItem("slideengage_lecturer", sessionPayload);
+                localStorage.setItem("slideengage_session", sessionPayload);
                 console.log("session saved");
               } catch (error) {
                 console.log("Session storage skipped");
