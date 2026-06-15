@@ -495,6 +495,34 @@ export function GET() {
           status.style.color = isError ? "#b42318" : "";
           status.textContent = message || "";
         };
+        window.slideEngageOpenInteractionsAfterLogin = function (data, attempt) {
+          attempt = attempt || 0;
+          window.slideEngagePendingLoginData = data;
+          if (typeof window.slideEngageCompleteLoginWithData === "function") {
+            try {
+              if (window.slideEngageCompleteLoginWithData(data)) {
+                window.slideEngagePendingLoginData = null;
+                console.log("switching to interaction page");
+                return true;
+              }
+            } catch (error) {
+              console.error("[SlideEngage taskpane] Unable to render interactions:", error);
+            }
+          }
+          if (attempt < 30) {
+            window.setTimeout(function () {
+              window.slideEngageOpenInteractionsAfterLogin(data, attempt + 1);
+            }, 100);
+            return false;
+          }
+          if (typeof window.slideEngageOpenPanelWithSession === "function" && window.slideEngageOpenPanelWithSession()) {
+            window.slideEngagePendingLoginData = null;
+            console.log("switching to interaction page");
+            return true;
+          }
+          window.slideEngageSetLoginStatus("Login successful, but the interaction page did not load. Please close and reopen the add-in.", true);
+          return false;
+        };
         window.slideEngageBootstrapLogin = function (event) {
           if (event && event.preventDefault) event.preventDefault();
           if (event && event.stopPropagation) event.stopPropagation();
@@ -541,14 +569,10 @@ export function GET() {
               }
               return data;
             });
-          }).then(function () {
-            console.log("Redirect start");
+          }).then(function (data) {
+            console.log("Interaction page render start");
             window.slideEngageSetLoginStatus("Login successful", false);
-            if (typeof window.slideEngageOpenPanelWithSession === "function") {
-              window.slideEngageOpenPanelWithSession();
-            } else {
-              window.location.href = window.slideEngageBootstrap.appUrl + "/taskpane?login=success&v=" + Date.now();
-            }
+            window.slideEngageOpenInteractionsAfterLogin(data, 0);
           }).catch(function (error) {
             console.log("Login failure");
             console.error("[SlideEngage taskpane] Login failed:", error && error.message ? error.message : error);
@@ -859,6 +883,11 @@ export function GET() {
         }
 
         function exposeLoginHandlers() {
+          window.slideEngageCompleteLoginWithData = function (data) {
+            if (!data || !data.lecturer) return false;
+            completeLogin(data, data.supabase_session || null);
+            return true;
+          };
           window.slideEngageOpenPanelWithSession = function () {
             try {
               var session = parseStoredSession(localStorage.getItem(SESSION_KEY));
@@ -873,6 +902,10 @@ export function GET() {
           };
           window.slideEngageEmailChanged = handleEmailInput;
           window.slideEngagePasswordChanged = handlePasswordInput;
+          if (window.slideEngagePendingLoginData) {
+            window.slideEngageCompleteLoginWithData(window.slideEngagePendingLoginData);
+            window.slideEngagePendingLoginData = null;
+          }
         }
 
         function showApp() {
