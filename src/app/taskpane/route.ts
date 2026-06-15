@@ -480,11 +480,6 @@ export function GET() {
           <input id="password" class="input" type="password" autocomplete="current-password" placeholder="Password" oninput="window.slideEngagePasswordChanged && window.slideEngagePasswordChanged(this.value)" />
           <button id="login-button" class="button full" type="submit" onclick="return window.slideEngageLoginSubmit ? window.slideEngageLoginSubmit(event) : false">Sign in</button>
         </form>
-        <div id="login-debug" class="debug-panel" aria-live="polite">Email entered:
-Supabase: NOT STARTED
-API: NOT STARTED
-Status:
-Message:</div>
         <div id="login-status" class="status hidden" role="status" aria-live="polite"></div>
       </section>
 
@@ -840,12 +835,6 @@ Message:</div>
         function updateLoginDebug(info) {
           var node = el("login-debug");
           if (!node) return;
-          node.textContent =
-            "Email entered: " + (info.email || "") + "\\n" +
-            "Supabase: " + (info.supabase || "NOT STARTED") + "\\n" +
-            "API: " + (info.api || "NOT STARTED") + "\\n" +
-            "Status: " + (info.status || "") + "\\n" +
-            "Message: " + (info.message || "");
         }
 
         function getAccessToken() {
@@ -890,21 +879,42 @@ Message:</div>
         function saveSession(data, supabaseSession) {
           lecturer = data.lecturer;
           storeAuthTokens(supabaseSession || data.supabase_session || null);
+          var payload = JSON.stringify({
+            lecturer: data.lecturer,
+            supabase_session: supabaseSession || data.supabase_session || null,
+            expires_at: data.expires_at || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()
+          });
           try {
-            localStorage.setItem(SESSION_KEY, JSON.stringify({
-              lecturer: data.lecturer,
-              supabase_session: supabaseSession || data.supabase_session || null,
-              expires_at: data.expires_at || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()
-            }));
+            localStorage.setItem(SESSION_KEY, payload);
           } catch (error) {
             addDebug("Unable to persist Office session: " + (error && error.message ? error.message : "unknown error"));
+          }
+          try {
+            if (window.OfficeRuntime && window.OfficeRuntime.storage) {
+              window.OfficeRuntime.storage.setItem(SESSION_KEY, payload).catch(function (error) {
+                addDebug("OfficeRuntime session storage skipped: " + (error && error.message ? error.message : "unknown error"));
+              });
+            }
+          } catch (error) {
+            addDebug("OfficeRuntime session storage unavailable: " + (error && error.message ? error.message : "unknown error"));
           }
         }
 
         function clearSession() {
-          localStorage.removeItem(SESSION_KEY);
-          localStorage.removeItem("slideengage_access_token");
-          localStorage.removeItem("slideengage_refresh_token");
+          try {
+            localStorage.removeItem(SESSION_KEY);
+            localStorage.removeItem("slideengage_access_token");
+            localStorage.removeItem("slideengage_refresh_token");
+          } catch (error) {
+            addDebug("Local session clear skipped: " + (error && error.message ? error.message : "unknown error"));
+          }
+          try {
+            if (window.OfficeRuntime && window.OfficeRuntime.storage) {
+              window.OfficeRuntime.storage.removeItem(SESSION_KEY).catch(function () {});
+            }
+          } catch (error) {
+            addDebug("OfficeRuntime clear unavailable: " + (error && error.message ? error.message : "unknown error"));
+          }
           lecturer = null;
           events = [];
           selectedEvent = null;
@@ -987,6 +997,66 @@ Message:</div>
             setStatus("login-status", "Please sign in to continue.", false);
             showLogin();
           }
+          tryRestoreOfficeSession();
+        }
+
+        function tryRestoreOfficeSession() {
+          try {
+            if (lecturer || !window.OfficeRuntime || !window.OfficeRuntime.storage) return;
+            window.OfficeRuntime.storage.getItem(SESSION_KEY).then(function (raw) {
+              if (lecturer || !raw) return;
+              var session = parseStoredSession(raw);
+              if (session && !isSessionExpired(session)) {
+                lecturer = session.lecturer;
+                try {
+                  localStorage.setItem(SESSION_KEY, raw);
+                } catch (error) {
+                  addDebug("Local session mirror skipped: " + (error && error.message ? error.message : "unknown error"));
+                }
+                setStatus("login-status", "", false);
+                addDebug("Auth loaded from OfficeRuntime storage");
+                showApp();
+                loadEvents();
+              }
+            }).catch(function (error) {
+              addDebug("OfficeRuntime restore skipped: " + (error && error.message ? error.message : "unknown error"));
+            });
+          } catch (error) {
+            addDebug("OfficeRuntime restore unavailable: " + (error && error.message ? error.message : "unknown error"));
+          }
+        }
+
+        function completeLogin(data, supabaseSession) {
+          saveSession(data, supabaseSession);
+          clearLoginDraft();
+          syncLoginInputs();
+          setStatus("login-status", "", false);
+          setActionState("login", "success");
+          addDebug("SlideEngage signed in");
+          showApp();
+          loadEvents();
+        }
+
+        function apiLogin(email, password, supabaseSession) {
+          return fetch(APP_URL + "/api/auth/login", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": supabaseSession && supabaseSession.access_token ? "Bearer " + supabaseSession.access_token : ""
+            },
+            body: JSON.stringify({ email: email, password: password })
+          }).then(function (response) {
+            return safeJson(response).then(function (data) {
+              if (!response.ok) {
+                var apiError = new Error(data.error || data.message || "Invalid email or password.");
+                apiError.status = response.status;
+                apiError.payload = data;
+                throw apiError;
+              }
+              return data;
+            });
+          });
         }
 
         function login(event) {
@@ -1020,78 +1090,32 @@ Message:</div>
           if (isActionLoading("login")) return false;
           setActionState("login", "loading");
           setStatus("login-status", "Signing in...", false);
-          updateLoginDebug({
-            email: email,
-            supabase: "SKIPPED",
-            api: "PENDING",
-            status: "",
-            message: "Checking SlideEngage account..."
-          });
-          fetch(APP_URL + "/api/auth/login", {
-              method: "POST",
-              credentials: "same-origin",
-              headers: {
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ email: email, password: password })
-            }).then(function (response) {
-              return safeJson(response).then(function (data) {
-                console.log("[SlideEngage taskpane] API login result:", {
-                  ok: response.ok,
-                  status: response.status,
-                  data: data
+          var client = getAuthClient();
+          var loginPromise = client && client.auth
+            ? client.auth.signInWithPassword({ email: email, password: password }).then(function (authResponse) {
+                if (authResponse && authResponse.error) throw authResponse.error;
+                var session = authResponse && authResponse.data ? authResponse.data.session : null;
+                if (!session || !session.access_token) throw new Error("Unable to start Supabase session.");
+                storeAuthTokens(session);
+                return apiLogin(email, password, session).then(function (data) {
+                  return { data: data, session: session };
                 });
-                if (!response.ok) {
-                  updateLoginDebug({
-                    email: email,
-                    supabase: "SKIPPED",
-                    api: "FAILED",
-                    status: response.status,
-                    message: data.error || data.message || "API login failed"
-                  });
-                  var apiError = new Error(data.error || data.message || "API login failed");
-                  apiError.status = response.status;
-                  apiError.payload = data;
-                  throw apiError;
-                }
-                updateLoginDebug({
-                  email: email,
-                  supabase: "SKIPPED",
-                  api: "SUCCESS",
-                  status: response.status,
-                  message: "Signed in successfully."
-                });
-                return data;
-              });
-            }).then(function (data) {
-              saveSession(data, null);
-              clearLoginDraft();
-              syncLoginInputs();
-              setStatus("login-status", "", false);
-              setActionState("login", "success");
-              addDebug("SlideEngage API connected");
-              showApp();
-              loadEvents();
+              })
+            : Promise.reject(new Error("Supabase login is unavailable. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY."));
+
+          loginPromise.then(function (result) {
+              completeLogin(result.data, result.session);
             }).catch(function (error) {
               var message = /Failed to fetch|NetworkError|Load failed/i.test(error.message)
                 ? "Network error. Check your internet connection and try again."
-                : error.message;
-              if (!/Supabase: FAILED|API: FAILED/.test(el("login-debug").textContent || "")) {
-                updateLoginDebug({
-                  email: email,
-                  supabase: "SKIPPED",
-                  api: "FAILED",
-                  status: error.status || error.code || "",
-                  message: message || "Unable to sign in."
-                });
-              }
+                : "Invalid email or password.";
               console.error("[SlideEngage taskpane] Login failed:", message);
-              setStatus("login-status", "Login failed. Please check your email and password. " + message, true);
+              setStatus("login-status", message, true);
               setActionState("login", "error");
               addDebug("Login failed: " + error.message);
             }).finally(function () {
-            setActionState("login", actionStates.login === "error" ? "error" : actionStates.login);
-          });
+              setActionState("login", actionStates.login === "error" ? "error" : actionStates.login);
+            });
           return false;
         }
 
