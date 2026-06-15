@@ -230,20 +230,29 @@ export function GET() {
       }
       .template {
         display: grid;
+        grid-template-rows: auto auto;
         place-items: center;
-        gap: 3px;
+        gap: 5px;
         width: 100%;
         border: 1px solid var(--line);
-        border-radius: 10px;
+        border-radius: 12px;
         background: white;
-        min-height: 58px;
-        padding: 7px;
+        min-height: 64px;
+        padding: 9px 6px;
         text-align: center;
+        color: var(--ink);
         font-weight: 900;
         font-size: 11px;
+        line-height: 1.15;
+        transition: transform 150ms ease, border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
       }
-      .template:hover {
+      .template:hover,
+      .template:focus {
         border-color: var(--green);
+        background: #f8fffb;
+        box-shadow: 0 8px 18px rgba(14, 63, 34, 0.08);
+        transform: scale(1.02);
+        outline: none;
       }
       .template-grid {
         display: grid;
@@ -253,12 +262,19 @@ export function GET() {
       .template-icon {
         display: grid;
         place-items: center;
-        width: 24px;
-        height: 24px;
-        border-radius: 999px;
-        background: var(--green-soft);
-        color: var(--green);
+        width: 100%;
+        height: 22px;
+        background: transparent;
+        color: var(--ink);
+        font-size: 18px;
+        line-height: 1;
         font-weight: 900;
+      }
+      .template-label {
+        display: block;
+        width: 100%;
+        min-height: 24px;
+        overflow-wrap: anywhere;
       }
       .bar {
         height: 8px;
@@ -554,17 +570,22 @@ export function GET() {
           }
           if (templates && !templates.children.length) {
             [
-              ["📊", "Poll"],
-              ["📝", "Text"],
-              ["☁️", "Word Cloud"],
-              ["⭐", "Rating"],
-              ["🎯", "Quiz"],
-              ["💬", "Q&A"]
+              ["📊", "Poll", 0],
+              ["📝", "Text", 1],
+              ["☁️", "Word Cloud", 2],
+              ["⭐", "Rating", 3],
+              ["🎯", "Quiz", 4],
+              ["💬", "Q&A", 5]
             ].forEach(function (item) {
               var button = document.createElement("button");
-              button.className = "template-button";
+              button.className = "template";
               button.type = "button";
-              button.innerHTML = '<span>' + item[0] + '</span><span>' + item[1] + '</span>';
+              button.setAttribute("aria-label", "Create " + item[1]);
+              button.setAttribute("data-tooltip", "Create " + item[1]);
+              button.innerHTML = '<span class="template-icon">' + item[0] + '</span><span class="template-label">' + item[1] + '</span>';
+              button.onclick = function () {
+                if (window.slideEngageOpenTemplateByIndex) window.slideEngageOpenTemplateByIndex(item[2]);
+              };
               templates.appendChild(button);
             });
           }
@@ -1500,15 +1521,22 @@ export function GET() {
             button.className = "template";
             button.setAttribute("aria-label", tooltipForTemplate(template.label));
             button.setAttribute("data-tooltip", tooltipForTemplate(template.label));
-            button.innerHTML = '<span class="template-icon"></span><span></span>';
+            button.innerHTML = '<span class="template-icon"></span><span class="template-label"></span>';
             button.querySelector(".template-icon").textContent = template.icon;
-            button.querySelector("span:last-child").textContent = template.label;
+            button.querySelector(".template-label").textContent = template.label;
             button.onclick = function () {
               openInteractionEditor(null, template);
             };
             list.appendChild(button);
           });
         }
+
+        window.slideEngageOpenTemplateByIndex = function (index) {
+          var template = templates[index];
+          if (!template) return false;
+          openInteractionEditor(null, template);
+          return true;
+        };
 
         function tooltipForTemplate(label) {
           if (label === "Multiple choice") return "Create a poll with answer options";
