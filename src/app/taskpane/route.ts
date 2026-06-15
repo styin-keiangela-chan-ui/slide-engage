@@ -1022,48 +1022,16 @@ Message:</div>
           setStatus("login-status", "Signing in...", false);
           updateLoginDebug({
             email: email,
-            supabase: "PENDING",
-            api: "NOT STARTED",
+            supabase: "SKIPPED",
+            api: "PENDING",
             status: "",
-            message: "Signing in with Supabase..."
+            message: "Checking SlideEngage account..."
           });
-          var client = getAuthClient();
-          var authPromise = client && client.auth
-            ? client.auth.signInWithPassword({ email: email, password: password })
-            : Promise.reject(new Error("Supabase Auth is unavailable in this Office WebView."));
-
-          authPromise.then(function (authResponse) {
-            var supabaseSession = authResponse && authResponse.data ? authResponse.data.session : null;
-            console.log("[SlideEngage taskpane] Supabase response:", {
-              user: authResponse && authResponse.data && authResponse.data.user ? authResponse.data.user.email : null,
-              hasSession: !!supabaseSession,
-              error: authResponse && authResponse.error ? authResponse.error.message : null
-            });
-            if (authResponse && authResponse.error) {
-              var authError = authResponse.error;
-              updateLoginDebug({
-                email: email,
-                supabase: "FAILED",
-                api: "SKIPPED",
-                status: authError.status || authError.code || "",
-                message: authError.message || "Invalid login credentials"
-              });
-              throw authError;
-            }
-            storeAuthTokens(supabaseSession);
-            updateLoginDebug({
-              email: email,
-              supabase: "SUCCESS",
-              api: "PENDING",
-              status: "",
-              message: "Supabase login succeeded. Checking SlideEngage API..."
-            });
-            return fetch(APP_URL + "/api/auth/login", {
+          fetch(APP_URL + "/api/auth/login", {
               method: "POST",
               credentials: "same-origin",
               headers: {
-                "Content-Type": "application/json",
-                "Authorization": supabaseSession && supabaseSession.access_token ? "Bearer " + supabaseSession.access_token : ""
+                "Content-Type": "application/json"
               },
               body: JSON.stringify({ email: email, password: password })
             }).then(function (response) {
@@ -1076,7 +1044,7 @@ Message:</div>
                 if (!response.ok) {
                   updateLoginDebug({
                     email: email,
-                    supabase: "SUCCESS",
+                    supabase: "SKIPPED",
                     api: "FAILED",
                     status: response.status,
                     message: data.error || data.message || "API login failed"
@@ -1088,7 +1056,7 @@ Message:</div>
                 }
                 updateLoginDebug({
                   email: email,
-                  supabase: "SUCCESS",
+                  supabase: "SKIPPED",
                   api: "SUCCESS",
                   status: response.status,
                   message: "Signed in successfully."
@@ -1096,33 +1064,32 @@ Message:</div>
                 return data;
               });
             }).then(function (data) {
-              saveSession(data, supabaseSession);
+              saveSession(data, null);
               clearLoginDraft();
               syncLoginInputs();
               setStatus("login-status", "", false);
               setActionState("login", "success");
-              addDebug("Supabase connected");
+              addDebug("SlideEngage API connected");
               showApp();
               loadEvents();
-            });
-          }).catch(function (error) {
-            var message = /Failed to fetch|NetworkError|Load failed/i.test(error.message)
-              ? "Network error. Check your internet connection and try again."
-              : error.message;
-            if (!/Supabase: FAILED|API: FAILED/.test(el("login-debug").textContent || "")) {
-              updateLoginDebug({
-                email: email,
-                supabase: "FAILED",
-                api: "SKIPPED",
-                status: error.status || error.code || "",
-                message: message || "Unable to sign in."
-              });
-            }
-            console.error("[SlideEngage taskpane] Login failed:", message);
-            setStatus("login-status", "Login failed. Please check your email and password. " + message, true);
-            setActionState("login", "error");
-            addDebug("Login failed: " + error.message);
-          }).finally(function () {
+            }).catch(function (error) {
+              var message = /Failed to fetch|NetworkError|Load failed/i.test(error.message)
+                ? "Network error. Check your internet connection and try again."
+                : error.message;
+              if (!/Supabase: FAILED|API: FAILED/.test(el("login-debug").textContent || "")) {
+                updateLoginDebug({
+                  email: email,
+                  supabase: "SKIPPED",
+                  api: "FAILED",
+                  status: error.status || error.code || "",
+                  message: message || "Unable to sign in."
+                });
+              }
+              console.error("[SlideEngage taskpane] Login failed:", message);
+              setStatus("login-status", "Login failed. Please check your email and password. " + message, true);
+              setActionState("login", "error");
+              addDebug("Login failed: " + error.message);
+            }).finally(function () {
             setActionState("login", actionStates.login === "error" ? "error" : actionStates.login);
           });
           return false;
