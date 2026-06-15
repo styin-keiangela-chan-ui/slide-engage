@@ -13,7 +13,6 @@ export function GET() {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SlideEngage PowerPoint Add-in</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
     <style>
       :root {
         color-scheme: light;
@@ -475,10 +474,10 @@ export function GET() {
     <main class="shell">
       <section id="login-view" class="card">
         <h1 class="title">Lecturer login</h1>
-        <form id="login-form" class="stack" onsubmit="return window.slideEngageLoginSubmit ? window.slideEngageLoginSubmit(event) : false">
+        <form id="login-form" class="stack" action="javascript:void(0)" onsubmit="return window.slideEngageLoginSubmit ? window.slideEngageLoginSubmit(event) : false">
           <input id="email" class="input" autocomplete="email" placeholder="Email" oninput="window.slideEngageEmailChanged && window.slideEngageEmailChanged(this.value)" />
           <input id="password" class="input" type="password" autocomplete="current-password" placeholder="Password" oninput="window.slideEngagePasswordChanged && window.slideEngagePasswordChanged(this.value)" />
-          <button id="login-button" class="button full" type="submit" onclick="return window.slideEngageLoginSubmit ? window.slideEngageLoginSubmit(event) : false">Sign in</button>
+          <button id="login-button" class="button full" type="button" onclick="return window.slideEngageLoginSubmit ? window.slideEngageLoginSubmit(event) : false">Sign in</button>
         </form>
         <div id="login-status" class="status hidden" role="status" aria-live="polite"></div>
       </section>
@@ -770,13 +769,6 @@ export function GET() {
           loginEmail = value || "";
           saveLoginDraft();
           console.log("[SlideEngage taskpane] email input changed");
-          updateLoginDebug({
-            email: loginEmail,
-            supabase: actionStates.login === "loading" ? "PENDING" : "NOT STARTED",
-            api: "NOT STARTED",
-            status: "",
-            message: ""
-          });
         }
 
         function handlePasswordInput(value) {
@@ -787,6 +779,7 @@ export function GET() {
 
         function exposeLoginHandlers() {
           window.slideEngageLoginSubmit = function (event) {
+            console.log("LOGIN BUTTON CLICKED");
             return login(event);
           };
           window.slideEngageEmailChanged = handleEmailInput;
@@ -832,11 +825,6 @@ export function GET() {
           return Date.now() > new Date(session.expires_at).getTime();
         }
 
-        function updateLoginDebug(info) {
-          var node = el("login-debug");
-          if (!node) return;
-        }
-
         function getAccessToken() {
           try {
             return localStorage.getItem("slideengage_access_token") || "";
@@ -874,6 +862,43 @@ export function GET() {
             },
           });
           return authClient;
+        }
+
+        function supabasePasswordLogin(email, password) {
+          console.log("Supabase initialized", {
+            hasUrl: !!SUPABASE_URL,
+            hasAnonKey: !!SUPABASE_ANON_KEY
+          });
+          if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+            return Promise.reject(new Error("Supabase environment variables are missing."));
+          }
+          return fetch(SUPABASE_URL.replace(/\/$/, "") + "/auth/v1/token?grant_type=password", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": SUPABASE_ANON_KEY,
+              "Authorization": "Bearer " + SUPABASE_ANON_KEY
+            },
+            body: JSON.stringify({ email: email, password: password })
+          }).then(function (response) {
+            return safeJson(response).then(function (data) {
+              if (!response.ok) {
+                var message = data.error_description || data.msg || data.error || "Invalid email or password.";
+                var error = new Error(message);
+                error.status = response.status;
+                error.payload = data;
+                throw error;
+              }
+              return {
+                access_token: data.access_token,
+                refresh_token: data.refresh_token,
+                expires_at: data.expires_at,
+                expires_in: data.expires_in,
+                token_type: data.token_type,
+                user: data.user
+              };
+            });
+          });
         }
 
         function saveSession(data, supabaseSession) {
@@ -1061,6 +1086,9 @@ export function GET() {
 
         function login(event) {
           if (event && event.preventDefault) event.preventDefault();
+          if (event && event.stopPropagation) event.stopPropagation();
+          console.log("LOGIN BUTTON CLICKED");
+          console.log("Starting login...");
           console.log("[SlideEngage taskpane] login submit clicked");
           console.log("[SlideEngage taskpane] preventDefault called");
           loginEmail = el("email").value;
@@ -1068,47 +1096,33 @@ export function GET() {
           saveLoginDraft();
           var email = loginEmail.trim();
           var password = loginPassword;
+          console.log(email);
           console.log("[SlideEngage taskpane] Login email:", email);
-          updateLoginDebug({
-            email: email,
-            supabase: "NOT STARTED",
-            api: "NOT STARTED",
-            status: "",
-            message: ""
-          });
           if (!email || !password) {
-            updateLoginDebug({
-              email: email,
-              supabase: "NOT STARTED",
-              api: "NOT STARTED",
-              status: "",
-              message: "Email and password required."
-            });
             setStatus("login-status", "Email and password required.", true);
             return false;
           }
           if (isActionLoading("login")) return false;
           setActionState("login", "loading");
-          setStatus("login-status", "Signing in...", false);
-          var client = getAuthClient();
-          var loginPromise = client && client.auth
-            ? client.auth.signInWithPassword({ email: email, password: password }).then(function (authResponse) {
-                if (authResponse && authResponse.error) throw authResponse.error;
-                var session = authResponse && authResponse.data ? authResponse.data.session : null;
-                if (!session || !session.access_token) throw new Error("Unable to start Supabase session.");
-                storeAuthTokens(session);
-                return apiLogin(email, password, session).then(function (data) {
-                  return { data: data, session: session };
-                });
-              })
-            : Promise.reject(new Error("Supabase login is unavailable. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY."));
+          setStatus("login-status", "Loading...", false);
+          var loginPromise = supabasePasswordLogin(email, password).then(function (session) {
+            if (!session || !session.access_token) throw new Error("Unable to start Supabase session.");
+            console.log("Login success");
+            storeAuthTokens(session);
+            return apiLogin(email, password, session).then(function (data) {
+              return { data: data, session: session };
+            });
+          });
 
           loginPromise.then(function (result) {
+              console.log("Redirect start");
+              setStatus("login-status", "Login successful", false);
               completeLogin(result.data, result.session);
             }).catch(function (error) {
               var message = /Failed to fetch|NetworkError|Load failed/i.test(error.message)
                 ? "Network error. Check your internet connection and try again."
                 : "Invalid email or password.";
+              console.log("Login failure");
               console.error("[SlideEngage taskpane] Login failed:", message);
               setStatus("login-status", message, true);
               setActionState("login", "error");
