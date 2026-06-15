@@ -38,7 +38,8 @@ SlideEngage PowerPoint Add-in for Windows
 4. The installer checks whether Microsoft Edge WebView2 Runtime is installed.
 5. If WebView2 is missing, follow the prompt to install it.
 6. Restart PowerPoint.
-7. Open Insert > My Add-ins or Home > Add-ins and choose SlideEngage.
+7. Open the SlideEngage ribbon tab and click "Open SlideEngage".
+8. If the SlideEngage tab is not visible, check Insert > My Add-ins or Home > Add-ins and choose SlideEngage.
 
 The installer registers a current-user Office trusted catalog and copies manifest.xml to:
 %LOCALAPPDATA%\SlideEngage\OfficeAddin

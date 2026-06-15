@@ -192,10 +192,11 @@ function New-InstallerPages {
     <p>SlideEngage has been registered for the current Windows user.</p>
     <h2>Where to find SlideEngage</h2>
     <ul>
+      <li><strong>SlideEngage ribbon tab -> Open SlideEngage</strong></li>
       <li><strong>Insert -> My Add-ins</strong></li>
       <li><strong>Home -> Add-ins</strong></li>
     </ul>
-    <p>Restart PowerPoint, then open the Add-ins menu and choose SlideEngage.</p>
+    <p>Restart PowerPoint, then open the SlideEngage ribbon tab and choose Open SlideEngage. If the tab is not visible, check the Add-ins menu.</p>
   </section>
   <section class="card">
     <h2>Installer checks</h2>
@@ -223,7 +224,9 @@ function New-InstallerPages {
     <p>Use these checks if SlideEngage does not appear after installation.</p>
     <ol>
       <li>Restart PowerPoint after running the installer.</li>
-      <li>Look in both <strong>Insert -> My Add-ins</strong> and <strong>Home -> Add-ins</strong>.</li>
+      <li>Look for the dedicated <strong>SlideEngage</strong> ribbon tab first.</li>
+      <li>If the tab is not visible, look in both <strong>Insert -> My Add-ins</strong> and <strong>Home -> Add-ins</strong>.</li>
+      <li>If an older SlideEngage add-in is already installed, remove it from My Add-ins, restart PowerPoint, then rerun the installer.</li>
       <li>Install Microsoft Edge WebView2 Runtime if the installer reported it missing: <code>$WebView2InstallerUrl</code></li>
       <li>Confirm you are using desktop PowerPoint 2016 or newer, Microsoft 365 PowerPoint, or a supported managed Office install.</li>
       <li>If your school or company hides Office Add-ins, ask IT to enable Office Web Add-ins or deploy SlideEngage using Microsoft 365 centralized deployment.</li>
