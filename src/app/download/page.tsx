@@ -26,7 +26,7 @@ export default function DownloadInstallerPage() {
               Install SlideEngage once. Use it inside PowerPoint forever.
             </h1>
             <p className="mb-8 max-w-[640px] text-lg leading-8 text-[#5F6F80]">
-              Download the installer for your computer, restart PowerPoint, then open SlideEngage from Insert → Add-ins → My Add-ins. The installer registers the production Office manifest for you.
+              Download the installer for your computer, restart PowerPoint, then open SlideEngage from Insert → My Add-ins or Home → Add-ins. The installer registers the production Office manifest for you.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <a
@@ -85,9 +85,10 @@ export default function DownloadInstallerPage() {
         <section className="border-y border-[#E2EBE6] bg-white">
           <div className="mx-auto grid max-w-[1120px] grid-cols-1 gap-6 px-6 py-10 md:grid-cols-3">
             {[
-              ['Automatic registration', 'The installer places the PowerPoint manifest in the Office add-in location and registers the trusted catalog.'],
+              ['Automatic registration', 'The installer places the PowerPoint manifest in the Office add-in location, registers the trusted catalog, and verifies the manifest registration.'],
+              ['Windows readiness checks', 'The Windows installer checks Office Web Add-in support and prompts users to install Microsoft Edge WebView2 Runtime if it is missing.'],
               ['Production domain', 'The task pane loads from https://slide-engage.vercel.app with HTTPS-hosted icons and support URLs.'],
-              ['After install', 'Restart PowerPoint, then open Insert → Add-ins → My Add-ins and choose SlideEngage.'],
+              ['After install', 'Restart PowerPoint, then open Insert → My Add-ins or Home → Add-ins and choose SlideEngage.'],
             ].map(([title, desc]) => (
               <div key={title} className="rounded-xl border border-[#E2EBE6] p-5">
                 <h2 className="mb-2 text-base font-extrabold">{title}</h2>

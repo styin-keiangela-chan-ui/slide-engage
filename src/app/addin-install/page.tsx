@@ -220,14 +220,18 @@ export default function AddinInstallPage() {
             <section className="rounded-lg border border-[#E2EBE6] bg-white p-5">
               <h2 className="mb-4 text-base font-extrabold">Windows PowerPoint</h2>
               <ol className="space-y-3 text-sm text-[#1A1A2E]">
-                <li><strong>1.</strong> Open your existing PowerPoint file.</li>
-                <li><strong>2.</strong> Go to <strong>Insert</strong> {'->'} <strong>Add-ins</strong> {'->'} <strong>My Add-ins</strong>.</li>
-                <li><strong>3.</strong> Choose <strong>Upload My Add-in</strong>.</li>
-                <li><strong>4.</strong> Select the downloaded <strong>manifest.xml</strong>.</li>
-                <li><strong>5.</strong> Click the <strong>Slide Engage</strong> logo in the ribbon.</li>
+                <li><strong>1.</strong> Download and unzip the Windows installer package.</li>
+                <li><strong>2.</strong> Close PowerPoint, then run <strong>Install SlideEngage.cmd</strong>.</li>
+                <li><strong>3.</strong> The installer checks Office Web Add-in support and Microsoft Edge WebView2 Runtime.</li>
+                <li><strong>4.</strong> If WebView2 is missing, follow the prompt to install it.</li>
+                <li><strong>5.</strong> Restart PowerPoint, then open <strong>Insert</strong> {'->'} <strong>My Add-ins</strong> or <strong>Home</strong> {'->'} <strong>Add-ins</strong>.</li>
+                <li><strong>6.</strong> Choose <strong>SlideEngage</strong>.</li>
               </ol>
-              <div className="mt-5 rounded-lg border border-dashed border-[#AFCBBC] bg-[#F8FAF8] p-5 text-center text-sm font-bold text-[#6B7B8D]">
-                Screenshot placeholder: Insert {'->'} Add-ins {'->'} My Add-ins {'->'} Upload My Add-in
+              <div className="mt-5 rounded-lg border border-[#D8EEE0] bg-[#F3FBF6] p-4 text-sm leading-relaxed text-[#2D8A4E]">
+                The Windows installer verifies the manifest copy, PowerPoint WEF manifest, and trusted catalog registration. It opens a success page after installation.
+              </div>
+              <div className="mt-3 rounded-lg border border-[#FFD7A8] bg-[#FFF8E6] p-4 text-sm leading-relaxed text-[#7A4B00]">
+                If PowerPoint does not show Add-ins, open the troubleshooting page created by the installer at <strong>%LOCALAPPDATA%\SlideEngage\OfficeAddin</strong>.
               </div>
             </section>
 
@@ -266,6 +270,8 @@ export default function AddinInstallPage() {
           <section className="mt-6 rounded-lg border border-[#E2EBE6] bg-white p-5">
             <h2 className="mb-4 text-base font-extrabold">Troubleshooting</h2>
             <div className="space-y-3 text-sm text-[#6B7B8D]">
+              <p><strong className="text-[#1A1A2E]">Windows Add-ins button is missing:</strong> Confirm you are using desktop PowerPoint 2016 or newer, Microsoft 365 PowerPoint, or a managed Office install with Office Web Add-ins enabled.</p>
+              <p><strong className="text-[#1A1A2E]">WebView2 is missing:</strong> Install Microsoft Edge WebView2 Runtime, then rerun the SlideEngage Windows installer.</p>
               <p><strong className="text-[#1A1A2E]">Upload My Add-in is missing:</strong> Make sure you are using desktop PowerPoint with add-ins enabled by your organization.</p>
               <p><strong className="text-[#1A1A2E]">PowerPoint blocks the add-in:</strong> Confirm the manifest URL and task pane use HTTPS, not localhost.</p>
               <p><strong className="text-[#1A1A2E]">Slide Engage button does not appear:</strong> Restart PowerPoint after uploading the manifest.</p>
