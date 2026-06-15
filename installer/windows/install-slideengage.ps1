@@ -4,7 +4,8 @@ $InstallRoot = Join-Path $env:LOCALAPPDATA "SlideEngage\OfficeAddin"
 $ManifestSource = Join-Path $PSScriptRoot "manifest.xml"
 $ManifestTarget = Join-Path $InstallRoot "manifest.xml"
 $OfficeWefRoot = Join-Path $env:LOCALAPPDATA "Microsoft\Office\16.0\Wef\SlideEngage"
-$WefManifestTarget = Join-Path $OfficeWefRoot "SlideEngage.xml"
+$WefManifestTarget = Join-Path $OfficeWefRoot "manifest.xml"
+$LegacyWefManifestTarget = Join-Path $OfficeWefRoot "SlideEngage.xml"
 $CatalogId = "{3A58A707-8F47-4B13-A3AC-99D9F7238A41}"
 $CatalogRegistryPath = "HKCU:\Software\Microsoft\Office\16.0\WEF\TrustedCatalogs\$CatalogId"
 $SuccessPage = Join-Path $InstallRoot "SlideEngage-Windows-Success.html"
@@ -118,23 +119,86 @@ function Prompt-WebView2Install {
   Write-Host "Install WebView2, then rerun this installer if SlideEngage does not appear."
 }
 
-function Test-Manifest {
-  if (!(Test-Path $ManifestSource)) {
-    throw "manifest.xml was not found next to this installer script."
+function Test-ManifestFile {
+  param([string]$Path)
+
+  if (!(Test-Path $Path)) {
+    return [PSCustomObject]@{
+      Valid = $false
+      Message = "Manifest file is missing."
+      Path = $Path
+    }
   }
 
-  $manifestContent = Get-Content $ManifestSource -Raw
+  $manifestContent = Get-Content $Path -Raw
+  try {
+    [xml]$manifestXml = $manifestContent
+  } catch {
+    return [PSCustomObject]@{
+      Valid = $false
+      Message = "Manifest is not valid XML: $($_.Exception.Message)"
+      Path = $Path
+    }
+  }
+
+  if ($manifestContent -notmatch '<Host\s+Name="Presentation"\s*/>') {
+    return [PSCustomObject]@{
+      Valid = $false
+      Message = 'Manifest must contain <Host Name="Presentation"/>.'
+      Path = $Path
+    }
+  }
+  if ($manifestContent -notmatch '<DisplayName\s+DefaultValue="SlideEngage"\s*/>') {
+    return [PSCustomObject]@{
+      Valid = $false
+      Message = 'Manifest must contain DisplayName="SlideEngage".'
+      Path = $Path
+    }
+  }
+  if ($manifestContent -notmatch '<Id>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}</Id>') {
+    return [PSCustomObject]@{
+      Valid = $false
+      Message = 'Manifest must contain a valid GUID add-in ID.'
+      Path = $Path
+    }
+  }
   if ($manifestContent -notmatch "https://slide-engage\.vercel\.app/taskpane") {
-    throw "SlideEngage manifest does not point to the production taskpane URL."
+    return [PSCustomObject]@{
+      Valid = $false
+      Message = "Manifest does not point to the production HTTPS taskpane URL."
+      Path = $Path
+    }
   }
   if ($manifestContent -match "localhost|127\.0\.0\.1") {
-    throw "SlideEngage manifest contains a local development URL."
+    return [PSCustomObject]@{
+      Valid = $false
+      Message = "Manifest contains a local development URL."
+      Path = $Path
+    }
   }
+
+  return [PSCustomObject]@{
+    Valid = $true
+    Message = "Valid Office Add-in manifest."
+    Path = $Path
+  }
+}
+
+function Assert-Manifest {
+  param([string]$Path)
+  $result = Test-ManifestFile -Path $Path
+  if (!$result.Valid) {
+    throw "$($result.Message) Path: $Path"
+  }
+  return $result
 }
 
 function Register-SlideEngageManifest {
   New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
   New-Item -ItemType Directory -Force -Path $OfficeWefRoot | Out-Null
+  if (Test-Path $LegacyWefManifestTarget) {
+    Remove-Item $LegacyWefManifestTarget -Force
+  }
   Copy-Item $ManifestSource $ManifestTarget -Force
   Copy-Item $ManifestSource $WefManifestTarget -Force
 
@@ -149,6 +213,8 @@ function Test-SlideEngageRegistration {
   $manifestOk = Test-Path $ManifestTarget
   $wefOk = Test-Path $WefManifestTarget
   $registryUrl = ""
+  $manifestValidation = if ($manifestOk) { Test-ManifestFile -Path $ManifestTarget } else { [PSCustomObject]@{ Valid = $false; Message = "Manifest is missing."; Path = $ManifestTarget } }
+  $wefManifestValidation = if ($wefOk) { Test-ManifestFile -Path $WefManifestTarget } else { [PSCustomObject]@{ Valid = $false; Message = "WEF manifest is missing."; Path = $WefManifestTarget } }
 
   if ($registryOk) {
     try {
@@ -161,8 +227,14 @@ function Test-SlideEngageRegistration {
     RegistryOk = $registryOk
     ManifestOk = $manifestOk
     WefManifestOk = $wefOk
+    ManifestPath = $ManifestTarget
+    WefManifestPath = $WefManifestTarget
+    ManifestValidationOk = $manifestValidation.Valid
+    ManifestValidationMessage = $manifestValidation.Message
+    WefManifestValidationOk = $wefManifestValidation.Valid
+    WefManifestValidationMessage = $wefManifestValidation.Message
     RegistryUrl = $registryUrl
-    Success = $registryOk -and $manifestOk -and $wefOk
+    Success = $registryOk -and $manifestOk -and $wefOk -and $manifestValidation.Valid -and $wefManifestValidation.Valid
   }
 }
 
@@ -181,22 +253,27 @@ function New-InstallerPages {
   code{background:#f4f7f4;border-radius:6px;padding:2px 5px}
 "@
 
+  $statusPill = if ($Registration.Success) { "SlideEngage PowerPoint Add-in" } else { "Installation needs attention" }
+  $statusHeading = if ($Registration.Success) { "Installation successful" } else { "Installation failed" }
+  $statusMessage = if ($Registration.Success) { "SlideEngage has been registered for the current Windows user." } else { "SlideEngage was not registered because one or more required checks failed." }
+  $nextStepMessage = if ($Registration.Success) { "Restart PowerPoint, then open the SlideEngage ribbon tab and choose Open SlideEngage. If the tab is not visible, check the Add-ins menu." } else { "Fix the failed checks below, then rerun Install SlideEngage.cmd. Do not use PowerPoint until the manifest copied and validation checks both pass." }
+
   $successHtml = @"
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>SlideEngage installed</title><style>$style</style></head>
+<head><meta charset="utf-8"><title>SlideEngage installation status</title><style>$style</style></head>
 <body>
   <section class="card">
-    <div class="pill">SlideEngage PowerPoint Add-in</div>
-    <h1>Installation successful</h1>
-    <p>SlideEngage has been registered for the current Windows user.</p>
+    <div class="pill">$statusPill</div>
+    <h1>$statusHeading</h1>
+    <p>$statusMessage</p>
     <h2>Where to find SlideEngage</h2>
     <ul>
       <li><strong>SlideEngage ribbon tab -> Open SlideEngage</strong></li>
       <li><strong>Insert -> My Add-ins</strong></li>
       <li><strong>Home -> Add-ins</strong></li>
     </ul>
-    <p>Restart PowerPoint, then open the SlideEngage ribbon tab and choose Open SlideEngage. If the tab is not visible, check the Add-ins menu.</p>
+    <p>$nextStepMessage</p>
   </section>
   <section class="card">
     <h2>Installer checks</h2>
@@ -206,7 +283,12 @@ function New-InstallerPages {
       <li>WebView2 Runtime: <span class="$(if ($WebView2Info.Installed) { 'ok' } else { 'warn' })">$(if ($WebView2Info.Installed) { 'Detected ' + $WebView2Info.Version } else { 'Missing or not detected' })</span></li>
       <li>Manifest copied: <span class="$(if ($Registration.ManifestOk) { 'ok' } else { 'bad' })">$($Registration.ManifestOk)</span></li>
       <li>PowerPoint WEF copy: <span class="$(if ($Registration.WefManifestOk) { 'ok' } else { 'bad' })">$($Registration.WefManifestOk)</span></li>
+      <li>Manifest validation: <span class="$(if ($Registration.ManifestValidationOk) { 'ok' } else { 'bad' })">$($Registration.ManifestValidationMessage)</span></li>
+      <li>WEF manifest validation: <span class="$(if ($Registration.WefManifestValidationOk) { 'ok' } else { 'bad' })">$($Registration.WefManifestValidationMessage)</span></li>
       <li>Trusted catalog registry: <span class="$(if ($Registration.RegistryOk) { 'ok' } else { 'bad' })">$($Registration.RegistryOk)</span></li>
+      <li>Trusted catalog URL: <code>$($Registration.RegistryUrl)</code></li>
+      <li>Manifest path: <code>$($Registration.ManifestPath)</code></li>
+      <li>PowerPoint WEF manifest path: <code>$($Registration.WefManifestPath)</code></li>
     </ul>
     <p>If Add-ins is still missing, open the troubleshooting page saved beside this file.</p>
   </section>
@@ -266,7 +348,8 @@ if ($webView2Info.Installed) {
 }
 
 Write-Step "Validating SlideEngage manifest"
-Test-Manifest
+$sourceValidation = Assert-Manifest -Path $ManifestSource
+Write-Host "$($sourceValidation.Message)"
 
 Write-Step "Registering SlideEngage for PowerPoint"
 Register-SlideEngageManifest
@@ -275,8 +358,8 @@ Write-Step "Verifying installation"
 $registration = Test-SlideEngageRegistration
 if (!$registration.Success) {
   New-InstallerPages -OfficeInfo $officeInfo -WebView2Info $webView2Info -Registration $registration
-  Start-Process $TroubleshootingPage
-  throw "SlideEngage registration verification failed. Open the troubleshooting page for next steps."
+  Start-Process $SuccessPage
+  throw "SlideEngage registration verification failed. Manifest path: $($registration.ManifestPath). WEF manifest path: $($registration.WefManifestPath). Validation: $($registration.WefManifestValidationMessage)"
 }
 
 New-InstallerPages -OfficeInfo $officeInfo -WebView2Info $webView2Info -Registration $registration
@@ -288,8 +371,8 @@ Write-Host "  $ManifestTarget"
 Write-Host "  $WefManifestTarget"
 Write-Host ""
 Write-Host "Restart PowerPoint, then find SlideEngage in:"
+Write-Host "  SlideEngage ribbon tab -> Open SlideEngage"
 Write-Host "  Insert -> My Add-ins"
-Write-Host "  Home -> Add-ins"
 Write-Host ""
 Write-Host "Opening success page..."
 Start-Process $SuccessPage

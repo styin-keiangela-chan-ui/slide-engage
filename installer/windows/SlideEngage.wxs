@@ -41,7 +41,7 @@
         <RemoveFolder Id="RemoveOfficeAddinDir" Directory="OfficeAddinDir" On="uninstall"/>
       </Component>
       <Component Id="PowerPointWefManifestComponent" Directory="SlideEngageWefDir" Guid="25CF6A5B-DF70-4C62-9AF5-92C79E5306EB">
-        <File Id="PowerPointWefManifestXml" Source="$(var.SourceDir)\manifest.xml" Name="SlideEngage.xml" KeyPath="yes"/>
+        <File Id="PowerPointWefManifestXml" Source="$(var.SourceDir)\manifest.xml" Name="manifest.xml" KeyPath="yes"/>
         <RemoveFolder Id="RemovePowerPointWefDir" Directory="SlideEngageWefDir" On="uninstall"/>
       </Component>
     </ComponentGroup>

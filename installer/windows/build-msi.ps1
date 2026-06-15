@@ -42,8 +42,8 @@ SlideEngage PowerPoint Add-in for Windows
 8. If the SlideEngage tab is not visible, check Insert > My Add-ins or Home > Add-ins and choose SlideEngage.
 
 The installer registers a current-user Office trusted catalog and copies manifest.xml to:
-%LOCALAPPDATA%\SlideEngage\OfficeAddin
-%LOCALAPPDATA%\Microsoft\Office\16.0\Wef\SlideEngage
+%LOCALAPPDATA%\SlideEngage\OfficeAddin\manifest.xml
+%LOCALAPPDATA%\Microsoft\Office\16.0\Wef\SlideEngage\manifest.xml
 
 After installation, the installer opens:
 %LOCALAPPDATA%\SlideEngage\OfficeAddin\SlideEngage-Windows-Success.html
