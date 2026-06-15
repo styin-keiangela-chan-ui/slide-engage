@@ -1,4 +1,5 @@
-export const dynamic = 'force-static';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://slide-engage.vercel.app').replace(/\/$/, '');
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -758,7 +759,9 @@ Message:</div>
           try {
             sessionStorage.removeItem("slideengage_login_email");
             sessionStorage.removeItem("slideengage_login_password");
-          } catch {}
+          } catch (error) {
+            addDebug("Login draft clear skipped: " + (error && error.message ? error.message : "unknown error"));
+          }
         }
 
         function syncLoginInputs() {
@@ -848,7 +851,7 @@ Message:</div>
         function getAccessToken() {
           try {
             return localStorage.getItem("slideengage_access_token") || "";
-          } catch {
+          } catch (error) {
             return "";
           }
         }
@@ -2671,6 +2674,9 @@ Message:</div>
   return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0',
     },
   });
 }
