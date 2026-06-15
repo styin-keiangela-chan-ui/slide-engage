@@ -503,7 +503,7 @@ export function GET() {
           var emailInput = document.getElementById("email");
           var passwordInput = document.getElementById("password");
           var button = document.getElementById("login-button");
-          var email = emailInput ? String(emailInput.value || "").trim() : "";
+          var email = emailInput ? String(emailInput.value || "").trim().toLowerCase() : "";
           var password = passwordInput ? String(passwordInput.value || "") : "";
           console.log(email);
           if (typeof window.slideEngageMainLogin === "function") {
@@ -513,61 +513,34 @@ export function GET() {
             window.slideEngageSetLoginStatus("Email and password required.", true);
             return false;
           }
-          if (!window.slideEngageBootstrap.supabaseUrl || !window.slideEngageBootstrap.supabaseAnonKey) {
-            window.slideEngageSetLoginStatus("Login is not configured. Please check Supabase environment variables.", true);
-            return false;
-          }
           window.slideEngageSetLoginStatus("Loading...", false);
           if (button) {
             button.disabled = true;
             button.textContent = "Signing in...";
           }
-          console.log("Supabase initialized", {
-            hasUrl: !!window.slideEngageBootstrap.supabaseUrl,
-            hasAnonKey: !!window.slideEngageBootstrap.supabaseAnonKey
-          });
-          fetch(window.slideEngageBootstrap.supabaseUrl.replace(/\\/$/, "") + "/auth/v1/token?grant_type=password", {
+          console.log("Current Supabase URL:", window.slideEngageBootstrap.supabaseUrl || "MISSING");
+          fetch(window.slideEngageBootstrap.appUrl + "/api/auth/login", {
             method: "POST",
+            credentials: "same-origin",
             headers: {
-              "Content-Type": "application/json",
-              "apikey": window.slideEngageBootstrap.supabaseAnonKey,
-              "Authorization": "Bearer " + window.slideEngageBootstrap.supabaseAnonKey
+              "Content-Type": "application/json"
             },
             body: JSON.stringify({ email: email, password: password })
           }).then(function (response) {
             return response.json().catch(function () { return {}; }).then(function (data) {
-              if (!response.ok || !data.access_token) throw new Error(data.error_description || data.msg || "Invalid email or password.");
+              if (!response.ok || !data.lecturer) throw new Error(data.error || data.message || "Invalid email or password.");
               console.log("Login success");
-              try {
-                localStorage.setItem("slideengage_access_token", data.access_token);
-                if (data.refresh_token) localStorage.setItem("slideengage_refresh_token", data.refresh_token);
-              } catch (error) {
-                console.log("Token storage skipped");
-              }
-              return fetch(window.slideEngageBootstrap.appUrl + "/api/auth/login", {
-                method: "POST",
-                credentials: "same-origin",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": "Bearer " + data.access_token
-                },
-                body: JSON.stringify({ email: email, password: password })
-              }).then(function (apiResponse) {
-                return apiResponse.json().catch(function () { return {}; }).then(function (apiData) {
-                  if (!apiResponse.ok || !apiData.lecturer) throw new Error(apiData.error || "Invalid email or password.");
-                  var sessionPayload = JSON.stringify({
-                    lecturer: apiData.lecturer,
-                    supabase_session: data,
-                    expires_at: apiData.expires_at || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()
-                  });
-                  try {
-                    localStorage.setItem("slideengage_lecturer", sessionPayload);
-                  } catch (error) {
-                    console.log("Session storage skipped");
-                  }
-                  return apiData;
-                });
+              var sessionPayload = JSON.stringify({
+                lecturer: data.lecturer,
+                supabase_session: null,
+                expires_at: data.expires_at || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()
               });
+              try {
+                localStorage.setItem("slideengage_lecturer", sessionPayload);
+              } catch (error) {
+                console.log("Session storage skipped");
+              }
+              return data;
             });
           }).then(function () {
             console.log("Redirect start");
@@ -576,7 +549,7 @@ export function GET() {
           }).catch(function (error) {
             console.log("Login failure");
             console.error("[SlideEngage taskpane] Login failed:", error && error.message ? error.message : error);
-            window.slideEngageSetLoginStatus("Invalid email or password.", true);
+            window.slideEngageSetLoginStatus(error && error.message ? error.message : "Invalid email or password.", true);
             if (button) {
               button.disabled = false;
               button.textContent = "Sign in";
@@ -970,43 +943,6 @@ export function GET() {
           return authClient;
         }
 
-        function supabasePasswordLogin(email, password) {
-          console.log("Supabase initialized", {
-            hasUrl: !!SUPABASE_URL,
-            hasAnonKey: !!SUPABASE_ANON_KEY
-          });
-          if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-            return Promise.reject(new Error("Supabase environment variables are missing."));
-          }
-          return fetch(SUPABASE_URL.replace(/\/$/, "") + "/auth/v1/token?grant_type=password", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": SUPABASE_ANON_KEY,
-              "Authorization": "Bearer " + SUPABASE_ANON_KEY
-            },
-            body: JSON.stringify({ email: email, password: password })
-          }).then(function (response) {
-            return safeJson(response).then(function (data) {
-              if (!response.ok) {
-                var message = data.error_description || data.msg || data.error || "Invalid email or password.";
-                var error = new Error(message);
-                error.status = response.status;
-                error.payload = data;
-                throw error;
-              }
-              return {
-                access_token: data.access_token,
-                refresh_token: data.refresh_token,
-                expires_at: data.expires_at,
-                expires_in: data.expires_in,
-                token_type: data.token_type,
-                user: data.user
-              };
-            });
-          });
-        }
-
         function saveSession(data, supabaseSession) {
           lecturer = data.lecturer;
           storeAuthTokens(supabaseSession || data.supabase_session || null);
@@ -1169,13 +1105,16 @@ export function GET() {
         }
 
         function apiLogin(email, password, supabaseSession) {
+          var headers = {
+            "Content-Type": "application/json"
+          };
+          if (supabaseSession && supabaseSession.access_token) {
+            headers.Authorization = "Bearer " + supabaseSession.access_token;
+          }
           return fetch(APP_URL + "/api/auth/login", {
             method: "POST",
             credentials: "same-origin",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": supabaseSession && supabaseSession.access_token ? "Bearer " + supabaseSession.access_token : ""
-            },
+            headers: headers,
             body: JSON.stringify({ email: email, password: password })
           }).then(function (response) {
             return safeJson(response).then(function (data) {
@@ -1200,7 +1139,7 @@ export function GET() {
           loginEmail = el("email").value;
           loginPassword = el("password").value;
           saveLoginDraft();
-          var email = loginEmail.trim();
+          var email = loginEmail.trim().toLowerCase();
           var password = loginPassword;
           console.log(email);
           console.log("[SlideEngage taskpane] Login email:", email);
@@ -1211,13 +1150,10 @@ export function GET() {
           if (isActionLoading("login")) return false;
           setActionState("login", "loading");
           setStatus("login-status", "Loading...", false);
-          var loginPromise = supabasePasswordLogin(email, password).then(function (session) {
-            if (!session || !session.access_token) throw new Error("Unable to start Supabase session.");
+          console.log("Current Supabase URL:", SUPABASE_URL || "MISSING");
+          var loginPromise = apiLogin(email, password, null).then(function (data) {
             console.log("Login success");
-            storeAuthTokens(session);
-            return apiLogin(email, password, session).then(function (data) {
-              return { data: data, session: session };
-            });
+            return { data: data, session: null };
           });
 
           loginPromise.then(function (result) {
@@ -1227,7 +1163,7 @@ export function GET() {
             }).catch(function (error) {
               var message = /Failed to fetch|NetworkError|Load failed/i.test(error.message)
                 ? "Network error. Check your internet connection and try again."
-                : "Invalid email or password.";
+                : (error.message || "Invalid email or password.");
               console.log("Login failure");
               console.error("[SlideEngage taskpane] Login failed:", message);
               setStatus("login-status", message, true);
