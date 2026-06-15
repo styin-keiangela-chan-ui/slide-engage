@@ -16,6 +16,82 @@ function getAppBaseUrl() {
   return DEFAULT_PUBLIC_APP_URL;
 }
 
+const macInstallSteps = [
+  {
+    title: 'Click Download macOS.',
+    caption: 'Download the SlideEngage macOS installer from the PowerPoint integration page.',
+    image: '/guides/mac-install/step-1-download.png',
+  },
+  {
+    title: 'Open SlideEngage-macOS.pkg.',
+    caption: 'Open the downloaded package from your browser download history or Downloads folder.',
+    image: '/guides/mac-install/step-2-open-package.png',
+  },
+  {
+    title: 'If macOS says Not Opened, click Done.',
+    caption: 'Do not click Move to Bin. Choose Done so you can allow the installer from Privacy & Security.',
+    image: '/guides/mac-install/step-3-not-opened.png',
+  },
+  {
+    title: 'Open System Settings.',
+    caption: 'Go to the macOS System Settings app.',
+    image: '/guides/mac-install/step-4-system-settings.png',
+  },
+  {
+    title: 'Go to Privacy & Security.',
+    caption: 'Scroll to the Security section and click Open Anyway for SlideEngage-macOS.pkg.',
+    image: '/guides/mac-install/step-5-open-anyway.png',
+  },
+  {
+    title: 'Confirm Open Anyway.',
+    caption: 'When macOS shows the warning again, click Open Anyway.',
+    image: '/guides/mac-install/step-6-confirm-open-anyway.png',
+  },
+  {
+    title: 'Continue the installer.',
+    caption: 'In the SlideEngage installer, click Continue and follow the prompts.',
+    image: '/guides/mac-install/step-7-installer.png',
+  },
+  {
+    title: 'Allow installer access.',
+    caption: 'If macOS asks for permission to access data from other apps, click Allow.',
+    image: '/guides/mac-install/step-8-allow.png',
+  },
+  {
+    title: 'Finish installation.',
+    caption: 'Continue until you see The installation was successful, then click Close.',
+    image: '/guides/mac-install/step-9-success.png',
+  },
+];
+
+const powerPointUseSteps = [
+  {
+    title: 'Click Add-ins from the PowerPoint ribbon.',
+    caption: 'Open PowerPoint and choose Add-ins from the ribbon.',
+    image: '/guides/mac-install/step-9-add-ins.png',
+  },
+  {
+    title: 'Select SlideEngage from Developer Add-ins.',
+    caption: 'Choose SlideEngage from the Developer Add-ins menu.',
+    image: '/guides/mac-install/step-10-developer-addins.png',
+  },
+  {
+    title: 'The SlideEngage task pane opens on the right side.',
+    caption: 'The add-in opens beside your PowerPoint slide.',
+    image: '/guides/mac-install/step-11-taskpane.png',
+  },
+  {
+    title: 'Sign in using your SlideEngage email/Gmail and password.',
+    caption: 'Use the same account that you use on the SlideEngage website.',
+    image: '/guides/mac-install/step-11-taskpane.png',
+  },
+  {
+    title: 'Create events, add interactions, and present live results.',
+    caption: 'After login, manage SlideEngage directly inside PowerPoint.',
+    image: '/guides/mac-install/step-11-taskpane.png',
+  },
+];
+
 export default function AddinInstallPage() {
   const [copied, setCopied] = useState(false);
   const baseUrl = useMemo(() => getAppBaseUrl(), []);
@@ -59,6 +135,84 @@ export default function AddinInstallPage() {
               <a href="/manifest.xml" download="manifest.xml" className="rounded-lg border border-[#E2EBE6] px-4 py-2 text-center text-sm font-bold hover:border-[#2D8A4E] hover:text-[#2D8A4E]">
                 Download manifest.xml
               </a>
+            </div>
+          </section>
+
+          <section className="mt-6 rounded-lg border border-[#E2EBE6] bg-white p-5 shadow-sm">
+            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <div className="mb-2 inline-flex rounded-full bg-[#EAF7EF] px-3 py-1 text-xs font-extrabold text-[#2D8A4E]">
+                  macOS Installation Guide
+                </div>
+                <h2 className="text-2xl font-extrabold">Install SlideEngage PowerPoint Add-in on macOS</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#6B7B8D]">
+                  Follow these steps to install the SlideEngage package, allow it in macOS Privacy & Security, and open the add-in inside PowerPoint.
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4 rounded-xl border border-[#FFD7A8] bg-[#FFF8E6] p-4 text-sm font-semibold leading-relaxed text-[#7A4B00]">
+              Do not click Move to Bin. Choose Done, then allow it from Privacy & Security.
+            </div>
+            <div className="mb-5 rounded-xl border border-[#D8EEE0] bg-[#F3FBF6] p-4 text-sm leading-relaxed text-[#2D8A4E]">
+              <strong>Note:</strong> This warning appears because the installer is not notarized by Apple yet.
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {macInstallSteps.map((step, index) => (
+                <article key={step.title} className="overflow-hidden rounded-xl border border-[#E2EBE6] bg-[#FBFDFB] shadow-sm">
+                  <div className="flex items-start gap-3 p-4">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#2D8A4E] text-sm font-extrabold text-white">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold">{step.title}</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-[#6B7B8D]">{step.caption}</p>
+                    </div>
+                  </div>
+                  <img
+                    src={step.image}
+                    alt={step.title}
+                    className="h-56 w-full border-t border-[#E2EBE6] object-contain p-3"
+                    loading="lazy"
+                  />
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-6 rounded-lg border border-[#E2EBE6] bg-white p-5 shadow-sm">
+            <div className="mb-4">
+              <h2 className="text-2xl font-extrabold">Open SlideEngage in PowerPoint</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#6B7B8D]">
+                After installation, open the add-in from PowerPoint and sign in to start creating interactions.
+              </p>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-[#BDE4C8] bg-[#EAF7EF] p-4 text-sm font-semibold text-[#168A3A]">
+              <strong>Tip:</strong> Use the same account that you use on the SlideEngage website.
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {powerPointUseSteps.map((step, index) => (
+                <article key={step.title} className="overflow-hidden rounded-xl border border-[#E2EBE6] bg-[#FBFDFB] shadow-sm">
+                  <div className="flex items-start gap-3 p-4">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#2D8A4E] text-sm font-extrabold text-white">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold">{step.title}</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-[#6B7B8D]">{step.caption}</p>
+                    </div>
+                  </div>
+                  <img
+                    src={step.image}
+                    alt={step.title}
+                    className="h-64 w-full border-t border-[#E2EBE6] object-contain p-3"
+                    loading="lazy"
+                  />
+                </article>
+              ))}
             </div>
           </section>
 
