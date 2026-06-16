@@ -54,11 +54,13 @@ const guideSteps = [
     number: 9,
     title: 'Sign in',
     caption: 'Sign in using the same SlideEngage email/Gmail and password used on the SlideEngage website.',
+    image: '/guides/google-slides-install/step-9-sign-in.png',
   },
   {
     number: 10,
     title: 'Start using interactions',
     caption: 'After login, go to the interaction page, select or create an event, create interactions, and add them to your Google Slides presentation.',
+    image: '/guides/google-slides-install/step-10-dashboard.png',
   },
 ];
 
