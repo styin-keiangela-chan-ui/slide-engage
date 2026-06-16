@@ -16,7 +16,7 @@ export default function LandingPage() {
           Make every slide<br /><span className="text-[#2D8A4E]">interactive &amp; engaging</span>
         </h1>
         <p className="text-lg text-[#6B7B8D] max-w-[600px] mx-auto mb-10 leading-[1.7]">
-          Add polls, quizzes, Q&amp;A, word clouds, and live feedback directly inside PowerPoint and Google Slides — without leaving your presentation.
+          Run polls, quizzes, Q&amp;A, word clouds, and live feedback for any classroom or presentation session.
         </p>
         <div className="flex gap-3.5 justify-center flex-wrap">
           <Link href="/lecturer/login">
@@ -37,9 +37,9 @@ export default function LandingPage() {
         <Link href="/lecturer/login" className="bg-white rounded-[20px] p-9 border-2 border-[#E2EBE6] border-t-4 border-t-[#2D8A4E] hover:-translate-y-1 hover:shadow transition text-left">
           <div className="w-[52px] h-[52px] rounded-[14px] bg-[#EAF7EF] flex items-center justify-center text-[26px] mb-4">🎓</div>
           <h2 className="text-[22px] font-bold mb-2">Lecturer Portal</h2>
-          <p className="text-sm text-[#6B7B8D] leading-relaxed mb-5">Create and manage interactive sessions. Build polls, quizzes, and Q&amp;A activities, then insert them directly into your presentation files.</p>
+          <p className="text-sm text-[#6B7B8D] leading-relaxed mb-5">Create and manage interactive sessions. Build polls, quizzes, and Q&amp;A activities, then present them with real-time audience participation.</p>
           <ul className="flex flex-col gap-[7px]">
-            {['Build polls, quizzes, word clouds, Q&A, feedback', 'Download PowerPoint add-in template', 'Get Google Slides Apps Script code', 'Live dashboard with real-time results', 'Export results to Excel / Google Sheets'].map(item => (
+            {['Build polls, quizzes, word clouds, Q&A, feedback', 'Share sessions with event codes and QR links', 'Live dashboard with real-time results', 'Moderate audience questions', 'Export results for review'].map(item => (
               <li key={item} className="text-[13px] text-[#6B7B8D] flex items-center gap-2">
                 <span className="text-[#2D8A4E] font-bold">✓</span> {item}
               </li>
@@ -72,7 +72,7 @@ export default function LandingPage() {
             { icon: '❓', title: 'Q&A Sessions', desc: 'Attendees submit questions and upvote their favourites. AI can auto-answer common questions.' },
             { icon: '☁️', title: 'Word Clouds', desc: 'Real-time word cloud that grows as participants submit their responses.' },
             { icon: '⭐', title: 'Feedback Forms', desc: 'Star ratings, open text, and NPS-style feedback collected anonymously at the end of sessions.' },
-            { icon: '📥', title: 'PowerPoint Add-in', desc: 'Install once, open PowerPoint, and use SlideEngage from the ribbon without uploading XML manually.' },
+            { icon: '🔗', title: 'Easy Sharing', desc: 'Invite participants with a short event code, join link, or QR code from any device.' },
           ].map(f => (
             <div key={f.title} className="bg-white rounded-[14px] p-6 border border-[#E2EBE6]">
               <div className="text-[28px] mb-3">{f.icon}</div>

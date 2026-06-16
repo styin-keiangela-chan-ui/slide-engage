@@ -1,15 +1,15 @@
 'use client';
 
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import type { Event } from '@/lib/types';
-import { GoogleSlidesIcon, PowerPointIcon } from '@/components/ui/IntegrationIcons';
 import EventBuilderPage from '../page';
 
-type SettingsSection = 'General' | 'Collaboration' | 'Privacy' | 'Features' | 'Customization' | 'Integrations' | 'Engage Labs BETA';
+type SettingsSection = 'General' | 'Collaboration' | 'Privacy' | 'Features' | 'Customization' | 'Engage Labs BETA';
 
-const sections: SettingsSection[] = ['General', 'Collaboration', 'Privacy', 'Features', 'Customization', 'Integrations', 'Engage Labs BETA'];
+const sections: SettingsSection[] = ['General', 'Collaboration', 'Privacy', 'Features', 'Customization', 'Engage Labs BETA'];
 const themeOptions = [
   { id: 'sandy-beige', label: 'Sandy beige', style: 'bg-[#F6EFE6]' },
   { id: 'royal-blue', label: 'Royal blue', style: 'bg-gradient-to-br from-[#274C9F] to-[#5A75D6]' },
@@ -82,8 +82,6 @@ export default function EventSettingsPage() {
   const [brandingOpen, setBrandingOpen] = useState(false);
   const [presentOpen, setPresentOpen] = useState(false);
   const [participantOpen, setParticipantOpen] = useState(false);
-  const [powerPointOpen, setPowerPointOpen] = useState(false);
-  const [googleSlidesOpen, setGoogleSlidesOpen] = useState(false);
   const [mainLogo, setMainLogo] = useState('');
   const [partnerLogo, setPartnerLogo] = useState('');
   const [selectedTheme, setSelectedTheme] = useState('royal-blue');
@@ -293,20 +291,6 @@ export default function EventSettingsPage() {
       section: 'Customization' as SettingsSection,
       icon: '▯',
       action: () => setParticipantOpen(true),
-    },
-    {
-      title: 'PowerPoint',
-      path: 'Integrations > PowerPoint',
-      section: 'Integrations' as SettingsSection,
-      icon: <PowerPointIcon size="sm" />,
-      action: () => setPowerPointOpen(true),
-    },
-    {
-      title: 'Google Slides',
-      path: 'Integrations > Google Slides',
-      section: 'Integrations' as SettingsSection,
-      icon: <GoogleSlidesIcon size="sm" />,
-      action: () => setGoogleSlidesOpen(true),
     },
     {
       title: 'Engage Labs',
@@ -695,40 +679,6 @@ export default function EventSettingsPage() {
             </>
           )}
 
-          {activeSection === 'Integrations' && (
-            <>
-              <IntegrationPanel
-                icon={<PowerPointIcon size="sm" />}
-                title="PowerPoint"
-                description="Add and display polls and Q&A directly in your PowerPoint slides."
-                open={powerPointOpen}
-                onToggle={() => setPowerPointOpen(value => !value)}
-              >
-                <p className="mb-4 text-sm leading-6 text-[#606060]">
-                  Install the integration and add your existing or new interactions from the SlideEngage sidebar. Your polls will activate automatically as you present.
-                </p>
-                <a href="/manifest.xml" download="SlideEngage-PowerPoint-Addin.xml" className="inline-flex items-center gap-3 rounded-[10px] bg-[#168A3A] px-6 py-3 text-sm font-bold text-white hover:bg-[#0f6f2d]">
-                  ⬇ Download
-                </a>
-              </IntegrationPanel>
-
-              <IntegrationPanel
-                icon={<GoogleSlidesIcon size="sm" />}
-                title="Google Slides"
-                description="Add and display polls and Q&A directly in your Google Slides presentation."
-                open={googleSlidesOpen}
-                onToggle={() => setGoogleSlidesOpen(value => !value)}
-              >
-                <p className="mb-4 text-sm leading-6 text-[#606060]">
-                  Install the add-on and add your existing or new interactions from the SlideEngage sidebar. Your polls will activate automatically as you present.
-                </p>
-                <a href="/google-slides-polling" target="_blank" rel="noreferrer" className="inline-flex items-center gap-3 rounded-[10px] bg-[#168A3A] px-6 py-3 text-sm font-bold text-white hover:bg-[#0f6f2d]">
-                  ↗ Get the add-on
-                </a>
-              </IntegrationPanel>
-            </>
-          )}
-
           {activeSection === 'Engage Labs BETA' && (
             <>
               <div className="mb-6 flex items-center gap-4">
@@ -909,42 +859,6 @@ function UploadImageControl({
           </button>
         )}
       </div>
-    </div>
-  );
-}
-
-function IntegrationPanel({
-  icon,
-  title,
-  description,
-  open,
-  onToggle,
-  children,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="mb-8 border-b border-[#E1E1E1] pb-8">
-      <button type="button" onClick={onToggle} className="flex w-full items-start gap-5 text-left">
-        <span className="mt-1 text-lg">{icon}</span>
-        <div className="flex-1">
-          <div className="text-xl font-extrabold">{title}</div>
-          {!open && <p className="mt-3 max-w-[560px] text-base leading-7 text-[#555]">{description}</p>}
-        </div>
-        <span className="text-lg">{open ? '⌃' : '⌄'}</span>
-      </button>
-      {open && (
-        <div className="ml-10 mt-6">
-          <Divider />
-          <p className="mb-4 text-base leading-7 text-[#555]">{description}</p>
-          {children}
-        </div>
-      )}
     </div>
   );
 }

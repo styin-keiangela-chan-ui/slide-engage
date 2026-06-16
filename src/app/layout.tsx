@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "SlideEngage — Interactive Learning Platform",
-  description: "Add polls, quizzes, Q&A, word clouds, and live feedback directly inside PowerPoint and Google Slides.",
+  description: "Run polls, quizzes, Q&A, word clouds, and live feedback for interactive learning sessions.",
   icons: {
     icon: [
       { url: "/assets/icons/icon-32.png", sizes: "32x32", type: "image/png" },

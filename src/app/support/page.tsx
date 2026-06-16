@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import Navbar from '@/components/ui/Navbar';
 
 export default function SupportPage() {
@@ -9,11 +8,8 @@ export default function SupportPage() {
         <section className="mx-auto max-w-3xl rounded-lg border border-[#E2EBE6] bg-white p-7">
           <h1 className="text-2xl font-extrabold">Slide Engage Support</h1>
           <p className="mt-4 text-sm leading-relaxed text-[#6B7B8D]">
-            Need help installing the PowerPoint add-in or running a live session? Start with the guided installation page.
+            Need help running a live session? Sign in to the lecturer portal, create an event, and share the event code or QR link with participants.
           </p>
-          <Link href="/addin-install" className="mt-5 inline-flex rounded-lg bg-[#2D8A4E] px-4 py-2 text-sm font-bold text-white">
-            Open install guide
-          </Link>
         </section>
       </main>
     </>
