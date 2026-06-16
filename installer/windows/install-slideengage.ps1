@@ -286,7 +286,7 @@ function New-InstallerPages {
   $statusPill = if ($Registration.Success) { "SlideEngage PowerPoint Add-in" } else { "Installation needs attention" }
   $statusHeading = if ($Registration.Success) { "Installation successful" } else { "Installation failed" }
   $statusMessage = if ($Registration.Success) { "SlideEngage has been registered for the current Windows user." } else { "SlideEngage was not registered because one or more required checks failed." }
-  $nextStepMessage = if ($Registration.Success) { "Restart PowerPoint, then open the SlideEngage ribbon tab and choose Open SlideEngage. If the tab is not visible, check the Add-ins menu." } else { "Fix the failed checks below, then rerun Install SlideEngage.cmd. Do not use PowerPoint until the manifest copied and validation checks both pass." }
+  $nextStepMessage = if ($Registration.Success) { "Restart PowerPoint, then open the Home tab and choose Open SlideEngage in the SlideEngage group. If it is not visible, check the Add-ins menu." } else { "Fix the failed checks below, then rerun Install SlideEngage.cmd. Do not use PowerPoint until the manifest copied and validation checks both pass." }
 
   $successHtml = @"
 <!doctype html>
@@ -299,7 +299,7 @@ function New-InstallerPages {
     <p>$statusMessage</p>
     <h2>Where to find SlideEngage</h2>
     <ul>
-      <li><strong>SlideEngage ribbon tab -> Open SlideEngage</strong></li>
+      <li><strong>Home tab -> SlideEngage group -> Open SlideEngage</strong></li>
       <li><strong>Insert -> My Add-ins</strong></li>
       <li><strong>Home -> Add-ins</strong></li>
     </ul>
@@ -340,8 +340,8 @@ function New-InstallerPages {
     <p>Use these checks if SlideEngage does not appear after installation.</p>
     <ol>
       <li>Restart PowerPoint after running the installer.</li>
-      <li>Look for the dedicated <strong>SlideEngage</strong> ribbon tab first.</li>
-      <li>If the tab is not visible, look in both <strong>Insert -> My Add-ins</strong> and <strong>Home -> Add-ins</strong>.</li>
+      <li>Look on the <strong>Home</strong> tab for the <strong>SlideEngage</strong> group and <strong>Open SlideEngage</strong> button.</li>
+      <li>If the button is not visible, look in both <strong>Insert -> My Add-ins</strong> and <strong>Home -> Add-ins</strong>.</li>
       <li>If an older SlideEngage add-in is already installed, remove it from My Add-ins, restart PowerPoint, then rerun the installer.</li>
       <li>Confirm the trusted catalog is listed in PowerPoint under <strong>File -> Options -> Trust Center -> Trust Center Settings -> Trusted Add-in Catalogs</strong>.</li>
       <li>The catalog URL should be <code>$InstallRoot</code> and <strong>Show in Menu</strong> should be enabled.</li>
@@ -410,7 +410,7 @@ Write-Host "  $ManifestTarget"
 Write-Host "  $WefManifestTarget"
 Write-Host ""
 Write-Host "Restart PowerPoint, then find SlideEngage in:"
-Write-Host "  SlideEngage ribbon tab -> Open SlideEngage"
+Write-Host "  Home tab -> SlideEngage group -> Open SlideEngage"
 Write-Host "  Insert -> My Add-ins"
 Write-Host ""
 Write-Host "Opening success page..."

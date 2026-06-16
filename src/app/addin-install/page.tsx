@@ -224,8 +224,8 @@ export default function AddinInstallPage() {
                 <li><strong>2.</strong> Close PowerPoint, then run <strong>Install SlideEngage.cmd</strong>.</li>
                 <li><strong>3.</strong> The installer checks Office Web Add-in support and Microsoft Edge WebView2 Runtime.</li>
                 <li><strong>4.</strong> If WebView2 is missing, follow the prompt to install it.</li>
-                <li><strong>5.</strong> Restart PowerPoint, then open the <strong>SlideEngage</strong> ribbon tab.</li>
-                <li><strong>6.</strong> Click <strong>Open SlideEngage</strong>. If the tab is not visible, check <strong>Insert</strong> {'->'} <strong>My Add-ins</strong> or <strong>Home</strong> {'->'} <strong>Add-ins</strong>.</li>
+                <li><strong>5.</strong> Restart PowerPoint, then open the <strong>Home</strong> tab.</li>
+                <li><strong>6.</strong> Click <strong>Open SlideEngage</strong> in the <strong>SlideEngage</strong> group. If the group is not visible, check <strong>Insert</strong> {'->'} <strong>My Add-ins</strong> or <strong>Home</strong> {'->'} <strong>Add-ins</strong>.</li>
               </ol>
               <div className="mt-5 rounded-lg border border-[#D8EEE0] bg-[#F3FBF6] p-4 text-sm leading-relaxed text-[#2D8A4E]">
                 The Windows installer verifies the manifest copy, PowerPoint WEF manifest, and trusted catalog registration. It opens a success page after installation.
@@ -270,7 +270,7 @@ export default function AddinInstallPage() {
           <section className="mt-6 rounded-lg border border-[#E2EBE6] bg-white p-5">
             <h2 className="mb-4 text-base font-extrabold">Troubleshooting</h2>
             <div className="space-y-3 text-sm text-[#6B7B8D]">
-              <p><strong className="text-[#1A1A2E]">Windows Add-ins button is missing:</strong> Look for the <strong>SlideEngage</strong> ribbon tab first. If it is still missing, confirm you are using desktop PowerPoint 2016 or newer, Microsoft 365 PowerPoint, or a managed Office install with Office Web Add-ins enabled.</p>
+              <p><strong className="text-[#1A1A2E]">Windows Add-ins button is missing:</strong> Look on the <strong>Home</strong> tab for the <strong>SlideEngage</strong> group first. If it is still missing, confirm you are using desktop PowerPoint 2016 or newer, Microsoft 365 PowerPoint, or a managed Office install with Office Web Add-ins enabled.</p>
               <p><strong className="text-[#1A1A2E]">WebView2 is missing:</strong> Install Microsoft Edge WebView2 Runtime, then rerun the SlideEngage Windows installer.</p>
               <p><strong className="text-[#1A1A2E]">Trusted catalog not listed:</strong> In PowerPoint, open <strong>File</strong> {'->'} <strong>Options</strong> {'->'} <strong>Trust Center</strong> {'->'} <strong>Trust Center Settings</strong> {'->'} <strong>Trusted Add-in Catalogs</strong>. The SlideEngage catalog should point to <strong>%LOCALAPPDATA%\SlideEngage\OfficeAddin</strong> and show in the menu.</p>
               <p><strong className="text-[#1A1A2E]">Upload My Add-in is missing:</strong> Make sure you are using desktop PowerPoint with add-ins enabled by your organization.</p>
