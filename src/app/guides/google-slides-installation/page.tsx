@@ -68,9 +68,9 @@ export default function GoogleSlidesInstallationGuidePage() {
   return (
     <>
       <Navbar />
-      <main className="min-h-[calc(100vh-64px)] bg-[#F4F7F4] px-5 py-8 text-[#17172F]">
-        <div className="mx-auto max-w-6xl">
-          <nav className="mb-6 flex flex-wrap items-center gap-2 text-sm font-semibold text-[#6B7B8D]" aria-label="Breadcrumb">
+      <main className="min-h-[calc(100vh-64px)] bg-[#F4F7F4] px-5 py-6 text-[#17172F]">
+        <div className="mx-auto max-w-7xl">
+          <nav className="mb-5 flex flex-wrap items-center gap-2 text-xs font-semibold text-[#6B7B8D]" aria-label="Breadcrumb">
             <Link className="hover:text-[#168A3A]" href="/">Home</Link>
             <span aria-hidden="true">→</span>
             <span>Guides</span>
@@ -78,69 +78,59 @@ export default function GoogleSlidesInstallationGuidePage() {
             <span className="text-[#17172F]">Google Slides Installation</span>
           </nav>
 
-          <section className="rounded-[20px] border border-[#DDEAE2] bg-white p-6 shadow-sm md:p-8">
+          <section className="rounded-lg border border-[#E2EBE6] bg-white p-5 shadow-sm">
             <div className="max-w-3xl">
-              <p className="mb-3 text-xs font-extrabold uppercase tracking-[0.18em] text-[#168A3A]">Development guide</p>
-              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">Google Slides Installation Guide</h1>
-              <p className="mt-4 text-base leading-7 text-[#66758A]">
+              <p className="mb-2 inline-flex rounded-full bg-[#EAF7EF] px-3 py-1 text-xs font-extrabold text-[#2D8A4E]">Development guide</p>
+              <h1 className="text-2xl font-extrabold tracking-tight">Google Slides Installation Guide</h1>
+              <p className="mt-2 text-sm leading-relaxed text-[#66758A]">
                 Install the SlideEngage Google Slides add-on manually during development. In production, SlideEngage should be installed through Google Workspace Marketplace.
               </p>
             </div>
 
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <div className="rounded-[16px] border border-[#F3D58A] bg-[#FFF8E6] p-4 text-sm leading-6 text-[#7A4B00]">
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-[#F3D58A] bg-[#FFF8E6] p-4 text-sm leading-relaxed text-[#7A4B00]">
                 <strong className="block text-[#5E3C00]">Important</strong>
                 This manual Apps Script method is for development/testing only. Normal users should install SlideEngage from Google Workspace Marketplace once published.
               </div>
-              <div className="rounded-[16px] border border-[#BFE4CB] bg-[#F0FAF3] p-4 text-sm leading-6 text-[#216D3A]">
+              <div className="rounded-xl border border-[#BFE4CB] bg-[#F0FAF3] p-4 text-sm leading-relaxed text-[#216D3A]">
                 <strong className="block text-[#168A3A]">Tip</strong>
                 After saving and running the Apps Script, refresh Google Slides to see the SlideEngage menu.
               </div>
             </div>
           </section>
 
-          <section className="mt-6 grid gap-5">
+          <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {guideSteps.map((step) => (
-              <article key={step.number} className="overflow-hidden rounded-[18px] border border-[#DDEAE2] bg-white shadow-sm">
-                <div className="flex gap-4 border-b border-[#E6EFEA] p-5 md:p-6">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#2D8A4E] text-lg font-extrabold text-white">
+              <article key={step.number} className="overflow-hidden rounded-xl border border-[#E2EBE6] bg-[#FBFDFB] shadow-sm">
+                <div className="flex min-h-[112px] items-start gap-3 border-b border-[#E2EBE6] p-4">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#2D8A4E] text-sm font-extrabold text-white">
                     {step.number}
                   </div>
-                  <div>
-                    <h2 className="text-lg font-extrabold md:text-xl">{step.title}</h2>
-                    <p className="mt-2 max-w-4xl text-sm leading-6 text-[#66758A]">{step.caption}</p>
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-extrabold leading-snug">{step.title}</h2>
+                    <p className="mt-1 text-xs leading-relaxed text-[#66758A]">{step.caption}</p>
                   </div>
                 </div>
-                {step.image ? (
-                  <div className="bg-[#F8FAF8] p-4 md:p-6">
-                    <img
-                      src={step.image}
-                      alt={step.title}
-                      className="mx-auto max-h-[520px] w-full rounded-[14px] border border-[#E1ECE6] bg-white object-contain shadow-md"
-                      loading="lazy"
-                    />
-                  </div>
-                ) : (
-                  <div className="bg-[#F8FAF8] p-4 md:p-6">
-                    <div className="rounded-[14px] border border-dashed border-[#BFD4C7] bg-white p-5 text-sm font-semibold text-[#66758A]">
-                      Complete this step inside the SlideEngage sidebar after the add-on opens.
-                    </div>
-                  </div>
-                )}
+                <img
+                  src={step.image}
+                  alt={step.title}
+                  className="h-56 w-full bg-white object-contain p-3"
+                  loading="lazy"
+                />
               </article>
             ))}
           </section>
 
-          <section className="mt-6 flex flex-col gap-3 rounded-[18px] border border-[#DDEAE2] bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <section className="mt-6 flex flex-col gap-3 rounded-lg border border-[#E2EBE6] bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-extrabold">Need another setup path?</h2>
+              <h2 className="text-base font-extrabold">Need another setup path?</h2>
               <p className="mt-1 text-sm text-[#66758A]">Return to downloads or review the Google Workspace Marketplace publishing checklist.</p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Link href="/download" className="rounded-[10px] bg-[#168A3A] px-4 py-2 text-center text-sm font-extrabold text-white hover:bg-[#0F6F2D]">
+              <Link href="/download" className="rounded-lg bg-[#168A3A] px-4 py-2 text-center text-sm font-extrabold text-white hover:bg-[#0F6F2D]">
                 Back to Downloads
               </Link>
-              <Link href="/google-slides-polling" className="rounded-[10px] border border-[#DDEAE2] px-4 py-2 text-center text-sm font-extrabold hover:border-[#168A3A] hover:text-[#168A3A]">
+              <Link href="/google-slides-polling" className="rounded-lg border border-[#DDEAE2] px-4 py-2 text-center text-sm font-extrabold hover:border-[#168A3A] hover:text-[#168A3A]">
                 Open Google Workspace Marketplace Publishing Guide
               </Link>
             </div>
