@@ -44,6 +44,9 @@ export default function GoogleSlidesIntegrationPage() {
                 <a href="/SlideEngage_GoogleSlides_Addon.gs" download="SlideEngage_GoogleSlides_Addon.gs" className="rounded-[9px] bg-[#2D8A4E] px-4 py-2 text-sm font-semibold text-white hover:bg-[#226f3e]">
                   Install Google Slides Add-on
                 </a>
+                <Link href="/guides/google-slides-installation" className="rounded-[9px] border border-[#E2EBE6] px-4 py-2 text-sm font-semibold hover:bg-[#F4F7F4]">
+                  Install guide
+                </Link>
                 <Link href="/google-slides-polling" className="rounded-[9px] border border-[#E2EBE6] px-4 py-2 text-sm font-semibold hover:bg-[#F4F7F4]">
                   Publishing guide
                 </Link>
